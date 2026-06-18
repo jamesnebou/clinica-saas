@@ -1,6 +1,6 @@
 ﻿import Link from "next/link";
 import { redirect } from "next/navigation";
-import { CalendarDays, LayoutDashboard, LogOut, Scissors, Sparkles, Stethoscope, UsersRound } from "lucide-react";
+import { CalendarDays, CreditCard, LayoutDashboard, LogOut, Scissors, Sparkles, Stethoscope, UsersRound } from "lucide-react";
 import { requireClinic } from "@/lib/auth/session";
 import { signOutAction } from "@/app/login/actions";
 
@@ -10,6 +10,7 @@ const navItems = [
   { href: "/dashboard/clientes", label: "Clientes", icon: UsersRound },
   { href: "/dashboard/profissionais", label: "Profissionais", icon: Stethoscope },
   { href: "/dashboard/procedimentos", label: "Procedimentos", icon: Scissors },
+  { href: "/dashboard/financeiro", label: "Financeiro", icon: CreditCard },
 ];
 
 export default async function DashboardLayout({ children }) {

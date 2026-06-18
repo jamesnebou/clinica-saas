@@ -4,7 +4,14 @@ import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { requireClinic } from "@/lib/auth/session";
 import { EmptyClinicState, Field, PageHeader, SubmitButton, TextArea } from "@/components/app-shell/ui";
-import { createClienteFotoAction, deleteClienteFotoAction, updateClienteAnamneseAction, updateClienteFichaAction } from "../../actions";
+import { createSignedPhotoUrl } from "@/lib/supabase/storage";
+import {
+  createClienteFotoAction,
+  createClienteFotoUploadAction,
+  deleteClienteFotoAction,
+  updateClienteAnamneseAction,
+  updateClienteFichaAction,
+} from "../../actions";
 
 export const metadata = { title: "Ficha do cliente | Clinica SaaS" };
 
@@ -62,30 +69,35 @@ export default async function ClienteDetalhePage({ params }) {
   }
 
   const supabase = await createClient();
-  const [{ data: cliente }, { data: agendamentos = [] }, { data: fotos = [] }] = await Promise.all([
-    supabase
-      .from("clientes")
-      .select("*")
-      .eq("clinica_id", activeClinic.id)
-      .eq("id", id)
-      .maybeSingle(),
+  const [{ data: cliente }, { data: agendamentos = [] }, { data: fotos = [] }, { data: pacotes = [] }] = await Promise.all([
+    supabase.from("clientes").select("*").eq("clinica_id", activeClinic.id).eq("id", id).maybeSingle(),
     supabase
       .from("agendamentos")
-      .select("id, inicio, fim, status, valor, observacoes, profissionais(nome), procedimentos(nome)")
+      .select("id, inicio, fim, status, valor, pagamento_status, valor_pago, observacoes, profissionais(nome), procedimentos(nome)")
       .eq("clinica_id", activeClinic.id)
       .eq("cliente_id", id)
       .order("inicio", { ascending: false })
       .limit(30),
     supabase
       .from("cliente_fotos")
-      .select("id, tipo, titulo, url, observacoes, data_foto")
+      .select("id, tipo, titulo, url, storage_path, observacoes, data_foto")
       .eq("clinica_id", activeClinic.id)
       .eq("cliente_id", id)
       .order("data_foto", { ascending: false }),
+    supabase
+      .from("cliente_pacotes")
+      .select("id, nome_pacote, sessoes_total, sessoes_utilizadas, valor_total, status, data_compra, validade_em")
+      .eq("clinica_id", activeClinic.id)
+      .eq("cliente_id", id)
+      .order("created_at", { ascending: false }),
   ]);
 
   if (!cliente) notFound();
 
+  const fotosComUrl = await Promise.all((fotos || []).map(async (foto) => ({
+    ...foto,
+    displayUrl: foto.storage_path ? await createSignedPhotoUrl(foto.storage_path) : foto.url,
+  })));
   const anamnese = cliente.anamnese || {};
   const whats = whatsappUrl(cliente.telefone, cliente.nome);
   const proximoRetorno = cliente.retorno_recomendado_em ? new Date(`${cliente.retorno_recomendado_em}T12:00:00`) : null;
@@ -184,13 +196,13 @@ export default async function ClienteDetalhePage({ params }) {
 
           <aside className="space-y-6">
             <section className="rounded-lg border border-neutral-200 bg-white p-5 shadow-sm">
-              <div className="flex items-center gap-2"><CalendarDays size={20} className="text-emerald-700" /><h2 className="text-lg font-semibold">Histórico de agendamentos</h2></div>
+              <div className="flex items-center gap-2"><CalendarDays size={20} className="text-emerald-700" /><h2 className="text-lg font-semibold">Histórico</h2></div>
               <div className="mt-4 space-y-3">
                 {agendamentos.length === 0 ? <p className="rounded-lg bg-neutral-50 px-4 py-3 text-sm text-neutral-600">Sem histórico.</p> : agendamentos.map((item) => (
                   <div key={item.id} className="rounded-lg border border-neutral-200 p-3">
                     <p className="text-sm font-semibold">{item.procedimentos?.nome || "Procedimento"}</p>
                     <p className="mt-1 text-xs text-neutral-500">{formatDateTime(item.inicio)} · {item.profissionais?.nome || "Profissional"}</p>
-                    <p className="mt-1 text-xs text-neutral-500">{item.status} · {formatMoney(item.valor)}</p>
+                    <p className="mt-1 text-xs text-neutral-500">{item.status} · {formatMoney(item.valor)} · Pagamento: {item.pagamento_status || "pendente"}</p>
                   </div>
                 ))}
               </div>
@@ -198,7 +210,7 @@ export default async function ClienteDetalhePage({ params }) {
 
             <section className="rounded-lg border border-neutral-200 bg-white p-5 shadow-sm">
               <div className="flex items-center gap-2"><Camera size={20} className="text-emerald-700" /><h2 className="text-lg font-semibold">Fotos antes/depois</h2></div>
-              <form action={createClienteFotoAction} className="mt-4 space-y-3 rounded-lg bg-neutral-50 p-3">
+              <form action={createClienteFotoUploadAction} className="mt-4 space-y-3 rounded-lg bg-neutral-50 p-3">
                 <input type="hidden" name="cliente_id" value={cliente.id} />
                 <SelectField label="Tipo" name="tipo" defaultValue="evolucao">
                   <option value="antes">Antes</option>
@@ -207,17 +219,39 @@ export default async function ClienteDetalhePage({ params }) {
                   <option value="documento">Documento</option>
                 </SelectField>
                 <Field label="Título" name="titulo" />
-                <Field label="URL da imagem" name="url" required />
+                <label className="block">
+                  <span className="text-sm font-medium text-neutral-700">Arquivo da imagem</span>
+                  <input className="mt-2 w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm" name="arquivo" type="file" accept="image/png,image/jpeg,image/webp" required />
+                </label>
                 <Field label="Data da foto" name="data_foto" type="date" defaultValue={new Date().toISOString().slice(0, 10)} />
                 <TextArea label="Observações" name="observacoes" />
-                <SubmitButton>Adicionar foto</SubmitButton>
+                <SubmitButton>Enviar foto</SubmitButton>
               </form>
+
+              <details className="mt-3 rounded-lg border border-neutral-200 bg-white p-3">
+                <summary className="cursor-pointer text-sm font-semibold text-neutral-700">Adicionar por URL externa</summary>
+                <form action={createClienteFotoAction} className="mt-3 space-y-3">
+                  <input type="hidden" name="cliente_id" value={cliente.id} />
+                  <SelectField label="Tipo" name="tipo" defaultValue="evolucao">
+                    <option value="antes">Antes</option>
+                    <option value="depois">Depois</option>
+                    <option value="evolucao">Evolução</option>
+                    <option value="documento">Documento</option>
+                  </SelectField>
+                  <Field label="Título" name="titulo" />
+                  <Field label="URL da imagem" name="url" required />
+                  <Field label="Data da foto" name="data_foto" type="date" defaultValue={new Date().toISOString().slice(0, 10)} />
+                  <TextArea label="Observações" name="observacoes" />
+                  <SubmitButton>Adicionar por URL</SubmitButton>
+                </form>
+              </details>
+
               <div className="mt-4 space-y-3">
-                {fotos.length === 0 ? <p className="rounded-lg bg-neutral-50 px-4 py-3 text-sm text-neutral-600">Nenhuma foto cadastrada.</p> : fotos.map((foto) => (
+                {fotosComUrl.length === 0 ? <p className="rounded-lg bg-neutral-50 px-4 py-3 text-sm text-neutral-600">Nenhuma foto cadastrada.</p> : fotosComUrl.map((foto) => (
                   <div key={foto.id} className="rounded-lg border border-neutral-200 p-3">
-                    <a href={foto.url} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-lg border border-neutral-200 bg-neutral-50">
+                    <a href={foto.displayUrl || foto.url || "#"} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-lg border border-neutral-200 bg-neutral-50">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={foto.url} alt={foto.titulo || foto.tipo} className="h-44 w-full object-cover" />
+                      <img src={foto.displayUrl || foto.url} alt={foto.titulo || foto.tipo} className="h-44 w-full object-cover" />
                     </a>
                     <div className="mt-2 flex items-start justify-between gap-3">
                       <div>
@@ -235,11 +269,22 @@ export default async function ClienteDetalhePage({ params }) {
               </div>
             </section>
 
+            <section className="rounded-lg border border-neutral-200 bg-white p-5 shadow-sm">
+              <h2 className="text-lg font-semibold">Pacotes comprados</h2>
+              <div className="mt-4 space-y-3">
+                {pacotes.length === 0 ? <p className="rounded-lg bg-neutral-50 px-4 py-3 text-sm text-neutral-600">Nenhum pacote vendido.</p> : pacotes.map((pacote) => (
+                  <div key={pacote.id} className="rounded-lg border border-neutral-200 p-3">
+                    <p className="text-sm font-semibold">{pacote.nome_pacote}</p>
+                    <p className="mt-1 text-xs text-neutral-500">Sessões: {pacote.sessoes_utilizadas}/{pacote.sessoes_total} · {formatMoney(pacote.valor_total)}</p>
+                    <p className="mt-1 text-xs text-neutral-500">Status: {pacote.status} · Validade: {formatDate(pacote.validade_em)}</p>
+                  </div>
+                ))}
+              </div>
+            </section>
+
             <section className="rounded-lg border border-emerald-200 bg-emerald-50 p-5 text-emerald-950">
               <div className="flex items-center gap-2"><ShieldCheck size={20} /><h2 className="text-lg font-semibold">Termo e LGPD</h2></div>
-              <p className="mt-3 text-sm leading-6">
-                Use o campo de consentimento para registrar autorização de tratamento de dados, procedimentos e uso de imagens. Depois podemos evoluir para assinatura digital com PDF.
-              </p>
+              <p className="mt-3 text-sm leading-6">Registre autorização de tratamento de dados, procedimentos e uso de imagens. Depois podemos evoluir para assinatura digital com PDF.</p>
             </section>
           </aside>
         </div>

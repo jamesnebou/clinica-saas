@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { requireClinic } from "@/lib/auth/session";
+import { supabaseAdmin } from "@/lib/supabase/admin";
+import { uploadClientPhoto } from "@/lib/supabase/storage";
 
 async function getScopedSupabase() {
   const context = await requireClinic();
@@ -396,4 +398,167 @@ export async function deleteClienteFotoAction(formData) {
   const { error } = await supabase.from("cliente_fotos").delete().eq("id", id).eq("clinica_id", clinicaId).eq("cliente_id", clienteId);
   if (error) throw error;
   revalidatePath(`/dashboard/clientes/${clienteId}`);
+}
+
+
+function financeRedirectUrl(formData) {
+  const month = text(formData, "month") || new Date().toISOString().slice(0, 7);
+  return `/dashboard/financeiro?month=${encodeURIComponent(month)}`;
+}
+
+export async function createClienteFotoUploadAction(formData) {
+  const { clinicaId } = await getScopedSupabase();
+  const clienteId = requireValue(text(formData, "cliente_id"), "Cliente nao informado.");
+  const file = formData.get("arquivo");
+  const uploaded = await uploadClientPhoto({ clinicaId, clienteId, file });
+
+  const { error } = await supabaseAdmin.from("cliente_fotos").insert({
+    clinica_id: clinicaId,
+    cliente_id: clienteId,
+    tipo: requireValue(text(formData, "tipo"), "Tipo da foto nao informado."),
+    titulo: nullableText(formData, "titulo"),
+    url: null,
+    storage_path: uploaded.path,
+    mime_type: uploaded.mimeType,
+    tamanho_bytes: uploaded.size,
+    observacoes: nullableText(formData, "observacoes"),
+    data_foto: nullableText(formData, "data_foto") || new Date().toISOString().slice(0, 10),
+  });
+
+  if (error) throw error;
+  revalidatePath(`/dashboard/clientes/${clienteId}`);
+}
+
+export async function updateAgendamentoFinanceiroAction(formData) {
+  const { supabase, clinicaId } = await getScopedSupabase();
+  const agendamentoId = requireValue(text(formData, "agendamento_id"), "Agendamento nao informado.");
+  const clienteId = nullableText(formData, "cliente_id");
+  const profissionalId = nullableText(formData, "profissional_id");
+  const valor = numberValue(formData, "valor", 0);
+  const valorPago = numberValue(formData, "valor_pago", 0);
+  const status = requireValue(text(formData, "pagamento_status"), "Status de pagamento nao informado.");
+  const formaPagamento = nullableText(formData, "forma_pagamento");
+  const dataPagamento = nullableText(formData, "data_pagamento") || (status === "pago" ? new Date().toISOString() : null);
+
+  const { error: agendaError } = await supabase
+    .from("agendamentos")
+    .update({
+      valor,
+      valor_pago: valorPago,
+      pagamento_status: status,
+      forma_pagamento: formaPagamento,
+      data_pagamento: dataPagamento,
+    })
+    .eq("id", agendamentoId)
+    .eq("clinica_id", clinicaId);
+
+  if (agendaError) throw agendaError;
+
+  const pagamentoPayload = {
+    clinica_id: clinicaId,
+    cliente_id: clienteId,
+    agendamento_id: agendamentoId,
+    profissional_id: profissionalId,
+    descricao: nullableText(formData, "descricao") || "Pagamento de atendimento",
+    valor,
+    valor_pago: valorPago,
+    status,
+    forma_pagamento: formaPagamento,
+    data_pagamento: dataPagamento,
+    observacoes: nullableText(formData, "observacoes_financeiras"),
+  };
+
+  const { data: existente, error: buscaError } = await supabase
+    .from("pagamentos_clinica")
+    .select("id")
+    .eq("clinica_id", clinicaId)
+    .eq("agendamento_id", agendamentoId)
+    .maybeSingle();
+
+  if (buscaError) throw buscaError;
+
+  const query = existente?.id
+    ? supabase.from("pagamentos_clinica").update(pagamentoPayload).eq("id", existente.id)
+    : supabase.from("pagamentos_clinica").insert(pagamentoPayload);
+
+  const { error: pagamentoError } = await query;
+  if (pagamentoError) throw pagamentoError;
+
+  revalidatePath("/dashboard/agenda");
+  revalidatePath("/dashboard/financeiro");
+  redirect(financeRedirectUrl(formData));
+}
+
+export async function createPacoteAction(formData) {
+  const { supabase, clinicaId } = await getScopedSupabase();
+
+  const { error } = await supabase.from("pacotes_clinica").insert({
+    clinica_id: clinicaId,
+    nome: requireValue(text(formData, "nome"), "Informe o nome do pacote."),
+    descricao: nullableText(formData, "descricao"),
+    procedimento_id: nullableText(formData, "procedimento_id"),
+    quantidade_sessoes: Math.max(1, numberValue(formData, "quantidade_sessoes", 1)),
+    valor: numberValue(formData, "valor", 0),
+    validade_dias: Math.max(1, numberValue(formData, "validade_dias", 90)),
+  });
+
+  if (error) throw error;
+  revalidatePath("/dashboard/financeiro");
+  redirect(financeRedirectUrl(formData));
+}
+
+export async function sellClientePacoteAction(formData) {
+  const { supabase, clinicaId } = await getScopedSupabase();
+  const pacoteId = requireValue(text(formData, "pacote_id"), "Pacote nao informado.");
+  const clienteId = requireValue(text(formData, "cliente_id"), "Cliente nao informado.");
+
+  const { data: pacote, error: pacoteError } = await supabase
+    .from("pacotes_clinica")
+    .select("id, nome, quantidade_sessoes, valor, validade_dias")
+    .eq("clinica_id", clinicaId)
+    .eq("id", pacoteId)
+    .maybeSingle();
+
+  if (pacoteError) throw pacoteError;
+  if (!pacote) throw new Error("Pacote nao encontrado.");
+
+  const compra = nullableText(formData, "data_compra") || new Date().toISOString().slice(0, 10);
+  const validade = new Date(`${compra}T12:00:00`);
+  validade.setDate(validade.getDate() + Number(pacote.validade_dias || 90));
+  const valorPago = numberValue(formData, "valor_pago", 0);
+  const status = valorPago >= Number(pacote.valor || 0) ? "pago" : valorPago > 0 ? "parcial" : "pendente";
+
+  const { data: clientePacote, error: vendaError } = await supabase
+    .from("cliente_pacotes")
+    .insert({
+      clinica_id: clinicaId,
+      cliente_id: clienteId,
+      pacote_id: pacote.id,
+      nome_pacote: pacote.nome,
+      sessoes_total: pacote.quantidade_sessoes,
+      valor_total: pacote.valor,
+      data_compra: compra,
+      validade_em: validade.toISOString().slice(0, 10),
+      observacoes: nullableText(formData, "observacoes"),
+    })
+    .select("id")
+    .single();
+
+  if (vendaError) throw vendaError;
+
+  const { error: pagamentoError } = await supabase.from("pagamentos_clinica").insert({
+    clinica_id: clinicaId,
+    cliente_id: clienteId,
+    descricao: `Venda de pacote: ${pacote.nome}`,
+    valor: pacote.valor,
+    valor_pago: valorPago,
+    status,
+    forma_pagamento: nullableText(formData, "forma_pagamento"),
+    data_pagamento: valorPago > 0 ? new Date().toISOString() : null,
+    observacoes: clientePacote?.id ? `cliente_pacote_id:${clientePacote.id}` : null,
+  });
+
+  if (pagamentoError) throw pagamentoError;
+  revalidatePath("/dashboard/financeiro");
+  redirect(financeRedirectUrl(formData));
 }

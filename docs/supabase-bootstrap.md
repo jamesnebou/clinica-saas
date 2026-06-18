@@ -57,3 +57,14 @@ Se o `select` de `auth.users` nao encontrar o e-mail, nenhum vinculo sera criado
 ## 4. Testar
 
 Acesse `/login`, entre com o e-mail/senha criado no Supabase Auth e abra `/dashboard`.
+
+## Migrations adicionais
+
+Depois da migration inicial, aplique também:
+
+```txt
+supabase/migrations/20260618143000_cliente_prontuario.sql
+supabase/migrations/20260618162000_storage_financeiro_basico.sql
+```
+
+A segunda migration cria o bucket privado `cliente-fotos` no Supabase Storage e adiciona o financeiro básico da clínica.
