@@ -59,4 +59,12 @@ export function SubmitButton({ children }) {
     </button>
   );
 }
-
+export function EmptyState({ title, description, action }) {
+  return (
+    <div className="rounded-lg border border-dashed border-neutral-300 bg-neutral-50 px-4 py-6 text-center">
+      <h3 className="text-sm font-semibold text-neutral-900">{title}</h3>
+      {description ? <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-neutral-600">{description}</p> : null}
+      {action ? <div className="mt-4">{action}</div> : null}
+    </div>
+  );
+}

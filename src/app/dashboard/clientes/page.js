@@ -1,7 +1,7 @@
 ﻿import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { requireClinic } from "@/lib/auth/session";
-import { EmptyClinicState, Field, PageHeader, SubmitButton, TextArea } from "@/components/app-shell/ui";
+import { EmptyClinicState, EmptyState, Field, PageHeader, SubmitButton, TextArea } from "@/components/app-shell/ui";
 import { createClienteAction, deleteClienteAction, updateClienteStatusAction } from "../actions";
 
 export const metadata = { title: "Clientes | Clinica SaaS" };
@@ -50,7 +50,7 @@ export default async function ClientesPage() {
             <h2 className="text-lg font-semibold">Lista de clientes</h2>
             <div className="mt-4 space-y-3">
               {clientes.length === 0 ? (
-                <p className="rounded-lg bg-neutral-50 px-4 py-3 text-sm text-neutral-600">Nenhum cliente cadastrado.</p>
+                <EmptyState title="Nenhum cliente cadastrado ainda" description="Cadastre o primeiro cliente para liberar ficha, anamnese, fotos de evolução, histórico de agenda e retorno recomendado." />
               ) : clientes.map((cliente) => (
                 <article key={cliente.id} className="rounded-lg border border-neutral-200 p-4">
                   <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
@@ -95,3 +95,4 @@ export default async function ClientesPage() {
     </main>
   );
 }
+

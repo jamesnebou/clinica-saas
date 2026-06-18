@@ -1,6 +1,6 @@
 ﻿import { createClient } from "@/lib/supabase/server";
 import { requireClinic } from "@/lib/auth/session";
-import { EmptyClinicState, Field, PageHeader, SubmitButton, TextArea } from "@/components/app-shell/ui";
+import { EmptyClinicState, EmptyState, Field, PageHeader, SubmitButton, TextArea } from "@/components/app-shell/ui";
 import { createProfissionalAction, deleteProfissionalAction, toggleProfissionalAction } from "../actions";
 
 export const metadata = { title: "Profissionais | Clinica SaaS" };
@@ -42,7 +42,7 @@ export default async function ProfissionaisPage() {
             <h2 className="text-lg font-semibold">Equipe cadastrada</h2>
             <div className="mt-4 space-y-3">
               {profissionais.length === 0 ? (
-                <p className="rounded-lg bg-neutral-50 px-4 py-3 text-sm text-neutral-600">Nenhum profissional cadastrado.</p>
+                <EmptyState title="Equipe ainda não cadastrada" description="Inclua profissionais para filtrar a agenda, calcular comissões e evitar conflitos de horário." />
               ) : profissionais.map((item) => (
                 <article key={item.id} className="rounded-lg border border-neutral-200 p-4">
                   <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
@@ -74,3 +74,4 @@ export default async function ProfissionaisPage() {
     </main>
   );
 }
+

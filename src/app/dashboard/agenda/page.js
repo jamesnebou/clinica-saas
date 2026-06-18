@@ -2,7 +2,7 @@
 import { AlertTriangle, CheckCircle2, Clock, MessageCircle, XCircle } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { requireClinic } from "@/lib/auth/session";
-import { EmptyClinicState, Field, PageHeader, SubmitButton, TextArea } from "@/components/app-shell/ui";
+import { EmptyClinicState, EmptyState, Field, PageHeader, SubmitButton, TextArea } from "@/components/app-shell/ui";
 import { createAgendamentoAction, deleteAgendamentoAction, updateAgendamentoAction, updateAgendamentoStatusAction } from "../actions";
 
 export const metadata = { title: "Agenda | Clinica SaaS" };
@@ -179,7 +179,7 @@ export default async function AgendaPage({ searchParams }) {
             <h2 className="text-lg font-semibold">Atendimentos do dia</h2>
             <div className="mt-4 space-y-3">
               {agendamentos.length === 0 ? (
-                <p className="rounded-lg bg-neutral-50 px-4 py-3 text-sm text-neutral-600">Nenhum agendamento para este dia.</p>
+                <EmptyState title="Agenda livre neste dia" description="Crie um atendimento para demonstrar confirmação, status visual, WhatsApp rápido e faturamento previsto." />
               ) : agendamentos.map((item) => {
                 const whats = whatsappUrl(item.clientes?.telefone, `Olá, ${item.clientes?.nome || "tudo bem"}? Passando para confirmar seu horário na clínica em ${new Date(item.inicio).toLocaleString("pt-BR")}.`);
                 return (
@@ -243,4 +243,5 @@ export default async function AgendaPage({ searchParams }) {
     </main>
   );
 }
+
 

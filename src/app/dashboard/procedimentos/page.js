@@ -1,6 +1,6 @@
 ﻿import { createClient } from "@/lib/supabase/server";
 import { requireClinic } from "@/lib/auth/session";
-import { EmptyClinicState, Field, PageHeader, SubmitButton, TextArea } from "@/components/app-shell/ui";
+import { EmptyClinicState, EmptyState, Field, PageHeader, SubmitButton, TextArea } from "@/components/app-shell/ui";
 import { createProcedimentoAction, deleteProcedimentoAction, toggleProcedimentoAction } from "../actions";
 
 export const metadata = { title: "Procedimentos | Clinica SaaS" };
@@ -45,7 +45,7 @@ export default async function ProcedimentosPage() {
             <h2 className="text-lg font-semibold">Procedimentos cadastrados</h2>
             <div className="mt-4 space-y-3">
               {procedimentos.length === 0 ? (
-                <p className="rounded-lg bg-neutral-50 px-4 py-3 text-sm text-neutral-600">Nenhum procedimento cadastrado.</p>
+                <EmptyState title="Nenhum procedimento criado" description="Cadastre serviços com duração e preço para acelerar agendamentos, pacotes e faturamento previsto." />
               ) : procedimentos.map((item) => (
                 <article key={item.id} className="rounded-lg border border-neutral-200 p-4">
                   <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
@@ -77,3 +77,4 @@ export default async function ProcedimentosPage() {
     </main>
   );
 }
+
