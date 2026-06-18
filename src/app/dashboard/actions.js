@@ -311,3 +311,89 @@ export async function deleteAgendamentoAction(formData) {
   revalidatePath("/dashboard");
   redirect(agendaRedirectUrl(formData));
 }
+
+export async function updateClienteFichaAction(formData) {
+  const { supabase, clinicaId } = await getScopedSupabase();
+  const id = requireValue(text(formData, "id"), "Cliente nao informado.");
+  const termoAceito = formData.get("termo_consentimento_aceito") === "on";
+
+  const payload = {
+    nome: requireValue(text(formData, "nome"), "Informe o nome do cliente."),
+    telefone: nullableText(formData, "telefone"),
+    email: nullableText(formData, "email"),
+    cpf: nullableText(formData, "cpf"),
+    data_nascimento: nullableText(formData, "data_nascimento"),
+    endereco: nullableText(formData, "endereco"),
+    origem: nullableText(formData, "origem"),
+    status: requireValue(text(formData, "status"), "Status nao informado."),
+    observacoes: nullableText(formData, "observacoes"),
+    observacoes_clinicas: nullableText(formData, "observacoes_clinicas"),
+    alergias: nullableText(formData, "alergias"),
+    contraindicacoes: nullableText(formData, "contraindicacoes"),
+    medicamentos_uso: nullableText(formData, "medicamentos_uso"),
+    procedimentos_previos: nullableText(formData, "procedimentos_previos"),
+    retorno_recomendado_em: nullableText(formData, "retorno_recomendado_em"),
+    termo_consentimento_aceito: termoAceito,
+    termo_consentimento_aceito_em: termoAceito ? (nullableText(formData, "termo_consentimento_aceito_em") || new Date().toISOString()) : null,
+    termo_consentimento_observacao: nullableText(formData, "termo_consentimento_observacao"),
+  };
+
+  const { error } = await supabase.from("clientes").update(payload).eq("id", id).eq("clinica_id", clinicaId);
+  if (error) throw error;
+  revalidatePath(`/dashboard/clientes/${id}`);
+  revalidatePath("/dashboard/clientes");
+}
+
+export async function updateClienteAnamneseAction(formData) {
+  const { supabase, clinicaId } = await getScopedSupabase();
+  const id = requireValue(text(formData, "id"), "Cliente nao informado.");
+
+  const anamnese = {
+    objetivo_principal: nullableText(formData, "objetivo_principal"),
+    queixa_principal: nullableText(formData, "queixa_principal"),
+    gestante: formData.get("gestante") === "on",
+    lactante: formData.get("lactante") === "on",
+    diabetes: formData.get("diabetes") === "on",
+    hipertensao: formData.get("hipertensao") === "on",
+    marcapasso: formData.get("marcapasso") === "on",
+    cancer_tratamento: formData.get("cancer_tratamento") === "on",
+    tendencia_queloide: formData.get("tendencia_queloide") === "on",
+    usa_acidos: formData.get("usa_acidos") === "on",
+    exposicao_solar: nullableText(formData, "exposicao_solar"),
+    rotina_skincare: nullableText(formData, "rotina_skincare"),
+    observacoes: nullableText(formData, "anamnese_observacoes"),
+    updated_at: new Date().toISOString(),
+  };
+
+  const { error } = await supabase.from("clientes").update({ anamnese }).eq("id", id).eq("clinica_id", clinicaId);
+  if (error) throw error;
+  revalidatePath(`/dashboard/clientes/${id}`);
+}
+
+export async function createClienteFotoAction(formData) {
+  const { supabase, clinicaId } = await getScopedSupabase();
+  const clienteId = requireValue(text(formData, "cliente_id"), "Cliente nao informado.");
+
+  const { error } = await supabase.from("cliente_fotos").insert({
+    clinica_id: clinicaId,
+    cliente_id: clienteId,
+    tipo: requireValue(text(formData, "tipo"), "Tipo da foto nao informado."),
+    titulo: nullableText(formData, "titulo"),
+    url: requireValue(text(formData, "url"), "Informe a URL da foto."),
+    observacoes: nullableText(formData, "observacoes"),
+    data_foto: nullableText(formData, "data_foto") || new Date().toISOString().slice(0, 10),
+  });
+
+  if (error) throw error;
+  revalidatePath(`/dashboard/clientes/${clienteId}`);
+}
+
+export async function deleteClienteFotoAction(formData) {
+  const { supabase, clinicaId } = await getScopedSupabase();
+  const id = requireValue(text(formData, "id"), "Foto nao informada.");
+  const clienteId = requireValue(text(formData, "cliente_id"), "Cliente nao informado.");
+
+  const { error } = await supabase.from("cliente_fotos").delete().eq("id", id).eq("clinica_id", clinicaId).eq("cliente_id", clienteId);
+  if (error) throw error;
+  revalidatePath(`/dashboard/clientes/${clienteId}`);
+}
