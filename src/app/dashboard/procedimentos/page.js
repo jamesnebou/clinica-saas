@@ -1,12 +1,12 @@
 ﻿import { createClient } from "@/lib/supabase/server";
-import { requireClinic } from "@/lib/auth/session";
+import { requireClinicSection } from "@/lib/auth/session";
 import { EmptyClinicState, EmptyState, Field, PageHeader, SubmitButton, TextArea } from "@/components/app-shell/ui";
 import { createProcedimentoAction, deleteProcedimentoAction, toggleProcedimentoAction } from "../actions";
 
 export const metadata = { title: "Procedimentos | Clinica SaaS" };
 
 export default async function ProcedimentosPage() {
-  const { activeClinic } = await requireClinic();
+  const { activeClinic } = await requireClinicSection("procedimentos");
 
   if (!activeClinic) {
     return <main className="px-5 py-8 sm:px-8 lg:px-10"><EmptyClinicState /></main>;

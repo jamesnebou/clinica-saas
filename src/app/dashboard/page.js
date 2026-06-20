@@ -2,7 +2,7 @@
 import { CalendarDays, CreditCard, Scissors, ShieldCheck, UsersRound } from "lucide-react";
 import { requireClinic } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
-import { EmptyClinicState, EmptyState, PageHeader } from "@/components/app-shell/ui";
+import { EmptyClinicState, EmptyState, Notice, PageHeader } from "@/components/app-shell/ui";
 import { getClinicBillingState, getClinicPlan } from "@/lib/saas/plans";
 
 async function countRows(supabase, table, clinicaId) {
@@ -18,7 +18,8 @@ function formatMoney(value) {
   return Number(value || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
-export default async function DashboardPage() {
+export default async function DashboardPage({ searchParams }) {
+  const params = await searchParams;
   const { activeClinic } = await requireClinic();
 
   if (!activeClinic) {
@@ -58,6 +59,11 @@ export default async function DashboardPage() {
     <main className="px-5 py-8 sm:px-8 lg:px-10">
       <section className="mx-auto max-w-7xl">
         <PageHeader eyebrow="Dashboard" title="Operação da clínica" description={`Visao executiva de ${brandName}: agenda, clientes, equipe, financeiro e status comercial.`} />
+        {params?.erro === "permissao" ? (
+          <div className="mt-6">
+            <Notice type="warning" title="Acesso restrito">Seu papel atual nao tem permissao para abrir essa area. O menu mostra apenas os modulos liberados para o seu acesso.</Notice>
+          </div>
+        ) : null}
 
         <div className="mt-8 grid gap-4 lg:grid-cols-[1fr_360px]">
           <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">

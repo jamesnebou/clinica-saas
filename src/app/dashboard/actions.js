@@ -80,6 +80,10 @@ function normalizeEmail(value) {
   return String(value || "").trim().toLowerCase();
 }
 
+function normalizePhone(value) {
+  return String(value || "").replace(/\D/g, "");
+}
+
 function safeHexColor(value, fallback) {
   const color = String(value || "").trim();
   return /^#[0-9a-f]{6}$/i.test(color) ? color : fallback;
@@ -733,24 +737,48 @@ export async function inviteClinicUserAction(formData) {
 
   const email = normalizeEmail(requireValue(text(formData, "email"), "Informe o e-mail do usuario."));
   const papel = requireValue(text(formData, "papel"), "Informe o papel do usuario.");
+  const senhaTemporaria = requireValue(text(formData, "senha_temporaria"), "Informe uma senha temporaria para o usuario.");
 
   if (!CLINIC_ROLES.has(papel)) {
     redirectWithMessage("/dashboard/usuarios", "papel", "Papel de usuario invalido.");
   }
 
+  let authUserId = null;
+  let authStatus = "convite";
+  const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
+    email,
+    password: senhaTemporaria,
+    email_confirm: true,
+    user_metadata: {
+      nome: nullableText(formData, "nome") || email,
+    },
+  });
+
+  if (authError) {
+    const alreadyExists = /already|registered|exists|duplicate/i.test(authError.message || "");
+    if (!alreadyExists) {
+      redirectWithMessage("/dashboard/usuarios", "auth", authError.message || "Nao foi possivel criar o acesso do usuario.");
+    }
+    authStatus = "existente";
+  } else {
+    authUserId = authData?.user?.id || null;
+  }
+
   const { error } = await supabase.from("usuarios_clinica").upsert({
     clinica_id: clinicaId,
+    user_id: authUserId,
     nome: nullableText(formData, "nome") || email,
     email,
     papel,
     ativo: true,
     invited_at: new Date().toISOString(),
+    accepted_at: authUserId ? new Date().toISOString() : null,
   }, { onConflict: "clinica_id,email" });
 
   if (error) throw error;
   revalidatePath("/dashboard/usuarios");
   revalidatePath("/dashboard/assinatura");
-  redirect("/dashboard/usuarios?ok=convite");
+  redirect(`/dashboard/usuarios?ok=${authStatus}`);
 }
 
 export async function updateClinicUserAction(formData) {
@@ -804,6 +832,130 @@ export async function updateClinicUserAction(formData) {
   revalidatePath("/dashboard/usuarios");
   revalidatePath("/dashboard/assinatura");
   redirect("/dashboard/usuarios?ok=usuario");
+}
+
+function crmRedirectUrl(formData) {
+  const status = text(formData, "status_filtro");
+  const params = new URLSearchParams();
+  if (status) params.set("status", status);
+  const query = params.toString();
+  return `/dashboard/crm${query ? `?${query}` : ""}`;
+}
+
+export async function createCrmOpportunityAction(formData) {
+  const { supabase, clinicaId } = await getScopedSupabase();
+
+  const { error } = await supabase.from("crm_oportunidades").insert({
+    clinica_id: clinicaId,
+    cliente_id: nullableText(formData, "cliente_id"),
+    nome: requireValue(text(formData, "nome"), "Informe o nome da oportunidade."),
+    telefone: nullableText(formData, "telefone"),
+    email: nullableText(formData, "email"),
+    origem: text(formData, "origem") || "whatsapp",
+    status: text(formData, "status") || "lead",
+    valor_estimado: numberValue(formData, "valor_estimado", 0),
+    proxima_acao_em: nullableText(formData, "proxima_acao_em"),
+    proxima_acao: nullableText(formData, "proxima_acao"),
+    observacoes: nullableText(formData, "observacoes"),
+  });
+
+  if (error) throw error;
+  revalidatePath("/dashboard/crm");
+  redirect("/dashboard/crm?ok=oportunidade");
+}
+
+export async function updateCrmOpportunityAction(formData) {
+  const { supabase, clinicaId } = await getScopedSupabase();
+  const id = requireValue(text(formData, "id"), "Oportunidade nao informada.");
+  const status = text(formData, "status") || "lead";
+
+  const { error } = await supabase
+    .from("crm_oportunidades")
+    .update({
+      status,
+      origem: text(formData, "origem") || "whatsapp",
+      valor_estimado: numberValue(formData, "valor_estimado", 0),
+      proxima_acao_em: nullableText(formData, "proxima_acao_em"),
+      proxima_acao: nullableText(formData, "proxima_acao"),
+      observacoes: nullableText(formData, "observacoes"),
+      perdido_motivo: status === "perdido" ? nullableText(formData, "perdido_motivo") : null,
+      convertido_em: status === "convertido" ? new Date().toISOString() : null,
+    })
+    .eq("id", id)
+    .eq("clinica_id", clinicaId);
+
+  if (error) throw error;
+  revalidatePath("/dashboard/crm");
+  redirect(crmRedirectUrl(formData));
+}
+
+export async function convertCrmOpportunityAction(formData) {
+  const { supabase, clinicaId, activeClinic } = await getScopedSupabase();
+  await redirectLimitError({ clinic: activeClinic, resource: "clientes", redirectTo: "/dashboard/crm" });
+  const id = requireValue(text(formData, "id"), "Oportunidade nao informada.");
+
+  const { data: oportunidade, error: opportunityError } = await supabase
+    .from("crm_oportunidades")
+    .select("id, cliente_id, nome, telefone, email, origem, observacoes")
+    .eq("id", id)
+    .eq("clinica_id", clinicaId)
+    .maybeSingle();
+
+  if (opportunityError) throw opportunityError;
+  if (!oportunidade) redirectWithMessage("/dashboard/crm", "crm", "Oportunidade nao encontrada.");
+
+  let clienteId = oportunidade.cliente_id;
+
+  if (!clienteId) {
+    let existingQuery = supabase.from("clientes").select("id").eq("clinica_id", clinicaId).limit(1);
+    if (oportunidade.email) {
+      existingQuery = existingQuery.eq("email", oportunidade.email);
+    } else if (oportunidade.telefone) {
+      existingQuery = existingQuery.eq("telefone", oportunidade.telefone);
+    } else {
+      existingQuery = existingQuery.eq("nome", oportunidade.nome);
+    }
+
+    const { data: existingClientes, error: existingError } = await existingQuery;
+    if (existingError) throw existingError;
+    clienteId = existingClientes?.[0]?.id || null;
+
+    if (!clienteId) {
+      const phone = normalizePhone(oportunidade.telefone);
+      const { data: cliente, error: clienteError } = await supabase
+        .from("clientes")
+        .insert({
+          clinica_id: clinicaId,
+          nome: oportunidade.nome,
+          telefone: oportunidade.telefone,
+          email: oportunidade.email,
+          origem: oportunidade.origem,
+          status: "ativo",
+          observacoes: oportunidade.observacoes || `Convertido pelo CRM. Telefone normalizado: ${phone || "-"}.`,
+          consentimento_lgpd: false,
+        })
+        .select("id")
+        .single();
+
+      if (clienteError) throw clienteError;
+      clienteId = cliente.id;
+    }
+  }
+
+  const { error } = await supabase
+    .from("crm_oportunidades")
+    .update({
+      cliente_id: clienteId,
+      status: "convertido",
+      convertido_em: new Date().toISOString(),
+    })
+    .eq("id", id)
+    .eq("clinica_id", clinicaId);
+
+  if (error) throw error;
+  revalidatePath("/dashboard/crm");
+  revalidatePath("/dashboard/clientes");
+  redirect(`/dashboard/clientes/${clienteId}`);
 }
 
 export async function updateClinicSettingsAction(formData) {

@@ -1,5 +1,5 @@
 ﻿import { AlertTriangle, CheckCircle2, CreditCard, ReceiptText, ShieldCheck } from "lucide-react";
-import { requireClinic } from "@/lib/auth/session";
+import { requireClinicSection } from "@/lib/auth/session";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { Field, PageHeader, SubmitButton } from "@/components/app-shell/ui";
 import { getClinicBillingState, getClinicPlan, getClinicUsage, getLimitRows, getSystemPlans } from "@/lib/saas/plans";
@@ -48,7 +48,7 @@ async function getBillingRows(clinicaId) {
 
 export default async function AssinaturaPage({ searchParams }) {
   const params = await searchParams;
-  const { activeClinic } = await requireClinic();
+  const { activeClinic } = await requireClinicSection("assinatura");
   const [currentPlan, plans, usage, cobrancas] = await Promise.all([
     getClinicPlan(activeClinic),
     getSystemPlans(),

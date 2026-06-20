@@ -1,6 +1,6 @@
 ﻿import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { requireClinic } from "@/lib/auth/session";
+import { requireClinicSection } from "@/lib/auth/session";
 import { EmptyClinicState, EmptyState, Field, PageHeader, SubmitButton, TextArea } from "@/components/app-shell/ui";
 import { createProfissionalAction, deleteProfissionalAction, toggleProfissionalAction } from "../actions";
 
@@ -8,7 +8,7 @@ export const metadata = { title: "Profissionais | Clinica SaaS" };
 
 export default async function ProfissionaisPage({ searchParams }) {
   const params = await searchParams;
-  const { activeClinic } = await requireClinic();
+  const { activeClinic } = await requireClinicSection("profissionais");
 
   if (!activeClinic) {
     return <main className="px-5 py-8 sm:px-8 lg:px-10"><EmptyClinicState /></main>;

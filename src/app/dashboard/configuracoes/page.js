@@ -1,5 +1,5 @@
 ﻿import { Clock, MessageCircle, Palette, Settings } from "lucide-react";
-import { requireClinic } from "@/lib/auth/session";
+import { requireClinicSection } from "@/lib/auth/session";
 import { EmptyClinicState, Field, PageHeader, SubmitButton, TextArea } from "@/components/app-shell/ui";
 import { updateClinicSettingsAction } from "../actions";
 
@@ -21,7 +21,7 @@ function Notice({ children }) {
 
 export default async function ConfiguracoesPage({ searchParams }) {
   const params = await searchParams;
-  const { activeClinic } = await requireClinic();
+  const { activeClinic } = await requireClinicSection("configuracoes");
 
   if (!activeClinic) {
     return <main className="px-5 py-8 sm:px-8 lg:px-10"><EmptyClinicState /></main>;

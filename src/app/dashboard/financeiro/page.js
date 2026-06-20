@@ -1,6 +1,6 @@
 ﻿import { CreditCard, Package, TrendingUp, Wallet } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
-import { requireClinic } from "@/lib/auth/session";
+import { requireClinicSection } from "@/lib/auth/session";
 import { EmptyClinicState, Field, PageHeader, SubmitButton, TextArea } from "@/components/app-shell/ui";
 import { createPacoteAction, sellClientePacoteAction, updateAgendamentoFinanceiroAction } from "../actions";
 
@@ -32,7 +32,7 @@ function SelectField({ label, name, defaultValue = "", required = false, childre
 export default async function FinanceiroPage({ searchParams }) {
   const params = await searchParams;
   const { safeMonth, start, end } = monthRange(String(params?.month || ""));
-  const { activeClinic } = await requireClinic();
+  const { activeClinic } = await requireClinicSection("financeiro");
 
   if (!activeClinic) {
     return <main className="px-5 py-8 sm:px-8 lg:px-10"><EmptyClinicState /></main>;

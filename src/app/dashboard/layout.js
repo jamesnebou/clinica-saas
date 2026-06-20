@@ -1,20 +1,22 @@
-﻿import Link from "next/link";
 import { redirect } from "next/navigation";
-import { CalendarDays, CreditCard, LayoutDashboard, LogOut, ReceiptText, Scissors, Settings, Sparkles, Stethoscope, UserCog, UsersRound } from "lucide-react";
+import { LogOut, Sparkles } from "lucide-react";
 import { requireClinic } from "@/lib/auth/session";
 import { signOutAction } from "@/app/login/actions";
 import { getClinicBillingState } from "@/lib/saas/plans";
+import { SidebarNav } from "@/components/app-shell/sidebar-nav";
+import { canAccessSection, getCurrentMembership } from "@/lib/auth/permissions";
 
 const navItems = [
-  { href: "/dashboard", label: "Visao geral", icon: LayoutDashboard },
-  { href: "/dashboard/agenda", label: "Agenda", icon: CalendarDays },
-  { href: "/dashboard/clientes", label: "Clientes", icon: UsersRound },
-  { href: "/dashboard/profissionais", label: "Profissionais", icon: Stethoscope },
-  { href: "/dashboard/procedimentos", label: "Procedimentos", icon: Scissors },
-  { href: "/dashboard/usuarios", label: "Usuarios", icon: UserCog },
-  { href: "/dashboard/configuracoes", label: "Configuracoes", icon: Settings },
-  { href: "/dashboard/financeiro", label: "Financeiro", icon: CreditCard },
-  { href: "/dashboard/assinatura", label: "Assinatura", icon: ReceiptText },
+  { href: "/dashboard", label: "Visao geral", icon: "dashboard", section: "dashboard" },
+  { href: "/dashboard/agenda", label: "Agenda", icon: "agenda", section: "agenda" },
+  { href: "/dashboard/clientes", label: "Clientes", icon: "clientes", section: "clientes" },
+  { href: "/dashboard/crm", label: "CRM", icon: "crm", section: "crm" },
+  { href: "/dashboard/profissionais", label: "Profissionais", icon: "profissionais", section: "profissionais" },
+  { href: "/dashboard/procedimentos", label: "Procedimentos", icon: "procedimentos", section: "procedimentos" },
+  { href: "/dashboard/usuarios", label: "Usuarios", icon: "usuarios", section: "usuarios" },
+  { href: "/dashboard/configuracoes", label: "Configuracoes", icon: "configuracoes", section: "configuracoes" },
+  { href: "/dashboard/financeiro", label: "Financeiro", icon: "financeiro", section: "financeiro" },
+  { href: "/dashboard/assinatura", label: "Assinatura", icon: "assinatura", section: "assinatura" },
 ];
 
 function safeColor(value, fallback) {
@@ -23,7 +25,8 @@ function safeColor(value, fallback) {
 }
 
 export default async function DashboardLayout({ children }) {
-  const { user, activeClinic } = await requireClinic();
+  const context = await requireClinic();
+  const { user, activeClinic } = context;
 
   if (!activeClinic) {
     redirect("/onboarding");
@@ -35,22 +38,35 @@ export default async function DashboardLayout({ children }) {
   const brandName = metadata.brand_name || activeClinic.nome || "Clinica SaaS";
   const logoUrl = metadata.logo_url || "";
   const billingState = getClinicBillingState(activeClinic);
+  const membership = getCurrentMembership(context.memberships, activeClinic.id);
+  const role = membership?.papel || "recepcao";
+  const allowedNavItems = navItems.filter((item) => canAccessSection(role, item.section));
 
   return (
-    <div className="min-h-screen text-neutral-950 lg:grid lg:grid-cols-[260px_1fr]" style={{ "--clinic-primary": primaryColor, "--clinic-accent": accentColor, "--clinic-soft": "color-mix(in srgb, var(--clinic-accent) 10%, white)", background: "linear-gradient(135deg, color-mix(in srgb, var(--clinic-accent) 10%, #f7f7f4), #f7f7f4 34%, color-mix(in srgb, var(--clinic-primary) 7%, #f7f7f4))" }}>
+    <div
+      className="min-h-screen text-neutral-950 lg:grid lg:grid-cols-[260px_1fr]"
+      style={{
+        "--clinic-primary": primaryColor,
+        "--clinic-accent": accentColor,
+        "--clinic-soft": "color-mix(in srgb, var(--clinic-accent) 10%, white)",
+        background: "linear-gradient(135deg, color-mix(in srgb, var(--clinic-accent) 10%, #f7f7f4), #f7f7f4 34%, color-mix(in srgb, var(--clinic-primary) 7%, #f7f7f4))",
+      }}
+    >
       <aside className="border-b border-neutral-200 bg-white/95 px-5 py-4 shadow-sm backdrop-blur lg:min-h-screen lg:border-b-0 lg:border-r lg:px-4">
         <div className="flex items-center justify-between gap-3 lg:block">
-          <div>
-            <div className="flex items-center gap-3 lg:block">
-              {logoUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={logoUrl} alt={`Logo ${brandName}`} className="h-14 max-w-[190px] rounded-lg object-contain object-left lg:h-16 lg:w-full" />
-              ) : <div className="inline-flex h-12 w-12 items-center justify-center rounded-lg text-white" style={{ background: "var(--clinic-primary)" }}><Sparkles size={22} /></div>}
-              <div className="min-w-0 lg:mt-4">
-                <p className="text-sm font-bold uppercase tracking-[0.18em] leading-5" style={{ color: "var(--clinic-primary)" }}>{brandName}</p>
-                <div className="mt-3 h-1.5 w-24 rounded-full" style={{ background: "linear-gradient(90deg, var(--clinic-primary), var(--clinic-accent))" }} />
-                <p className="mt-2 truncate text-xs text-neutral-500" title={user?.email}>{user?.email}</p>
+          <div className="flex items-center gap-3 lg:block">
+            {logoUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={logoUrl} alt={`Logo ${brandName}`} className="h-14 max-w-[190px] rounded-lg object-contain object-left lg:h-16 lg:w-full" />
+            ) : (
+              <div className="inline-flex h-12 w-12 items-center justify-center rounded-lg text-white" style={{ background: "var(--clinic-primary)" }}>
+                <Sparkles size={22} />
               </div>
+            )}
+            <div className="min-w-0 lg:mt-4">
+              <p className="text-sm font-bold uppercase leading-5 tracking-[0.18em]" style={{ color: "var(--clinic-primary)" }}>{brandName}</p>
+              <div className="mt-3 h-1.5 w-24 rounded-full" style={{ background: "linear-gradient(90deg, var(--clinic-primary), var(--clinic-accent))" }} />
+              <p className="mt-2 truncate text-xs text-neutral-500" title={user?.email}>{user?.email}</p>
             </div>
           </div>
           <form action={signOutAction} className="lg:hidden">
@@ -61,17 +77,7 @@ export default async function DashboardLayout({ children }) {
           </form>
         </div>
 
-        <nav className="mt-5 flex gap-2 overflow-x-auto lg:flex-col lg:overflow-visible">
-          {navItems.map((item) => {
-            const Icon = item.icon;
-            return (
-              <Link key={item.href} href={item.href} className="inline-flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-neutral-600 transition hover:bg-[color-mix(in_srgb,var(--clinic-accent)_12%,white)] hover:text-[var(--clinic-primary)]">
-                <Icon size={17} />
-                {item.label}
-              </Link>
-            );
-          })}
-        </nav>
+        <SidebarNav items={allowedNavItems} />
 
         <form action={signOutAction} className="mt-6 hidden lg:block">
           <input type="hidden" name="next" value="/login-cliente" />
@@ -93,9 +99,3 @@ export default async function DashboardLayout({ children }) {
     </div>
   );
 }
-
-
-
-
-
-

@@ -1,7 +1,7 @@
-﻿import { ShieldCheck, UserPlus, UsersRound } from "lucide-react";
+import { ShieldCheck, UserPlus, UsersRound } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
-import { requireClinic } from "@/lib/auth/session";
-import { EmptyClinicState, EmptyState, Field, PageHeader, SubmitButton } from "@/components/app-shell/ui";
+import { requireClinicSection } from "@/lib/auth/session";
+import { Card, EmptyClinicState, EmptyState, Field, LimitNotice, Notice, PageHeader, SectionTitle, SelectField, SubmitButton } from "@/components/app-shell/ui";
 import { getClinicPlan, getClinicUsage } from "@/lib/saas/plans";
 import { inviteClinicUserAction, updateClinicUserAction } from "../actions";
 
@@ -15,25 +15,9 @@ const roles = [
   ["profissional", "Profissional"],
 ];
 
-function SelectField({ label, name, defaultValue = "", children }) {
-  return (
-    <label className="block">
-      <span className="text-sm font-medium text-neutral-700">{label}</span>
-      <select name={name} defaultValue={defaultValue} className="mt-2 h-11 w-full rounded-lg border border-neutral-200 bg-white px-3 text-sm outline-none transition focus:border-[var(--clinic-primary)] focus:ring-2 focus:ring-[color-mix(in_srgb,var(--clinic-primary)_18%,transparent)]">
-        {children}
-      </select>
-    </label>
-  );
-}
-
-function Notice({ type = "info", children }) {
-  const styles = type === "success" ? "border-[color-mix(in_srgb,var(--clinic-primary)_24%,#e5e5e5)] bg-[color-mix(in_srgb,var(--clinic-accent)_10%,white)] text-[var(--clinic-primary)]" : "border-amber-200 bg-amber-50 text-amber-900";
-  return <div className={`mt-6 rounded-lg border px-4 py-3 text-sm ${styles}`}>{children}</div>;
-}
-
 export default async function UsuariosPage({ searchParams }) {
   const params = await searchParams;
-  const { activeClinic } = await requireClinic();
+  const { activeClinic } = await requireClinicSection("usuarios");
 
   if (!activeClinic) {
     return <main className="px-5 py-8 sm:px-8 lg:px-10"><EmptyClinicState /></main>;
@@ -57,26 +41,30 @@ export default async function UsuariosPage({ searchParams }) {
       <section className="mx-auto max-w-7xl">
         <PageHeader eyebrow="Acesso" title="Usuarios da clinica" description="Convide pessoas da equipe, defina papeis e controle usuarios ativos dentro do limite do plano." />
 
-        {params?.ok === "convite" ? <Notice type="success">Usuario convidado ou reativado com sucesso.</Notice> : null}
-        {params?.ok === "usuario" ? <Notice type="success">Usuario atualizado com sucesso.</Notice> : null}
-        {params?.erro ? <Notice>{params?.mensagem || "Nao foi possivel concluir esta acao."}</Notice> : null}
+        <div className="mt-6 space-y-3">
+          {params?.ok === "convite" ? <Notice type="success">Usuario criado no Auth e vinculado a clinica. Envie o e-mail e a senha temporaria informada para ele acessar em `/login-cliente`.</Notice> : null}
+          {params?.ok === "existente" ? <Notice type="warning">O e-mail ja existia no Auth. O vinculo com a clinica foi criado/reativado, mas a senha nao foi alterada.</Notice> : null}
+          {params?.ok === "usuario" ? <Notice type="success">Usuario atualizado com sucesso.</Notice> : null}
+          {params?.erro === "limite" ? <LimitNotice resource="usuarios" message={params?.mensagem} /> : null}
+          {params?.erro && params?.erro !== "limite" ? <Notice type="warning">{params?.mensagem || "Nao foi possivel concluir esta acao."}</Notice> : null}
+        </div>
 
         <div className="mt-8 grid gap-6 lg:grid-cols-[420px_1fr]">
-          <form action={inviteClinicUserAction} className="rounded-lg border border-neutral-200 bg-white p-5 shadow-sm">
-            <div className="flex items-center gap-2"><UserPlus size={20} className="text-[var(--clinic-primary)]" /><h2 className="text-lg font-semibold">Convidar usuario</h2></div>
-            <p className="mt-2 text-sm leading-6 text-neutral-600">Usuarios ativos: {usage.usuarios}/{plan.limite_usuarios}. Restam {remaining} no plano {plan.nome}.</p>
-            <div className="mt-4 space-y-4">
+          <Card>
+            <SectionTitle icon={UserPlus} title="Convidar usuario" description={`Usuarios ativos: ${usage.usuarios}/${plan.limite_usuarios}. Restam ${remaining} no plano ${plan.nome}.`} />
+            <form action={inviteClinicUserAction} className="mt-4 space-y-4">
               <Field label="Nome" name="nome" />
               <Field label="E-mail" name="email" type="email" required />
+              <Field label="Senha temporaria" name="senha_temporaria" type="password" required placeholder="Minimo recomendado: 8 caracteres" />
               <SelectField label="Papel" name="papel" defaultValue="recepcao">
                 {roles.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
               </SelectField>
               <SubmitButton>Convidar usuario</SubmitButton>
-            </div>
-          </form>
+            </form>
+          </Card>
 
-          <section className="rounded-lg border border-neutral-200 bg-white p-5 shadow-sm">
-            <div className="flex items-center gap-2"><UsersRound size={20} className="text-[var(--clinic-primary)]" /><h2 className="text-lg font-semibold">Equipe com acesso</h2></div>
+          <Card>
+            <SectionTitle icon={UsersRound} title="Equipe com acesso" />
             <div className="mt-4 space-y-3">
               {usuarios.length === 0 ? (
                 <EmptyState title="Nenhum usuario cadastrado" description="Convide os usuarios que vao operar agenda, financeiro e cadastros da clinica." />
@@ -87,7 +75,7 @@ export default async function UsuariosPage({ searchParams }) {
                     <Field label="Nome" name="nome" defaultValue={usuario.nome || ""} />
                     <div>
                       <p className="text-sm font-medium text-neutral-700">E-mail</p>
-                      <p className="mt-2 h-11 rounded-lg border border-neutral-100 bg-neutral-50 px-3 py-3 text-sm text-neutral-600">{usuario.email}</p>
+                      <p className="mt-2 min-h-11 break-all rounded-lg border border-neutral-100 bg-neutral-50 px-3 py-3 text-sm text-neutral-600">{usuario.email}</p>
                     </div>
                     <SelectField label="Papel" name="papel" defaultValue={usuario.papel}>
                       {roles.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
@@ -98,16 +86,15 @@ export default async function UsuariosPage({ searchParams }) {
                     </SelectField>
                   </div>
                   <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-                    <p className="inline-flex items-center gap-2 text-xs text-neutral-500"><ShieldCheck size={14} /> {usuario.accepted_at ? "Acesso aceito" : "Convite pendente ou login por e-mail"}</p>
+                    <p className="inline-flex items-center gap-2 text-xs text-neutral-500"><ShieldCheck size={14} /> {usuario.accepted_at ? "Acesso criado no Auth" : "Vinculo pendente de login/Auth"}</p>
                     <SubmitButton>Salvar usuario</SubmitButton>
                   </div>
                 </form>
               ))}
             </div>
-          </section>
+          </Card>
         </div>
       </section>
     </main>
   );
 }
-

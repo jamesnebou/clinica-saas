@@ -1,7 +1,7 @@
 ﻿import Link from "next/link";
 import { AlertTriangle, CalendarRange, CheckCircle2, Clock, MessageCircle, XCircle } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
-import { requireClinic } from "@/lib/auth/session";
+import { requireClinicSection } from "@/lib/auth/session";
 import { EmptyClinicState, EmptyState, Field, PageHeader, SubmitButton, TextArea } from "@/components/app-shell/ui";
 import { createAgendamentoAction, deleteAgendamentoAction, updateAgendamentoAction, updateAgendamentoStatusAction } from "../actions";
 
@@ -110,7 +110,7 @@ export default async function AgendaPage({ searchParams }) {
   const errorMessage = params?.error ? String(params.error) : "";
   const { start, end } = dayRange(selectedDate);
   const { days: weekDays, weekStart, weekEnd } = weekRange(selectedDate);
-  const { activeClinic } = await requireClinic();
+  const { activeClinic } = await requireClinicSection("agenda");
 
   if (!activeClinic) {
     return <main className="px-5 py-8 sm:px-8 lg:px-10"><EmptyClinicState /></main>;

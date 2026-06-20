@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { isInternalAdminEmail } from "@/lib/saas/plans";
+import { canAccessSection, getCurrentMembership } from "@/lib/auth/permissions";
 
 export async function getCurrentUser() {
   const supabase = await createClient();
@@ -51,6 +52,22 @@ export async function getUserClinics() {
 export async function requireClinic() {
   await requireUser();
   const context = await getUserClinics();
+
+  return context;
+}
+
+export async function requireClinicSection(section) {
+  const context = await requireClinic();
+  const activeClinic = context.activeClinic;
+
+  if (!activeClinic) {
+    return context;
+  }
+
+  const membership = getCurrentMembership(context.memberships, activeClinic.id);
+  if (!canAccessSection(membership?.papel, section)) {
+    redirect("/dashboard?erro=permissao");
+  }
 
   return context;
 }
