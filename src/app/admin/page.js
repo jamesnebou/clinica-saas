@@ -5,7 +5,7 @@ import { signOutAction } from "@/app/login/actions";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { Field, SubmitButton, TextArea } from "@/components/app-shell/ui";
 import { getClinicUsage, getSystemPlans } from "@/lib/saas/plans";
-import { updateClinicCommercialAction, upsertSystemPlanAction } from "./actions";
+import { createClinicWithOwnerAction, updateClinicCommercialAction, upsertSystemPlanAction } from "./actions";
 
 export const metadata = { title: "Admin SaaS | Clinica SaaS" };
 
@@ -155,6 +155,42 @@ export default async function AdminSaasPage() {
           </section>
 
           <aside className="space-y-6">
+            <form action={createClinicWithOwnerAction} className="rounded-lg border border-neutral-200 bg-white p-5 shadow-sm">
+              <h2 className="text-lg font-semibold">Criar clinica e owner</h2>
+              <p className="mt-2 text-sm leading-6 text-neutral-600">Cria a clinica, cria ou atualiza o usuario no Supabase Auth e vincula como owner. O acesso nao depende de e-mail chegar.</p>
+              <div className="mt-4 space-y-4">
+                <Field label="Nome da clinica" name="nome" required />
+                <Field label="Slug" name="slug" placeholder="clinica-bella-skin" />
+                <Field label="Marca exibida" name="brand_name" placeholder="Bella Skin" />
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <Field label="Documento" name="documento" />
+                  <Field label="Telefone" name="telefone" />
+                  <Field label="Cidade" name="cidade" />
+                  <Field label="Estado" name="estado" />
+                </div>
+                <Field label="E-mail da clinica" name="email" type="email" />
+                <Field label="Endereco" name="endereco" />
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <SelectField label="Status inicial" name="status" defaultValue="trial">
+                    <option value="trial">Trial</option>
+                    <option value="ativa">Ativa</option>
+                  </SelectField>
+                  <SelectField label="Plano" name="plano" defaultValue="starter">
+                    {plans.map((planOption) => <option key={planOption.slug} value={planOption.slug}>{planOption.nome}</option>)}
+                  </SelectField>
+                </div>
+                <div className="rounded-lg bg-neutral-50 p-3">
+                  <p className="text-sm font-semibold text-neutral-800">Owner da clinica</p>
+                  <div className="mt-3 space-y-4">
+                    <Field label="Nome do owner" name="owner_nome" />
+                    <Field label="E-mail do owner" name="owner_email" type="email" required />
+                    <Field label="Senha temporaria" name="owner_password" type="password" required />
+                  </div>
+                </div>
+                <SubmitButton>Criar clinica</SubmitButton>
+              </div>
+            </form>
+
             <section className="rounded-lg border border-neutral-200 bg-white p-5 shadow-sm">
               <h2 className="text-lg font-semibold">Planos do sistema</h2>
               <div className="mt-4 space-y-3">

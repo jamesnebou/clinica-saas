@@ -84,6 +84,46 @@ function normalizePhone(value) {
   return String(value || "").replace(/\D/g, "");
 }
 
+async function findAuthUserByEmail(email) {
+  let page = 1;
+  const perPage = 100;
+
+  while (page <= 10) {
+    const { data, error } = await supabaseAdmin.auth.admin.listUsers({ page, perPage });
+    if (error) throw error;
+    const found = data?.users?.find((user) => normalizeEmail(user.email) === email);
+    if (found) return found;
+    if (!data?.users?.length || data.users.length < perPage) return null;
+    page += 1;
+  }
+
+  return null;
+}
+
+async function upsertAuthUserWithPassword({ email, password, nome }) {
+  const existing = await findAuthUserByEmail(email);
+
+  if (existing?.id) {
+    const { data, error } = await supabaseAdmin.auth.admin.updateUserById(existing.id, {
+      password,
+      email_confirm: true,
+      user_metadata: { ...(existing.user_metadata || {}), nome },
+    });
+    if (error) throw error;
+    return { user: data?.user || existing, existed: true };
+  }
+
+  const { data, error } = await supabaseAdmin.auth.admin.createUser({
+    email,
+    password,
+    email_confirm: true,
+    user_metadata: { nome },
+  });
+
+  if (error) throw error;
+  return { user: data?.user, existed: false };
+}
+
 function safeHexColor(value, fallback) {
   const color = String(value || "").trim();
   return /^#[0-9a-f]{6}$/i.test(color) ? color : fallback;
@@ -603,10 +643,11 @@ export async function updateAgendamentoFinanceiroAction(formData) {
   const clienteId = nullableText(formData, "cliente_id");
   const profissionalId = nullableText(formData, "profissional_id");
   const valor = numberValue(formData, "valor", 0);
-  const valorPago = numberValue(formData, "valor_pago", 0);
+  const valorPagoInformado = numberValue(formData, "valor_pago", 0);
   const status = requireValue(text(formData, "pagamento_status"), "Status de pagamento nao informado.");
-  const formaPagamento = nullableText(formData, "forma_pagamento");
-  const dataPagamento = nullableText(formData, "data_pagamento") || (status === "pago" ? new Date().toISOString() : null);
+  const valorPago = status === "cancelado" ? 0 : valorPagoInformado;
+  const formaPagamento = status === "cancelado" ? null : nullableText(formData, "forma_pagamento");
+  const dataPagamento = status === "cancelado" ? null : nullableText(formData, "data_pagamento") || (status === "pago" ? new Date().toISOString() : null);
 
   const { error: agendaError } = await supabase
     .from("agendamentos")
@@ -743,42 +784,27 @@ export async function inviteClinicUserAction(formData) {
     redirectWithMessage("/dashboard/usuarios", "papel", "Papel de usuario invalido.");
   }
 
-  let authUserId = null;
-  let authStatus = "convite";
-  const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
+  const authResult = await upsertAuthUserWithPassword({
     email,
     password: senhaTemporaria,
-    email_confirm: true,
-    user_metadata: {
-      nome: nullableText(formData, "nome") || email,
-    },
+    nome: nullableText(formData, "nome") || email,
   });
-
-  if (authError) {
-    const alreadyExists = /already|registered|exists|duplicate/i.test(authError.message || "");
-    if (!alreadyExists) {
-      redirectWithMessage("/dashboard/usuarios", "auth", authError.message || "Nao foi possivel criar o acesso do usuario.");
-    }
-    authStatus = "existente";
-  } else {
-    authUserId = authData?.user?.id || null;
-  }
 
   const { error } = await supabase.from("usuarios_clinica").upsert({
     clinica_id: clinicaId,
-    user_id: authUserId,
+    user_id: authResult.user?.id || null,
     nome: nullableText(formData, "nome") || email,
     email,
     papel,
     ativo: true,
     invited_at: new Date().toISOString(),
-    accepted_at: authUserId ? new Date().toISOString() : null,
+    accepted_at: authResult.user?.id ? new Date().toISOString() : null,
   }, { onConflict: "clinica_id,email" });
 
   if (error) throw error;
   revalidatePath("/dashboard/usuarios");
   revalidatePath("/dashboard/assinatura");
-  redirect(`/dashboard/usuarios?ok=${authStatus}`);
+  redirect(`/dashboard/usuarios?ok=${authResult.existed ? "senha" : "convite"}`);
 }
 
 export async function updateClinicUserAction(formData) {

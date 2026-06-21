@@ -42,8 +42,8 @@ export default async function UsuariosPage({ searchParams }) {
         <PageHeader eyebrow="Acesso" title="Usuarios da clinica" description="Convide pessoas da equipe, defina papeis e controle usuarios ativos dentro do limite do plano." />
 
         <div className="mt-6 space-y-3">
-          {params?.ok === "convite" ? <Notice type="success">Usuario criado no Auth e vinculado a clinica. Envie o e-mail e a senha temporaria informada para ele acessar em `/login-cliente`.</Notice> : null}
-          {params?.ok === "existente" ? <Notice type="warning">O e-mail ja existia no Auth. O vinculo com a clinica foi criado/reativado, mas a senha nao foi alterada.</Notice> : null}
+          {params?.ok === "convite" ? <Notice type="success">Usuario criado no Auth e vinculado a clinica. Envie manualmente o e-mail e a senha temporaria para ele acessar em `/login-cliente`.</Notice> : null}
+          {params?.ok === "senha" ? <Notice type="success">O usuario ja existia no Auth. A senha temporaria foi atualizada e o vinculo com a clinica foi criado/reativado.</Notice> : null}
           {params?.ok === "usuario" ? <Notice type="success">Usuario atualizado com sucesso.</Notice> : null}
           {params?.erro === "limite" ? <LimitNotice resource="usuarios" message={params?.mensagem} /> : null}
           {params?.erro && params?.erro !== "limite" ? <Notice type="warning">{params?.mensagem || "Nao foi possivel concluir esta acao."}</Notice> : null}
@@ -51,7 +51,7 @@ export default async function UsuariosPage({ searchParams }) {
 
         <div className="mt-8 grid gap-6 lg:grid-cols-[420px_1fr]">
           <Card>
-            <SectionTitle icon={UserPlus} title="Convidar usuario" description={`Usuarios ativos: ${usage.usuarios}/${plan.limite_usuarios}. Restam ${remaining} no plano ${plan.nome}.`} />
+            <SectionTitle icon={UserPlus} title="Convidar usuario" description={`Usuarios ativos: ${usage.usuarios}/${plan.limite_usuarios}. Restam ${remaining} no plano ${plan.nome}. O sistema cria o acesso direto; nao depende de e-mail automatico.`} />
             <form action={inviteClinicUserAction} className="mt-4 space-y-4">
               <Field label="Nome" name="nome" />
               <Field label="E-mail" name="email" type="email" required />

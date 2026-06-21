@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireClinic } from "@/lib/auth/session";
 import { supabaseAdmin } from "@/lib/supabase/admin";
-import { createAsaasCustomerForClinic, createAsaasSubscriptionForClinic, isAsaasConfigured } from "@/lib/asaas/client";
+import { createAsaasCustomerForClinic, createAsaasSubscriptionForClinic, isAsaasConfigured, listAsaasSubscriptionPayments } from "@/lib/asaas/client";
 import { getSystemPlans } from "@/lib/saas/plans";
 
 function text(formData, key) {
@@ -96,6 +96,7 @@ export async function startSubscriptionAction(formData) {
 
   let customerId = clinic.asaas_customer_id;
   let subscription;
+  let firstPayment = null;
 
   try {
     if (!customerId) {
@@ -108,6 +109,9 @@ export async function startSubscriptionAction(formData) {
       plan,
       customerId,
     });
+
+    const payments = await listAsaasSubscriptionPayments(subscription.id);
+    firstPayment = payments?.[0] || null;
   } catch (error) {
     redirectSubscriptionError(error, "asaas_api");
   }
@@ -133,6 +137,22 @@ export async function startSubscriptionAction(formData) {
     .eq("id", clinic.id);
 
   if (error) redirectSubscriptionError(error, "upgrade");
+
+  if (firstPayment?.id) {
+    await supabaseAdmin.from("asaas_cobrancas").upsert({
+      clinica_id: clinic.id,
+      asaas_payment_id: firstPayment.id,
+      asaas_subscription_id: subscription.id,
+      evento: "SUBSCRIPTION_FIRST_PAYMENT",
+      status: String(firstPayment.status || "pendente").toLowerCase(),
+      valor: Number(firstPayment.value || firstPayment.netValue || plan.preco_mensal || 0),
+      vencimento: firstPayment.dueDate || subscription.nextDueDate || null,
+      pago_em: firstPayment.paymentDate ? new Date(firstPayment.paymentDate).toISOString() : null,
+      invoice_url: firstPayment.invoiceUrl || null,
+      bank_slip_url: firstPayment.bankSlipUrl || null,
+      payload: firstPayment,
+    }, { onConflict: "asaas_payment_id" });
+  }
 
   revalidatePath("/dashboard");
   revalidatePath("/dashboard/assinatura");

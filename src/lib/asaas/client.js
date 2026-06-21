@@ -68,3 +68,12 @@ export async function createAsaasSubscriptionForClinic({ clinic, plan, customerI
     }),
   });
 }
+
+export async function listAsaasSubscriptionPayments(subscriptionId) {
+  if (!subscriptionId) return [];
+  const payload = await asaasRequest(`/subscriptions/${subscriptionId}/payments`, {
+    method: "GET",
+  });
+
+  return payload?.data || [];
+}
