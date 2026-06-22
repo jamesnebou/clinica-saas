@@ -264,6 +264,11 @@ export async function createProcedimentoAction(formData) {
     descricao: nullableText(formData, "descricao"),
     duracao_minutos: Math.max(1, numberValue(formData, "duracao_minutos", 60)),
     preco: numberValue(formData, "preco", 0),
+    sinal_percentual: Math.min(100, Math.max(0, numberValue(formData, "sinal_percentual", 0))),
+    sinal_valor: Math.max(0, numberValue(formData, "sinal_valor", 0)),
+    publicado_site: formData.get("publicado_site") === "on",
+    destaque_site: formData.get("destaque_site") === "on",
+    ordem_site: Math.max(0, numberValue(formData, "ordem_site", 0)),
     cuidados_antes: nullableText(formData, "cuidados_antes"),
     cuidados_depois: nullableText(formData, "cuidados_depois"),
   });
@@ -1015,7 +1020,21 @@ export async function updateClinicSettingsAction(formData) {
     },
     politica_cancelamento: nullableText(formData, "politica_cancelamento"),
     whatsapp_mensagem_padrao: nullableText(formData, "whatsapp_mensagem_padrao"),
+    site_publico: {
+      ...(metadata.site_publico || {}),
+      publicado: formData.get("site_publicado") === "on",
+      eyebrow: nullableText(formData, "site_eyebrow"),
+      titulo_hero: nullableText(formData, "site_titulo_hero"),
+      subtitulo_hero: nullableText(formData, "site_subtitulo_hero"),
+      nome_profissional: nullableText(formData, "site_nome_profissional"),
+      bio_profissional: nullableText(formData, "site_bio_profissional"),
+      credencial_1: nullableText(formData, "site_credencial_1"),
+      credencial_2: nullableText(formData, "site_credencial_2"),
+      credencial_3: nullableText(formData, "site_credencial_3"),
+    },
   };
+
+  const dominio = nullableText(formData, "site_dominio");
 
   const { error } = await supabase
     .from("clinicas")
@@ -1032,8 +1051,22 @@ export async function updateClinicSettingsAction(formData) {
     .eq("id", clinicaId);
 
   if (error) throw error;
+
+  if (dominio) {
+    const normalizedDomain = dominio.replace(/^https?:\/\//i, "").replace(/\/.*$/, "").toLowerCase();
+    const { error: domainError } = await supabase.from("clinica_dominios").upsert({
+      clinica_id: clinicaId,
+      dominio: normalizedDomain,
+      status: "pendente",
+      observacoes: "Aguardando apontamento DNS e configuracao na Vercel.",
+    }, { onConflict: "dominio" });
+
+    if (domainError) throw domainError;
+  }
+
   revalidatePath("/dashboard");
   revalidatePath("/dashboard/configuracoes");
+  revalidatePath(`/c/${activeClinic.slug}`);
   redirect("/dashboard/configuracoes?ok=configuracoes");
 }
 

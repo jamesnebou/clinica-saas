@@ -129,8 +129,8 @@ export default async function DashboardPage({ searchParams }) {
   ];
 
   return (
-    <main className="px-5 py-8 sm:px-8 lg:px-10">
-      <section className="mx-auto max-w-7xl">
+    <main className="min-w-0 overflow-x-hidden px-4 py-8 sm:px-6 lg:px-8 xl:px-10">
+      <section className="mx-auto max-w-7xl min-w-0">
         <PageHeader eyebrow="Dashboard" title="Operacao da clinica" description={`Visao executiva de ${brandName}: faturamento, agenda, clientes, equipe e status comercial.`} />
         {params?.erro === "permissao" ? (
           <div className="mt-6">
@@ -138,8 +138,8 @@ export default async function DashboardPage({ searchParams }) {
           </div>
         ) : null}
 
-        <div className="mt-8 grid gap-4 lg:grid-cols-[1fr_360px]">
-          <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="mt-8 grid min-w-0 gap-4 2xl:grid-cols-[minmax(0,1fr)_360px]">
+          <section className="grid min-w-0 gap-4 sm:grid-cols-2 xl:grid-cols-4">
             {cards.map((card) => {
               const Icon = card.icon;
               return (
@@ -160,7 +160,7 @@ export default async function DashboardPage({ searchParams }) {
           </Card>
         </div>
 
-        <div className="mt-6 grid gap-4 lg:grid-cols-3">
+        <div className="mt-6 grid min-w-0 gap-4 lg:grid-cols-3">
           {financeCards.map((card) => {
             const Icon = card.icon;
             return (
@@ -178,8 +178,8 @@ export default async function DashboardPage({ searchParams }) {
           })}
         </div>
 
-        <div className="mt-6 grid gap-6 xl:grid-cols-[1fr_360px]">
-          <Card className="premium-panel-dark">
+        <div className="mt-6 grid min-w-0 gap-6 2xl:grid-cols-[minmax(0,1fr)_360px]">
+          <Card className="premium-panel-dark min-w-0 overflow-hidden">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
               <div>
                 <p className="text-xs font-bold uppercase tracking-[0.2em] text-[color-mix(in_srgb,var(--clinic-accent)_72%,white)]">Faturamento</p>
@@ -188,15 +188,15 @@ export default async function DashboardPage({ searchParams }) {
               <p className="text-sm text-white/60">Previsto x recebido</p>
             </div>
 
-            <div className="mt-6 flex h-72 items-end gap-3 rounded-lg border border-white/10 bg-white/[0.04] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
+            <div className="mt-6 flex h-72 min-w-0 items-end gap-2 rounded-lg border border-white/10 bg-white/[0.04] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] sm:gap-3 sm:p-4">
               {days.map((item) => {
                 const previstoHeight = Math.max(6, Math.round((item.previsto / maxChart) * 100));
                 const recebidoHeight = Math.max(6, Math.round((item.recebido / maxChart) * 100));
                 return (
                   <div key={item.key} className="flex h-full min-w-0 flex-1 flex-col justify-end gap-2">
-                    <div className="flex flex-1 items-end justify-center gap-1.5">
-                      <div className="w-full max-w-5 rounded-t-md bg-white/[0.18]" style={{ height: `${previstoHeight}%` }} title={`Previsto: ${formatMoney(item.previsto)}`} />
-                      <div className="w-full max-w-5 rounded-t-md bg-[linear-gradient(180deg,color-mix(in_srgb,var(--clinic-accent)_72%,white),var(--clinic-primary))] shadow-[0_0_24px_color-mix(in_srgb,var(--clinic-accent)_28%,transparent)]" style={{ height: `${recebidoHeight}%` }} title={`Recebido: ${formatMoney(item.recebido)}`} />
+                    <div className="flex flex-1 items-end justify-center gap-1">
+                      <div className="w-full max-w-4 rounded-t-md bg-white/[0.18] sm:max-w-5" style={{ height: `${previstoHeight}%` }} title={`Previsto: ${formatMoney(item.previsto)}`} />
+                      <div className="w-full max-w-4 rounded-t-md bg-[linear-gradient(180deg,color-mix(in_srgb,var(--clinic-accent)_72%,white),var(--clinic-primary))] shadow-[0_0_24px_color-mix(in_srgb,var(--clinic-accent)_28%,transparent)] sm:max-w-5" style={{ height: `${recebidoHeight}%` }} title={`Recebido: ${formatMoney(item.recebido)}`} />
                     </div>
                     <div className="text-center">
                       <p className="truncate text-xs font-semibold text-white/70">{item.label}</p>
@@ -213,7 +213,7 @@ export default async function DashboardPage({ searchParams }) {
             </div>
           </Card>
 
-          <aside className="space-y-6">
+          <aside className="min-w-0 space-y-6">
             <Card>
               <CreditCard size={24} className="text-[var(--clinic-primary)]" />
               <h2 className="mt-4 text-lg font-semibold">Resumo de hoje</h2>

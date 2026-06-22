@@ -15,7 +15,7 @@ export default async function ProcedimentosPage() {
   const supabase = await createClient();
   const { data: procedimentos = [] } = await supabase
     .from("procedimentos")
-    .select("id, nome, categoria, descricao, duracao_minutos, preco, ativo")
+    .select("id, nome, categoria, descricao, duracao_minutos, preco, ativo, publicado_site, destaque_site, sinal_percentual, sinal_valor, ordem_site")
     .eq("clinica_id", activeClinic.id)
     .order("created_at", { ascending: false });
 
@@ -33,6 +33,21 @@ export default async function ProcedimentosPage() {
               <div className="grid gap-4 sm:grid-cols-2">
                 <Field label="Duração (min)" name="duracao_minutos" type="number" defaultValue="60" />
                 <Field label="Preço" name="preco" type="number" defaultValue="0" />
+              </div>
+              <div className="grid gap-4 sm:grid-cols-3">
+                <Field label="Sinal fixo" name="sinal_valor" type="number" defaultValue="0" />
+                <Field label="Sinal (%)" name="sinal_percentual" type="number" defaultValue="0" />
+                <Field label="Ordem no site" name="ordem_site" type="number" defaultValue="0" />
+              </div>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <label className="flex items-center gap-2 rounded-lg border border-neutral-200 px-3 py-2 text-sm font-semibold text-neutral-700">
+                  <input type="checkbox" name="publicado_site" defaultChecked />
+                  Publicar no site
+                </label>
+                <label className="flex items-center gap-2 rounded-lg border border-neutral-200 px-3 py-2 text-sm font-semibold text-neutral-700">
+                  <input type="checkbox" name="destaque_site" />
+                  Destacar no site
+                </label>
               </div>
               <TextArea label="Descrição" name="descricao" />
               <TextArea label="Cuidados antes" name="cuidados_antes" />
@@ -53,6 +68,9 @@ export default async function ProcedimentosPage() {
                       <h3 className="font-semibold">{item.nome}</h3>
                       <p className="mt-1 text-sm text-neutral-600">{item.categoria || "Sem categoria"} · {item.duracao_minutos} min</p>
                       <p className="mt-1 text-xs text-neutral-500">R$ {Number(item.preco || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</p>
+                      <p className="mt-1 text-xs text-neutral-500">
+                        Site: {item.publicado_site ? "publicado" : "oculto"} · Sinal: {Number(item.sinal_valor || 0) > 0 ? `R$ ${Number(item.sinal_valor).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}` : `${Number(item.sinal_percentual || 0)}%`}
+                      </p>
                     </div>
                     <div className="flex flex-wrap gap-2">
                       <form action={toggleProcedimentoAction}>

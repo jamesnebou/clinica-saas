@@ -21,6 +21,10 @@ function pct(used, limit) {
   return Math.min(100, Math.round((Number(used || 0) / Number(limit || 1)) * 100));
 }
 
+function isOpenChargeStatus(status) {
+  return ["pending", "pendente", "overdue", "vencido"].includes(String(status || "").toLowerCase());
+}
+
 function Notice({ type, children }) {
   const styles = type === "success"
     ? "border-[color-mix(in_srgb,var(--clinic-primary)_24%,#e5e5e5)] bg-[color-mix(in_srgb,var(--clinic-accent)_10%,white)] text-[var(--clinic-primary)]"
@@ -68,7 +72,10 @@ export default async function AssinaturaPage({ searchParams }) {
   ]);
   const billingState = getClinicBillingState(activeClinic);
   const limits = getLimitRows({ plan: currentPlan, usage });
-  const openCharge = cobrancas.find((item) => ["pending", "pendente", "overdue", "vencido"].includes(String(item.status || "").toLowerCase()));
+  const latestCharge = cobrancas[0] || null;
+  const openCharge = ["cancelada", "inativa"].includes(String(activeClinic.status || "").toLowerCase()) || ["cancelada", "isenta"].includes(String(activeClinic.assinatura_status || "").toLowerCase())
+    ? null
+    : isOpenChargeStatus(latestCharge?.status) ? latestCharge : null;
 
   return (
     <main className="px-5 py-8 sm:px-8 lg:px-10">
@@ -185,4 +192,3 @@ export default async function AssinaturaPage({ searchParams }) {
     </main>
   );
 }
-

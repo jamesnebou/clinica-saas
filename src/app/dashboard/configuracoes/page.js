@@ -2,6 +2,7 @@
 import { requireClinicSection } from "@/lib/auth/session";
 import { EmptyClinicState, Field, PageHeader, SubmitButton, TextArea } from "@/components/app-shell/ui";
 import { updateClinicSettingsAction } from "../actions";
+import { createClient } from "@/lib/supabase/server";
 
 export const metadata = { title: "Configuracoes | Clinica SaaS" };
 
@@ -28,8 +29,15 @@ export default async function ConfiguracoesPage({ searchParams }) {
   }
 
   const meta = activeClinic.metadata || {};
+  const site = meta.site_publico || {};
   const schedule = meta.horario_funcionamento || {};
   const selectedDays = Array.isArray(schedule.dias) && schedule.dias.length ? schedule.dias.map(String) : ["1", "2", "3", "4", "5", "6"];
+  const supabase = await createClient();
+  const { data: domains = [] } = await supabase
+    .from("clinica_dominios")
+    .select("dominio, status")
+    .eq("clinica_id", activeClinic.id)
+    .order("created_at", { ascending: false });
 
   return (
     <main className="px-5 py-8 sm:px-8 lg:px-10">
@@ -92,6 +100,41 @@ export default async function ConfiguracoesPage({ searchParams }) {
           </section>
 
           <section className="rounded-lg border border-neutral-200 bg-white p-5 shadow-sm">
+            <div className="flex items-center gap-2"><Settings size={20} className="text-[var(--clinic-primary)]" /><h2 className="text-lg font-semibold">Site publico de vendas e agendamento</h2></div>
+            <div className="mt-5 rounded-lg border border-neutral-200 bg-neutral-50 px-4 py-3 text-sm text-neutral-600">
+              Link publico atual: <a href={`/c/${activeClinic.slug}`} target="_blank" className="font-bold text-[var(--clinic-primary)] underline">/c/{activeClinic.slug}</a>
+            </div>
+            <div className="mt-5 grid gap-4 lg:grid-cols-2">
+              <label className="flex items-center gap-2 rounded-lg border border-neutral-200 px-3 py-2 text-sm font-semibold text-neutral-700">
+                <input type="checkbox" name="site_publicado" defaultChecked={site.publicado !== false} />
+                Publicar site e agendamento online
+              </label>
+              <Field label="Dominio proprio desejado" name="site_dominio" placeholder="www.suaclinica.com.br" defaultValue={domains[0]?.dominio || ""} />
+              <Field label="Texto pequeno acima do titulo" name="site_eyebrow" defaultValue={site.eyebrow || ""} placeholder="Estetica premium e atendimento personalizado" />
+              <Field label="Titulo principal" name="site_titulo_hero" defaultValue={site.titulo_hero || ""} placeholder="Realce sua beleza com naturalidade" />
+              <div className="lg:col-span-2">
+                <TextArea label="Subtitulo da pagina" name="site_subtitulo_hero" defaultValue={site.subtitulo_hero || ""} placeholder="Apresente a clinica, diferenciais e convite para agendamento." />
+              </div>
+              <Field label="Nome da profissional em destaque" name="site_nome_profissional" defaultValue={site.nome_profissional || ""} />
+              <Field label="Credencial 1" name="site_credencial_1" defaultValue={site.credencial_1 || ""} placeholder="Protocolos personalizados" />
+              <Field label="Credencial 2" name="site_credencial_2" defaultValue={site.credencial_2 || ""} placeholder="Ambiente reservado" />
+              <Field label="Credencial 3" name="site_credencial_3" defaultValue={site.credencial_3 || ""} placeholder="Acompanhamento pos-procedimento" />
+              <div className="lg:col-span-2">
+                <TextArea label="Bio/apresentacao da profissional" name="site_bio_profissional" defaultValue={site.bio_profissional || ""} placeholder="Conte a historia, especialidade, abordagem e autoridade da profissional." />
+              </div>
+            </div>
+            {domains.length ? (
+              <div className="mt-5 grid gap-2">
+                {domains.map((domain) => (
+                  <p key={domain.dominio} className="rounded-lg bg-neutral-50 px-3 py-2 text-xs text-neutral-600">
+                    {domain.dominio} - status: <strong>{domain.status}</strong>
+                  </p>
+                ))}
+              </div>
+            ) : null}
+          </section>
+
+          <section className="rounded-lg border border-neutral-200 bg-white p-5 shadow-sm">
             <div className="flex items-center gap-2"><Clock size={20} className="text-[var(--clinic-primary)]" /><h2 className="text-lg font-semibold">Horario de funcionamento</h2></div>
             <div className="mt-5 grid gap-4 md:grid-cols-2">
               <Field label="Inicio do expediente" name="expediente_inicio" type="time" defaultValue={schedule.inicio || "08:00"} />
@@ -121,6 +164,4 @@ export default async function ConfiguracoesPage({ searchParams }) {
     </main>
   );
 }
-
-
 

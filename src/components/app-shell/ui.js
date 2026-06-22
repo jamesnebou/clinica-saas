@@ -26,7 +26,7 @@ export function PageHeader({ eyebrow, title, description, action }) {
 
 export function Card({ children, className = "" }) {
   return (
-    <section className={`premium-panel rounded-lg p-5 transition duration-200 ${className}`}>
+    <section className={`premium-panel min-w-0 rounded-lg p-5 transition duration-200 ${className}`}>
       {children}
     </section>
   );

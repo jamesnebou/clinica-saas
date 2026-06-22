@@ -67,6 +67,60 @@ async function findClinicByPayment(payment) {
   return null;
 }
 
+async function updatePublicBookingPayment({ payment, payload, event, paymentStatus, paidAt }) {
+  const paymentId = payment?.id || "";
+  const externalReference = payment?.externalReference || "";
+
+  let query = supabaseAdmin
+    .from("site_agendamentos_publicos")
+    .select("id, clinica_id, agendamento_id, valor_sinal")
+    .limit(1);
+
+  if (paymentId) {
+    query = query.eq("asaas_payment_id", paymentId);
+  } else if (externalReference) {
+    query = query.eq("agendamento_id", externalReference);
+  } else {
+    return false;
+  }
+
+  const { data, error } = await query;
+  if (error) throw error;
+  const booking = data?.[0];
+  if (!booking?.id) return false;
+
+  const publicStatus = paymentStatus === "pago" ? "pago" : paymentStatus === "cancelado" ? "cancelado" : "pendente";
+
+  const { error: publicError } = await supabaseAdmin
+    .from("site_agendamentos_publicos")
+    .update({
+      pagamento_status: publicStatus,
+      asaas_payment_id: paymentId || null,
+      invoice_url: payment?.invoiceUrl || null,
+      payload,
+    })
+    .eq("id", booking.id);
+
+  if (publicError) throw publicError;
+
+  if (booking.agendamento_id && paymentStatus === "pago") {
+    const { error: agendaError } = await supabaseAdmin
+      .from("agendamentos")
+      .update({
+        pagamento_status: "parcial",
+        forma_pagamento: "outro",
+        valor_pago: Number(booking.valor_sinal || payment?.value || 0),
+        data_pagamento: paidAt ? new Date(paidAt).toISOString() : new Date().toISOString(),
+        status: "confirmado",
+      })
+      .eq("id", booking.agendamento_id);
+
+    if (agendaError) throw agendaError;
+  }
+
+  return true;
+}
+
 async function findClinicBySubscription(subscription) {
   const subscriptionId = subscription?.id || "";
   const customerId = subscription?.customer || "";
@@ -127,14 +181,19 @@ export async function POST(request) {
   }
 
   const payment = payload?.payment || payload?.data || payload;
+  const paymentStatus = normalizePaymentStatus(payment?.status);
+  const paidAt = payment?.paymentDate || payment?.confirmedDate || payment?.clientPaymentDate || null;
+
+  const publicBookingUpdated = await updatePublicBookingPayment({ payment, payload, event, paymentStatus, paidAt });
+  if (publicBookingUpdated) {
+    return NextResponse.json({ ok: true, matched: true, type: "public-booking-payment" });
+  }
+
   const clinic = await findClinicByPayment(payment);
 
   if (!clinic?.id) {
     return NextResponse.json({ ok: true, matched: false, type: "payment" });
   }
-
-  const paymentStatus = normalizePaymentStatus(payment?.status);
-  const paidAt = payment?.paymentDate || payment?.confirmedDate || payment?.clientPaymentDate || null;
 
   const { error: billingError } = await supabaseAdmin.from("asaas_cobrancas").upsert({
     clinica_id: clinic.id,

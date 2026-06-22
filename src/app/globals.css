@@ -89,12 +89,13 @@ textarea {
   box-shadow: var(--shadow-soft);
 }
 
-.premium-shell :where(article, section, form, details).shadow-sm {
+.premium-shell :where(article, section, form, details, div).shadow-sm:not(aside):not(nav) {
   box-shadow: var(--shadow-soft);
   position: relative;
+  isolation: isolate;
 }
 
-.premium-shell :where(article, section, form, details).shadow-sm::before {
+.premium-shell :where(article, section, form, details, div).shadow-sm:not(aside):not(nav)::before {
   pointer-events: none;
   position: absolute;
   inset: 0;
@@ -106,9 +107,45 @@ textarea {
   opacity: 0.7;
 }
 
-.premium-shell :where(article, section, form, details).shadow-sm:hover {
-  box-shadow: var(--shadow-lift);
+.premium-shell :where(article, section, form, details, div).shadow-sm:not(aside):not(nav)::after {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  padding: 1px;
+  border-radius: inherit;
+  content: "";
+  background: conic-gradient(
+    from var(--premium-card-angle),
+    transparent 0deg,
+    color-mix(in srgb, var(--clinic-primary, #047857) 74%, transparent) 70deg,
+    color-mix(in srgb, var(--clinic-accent, #10b981) 74%, transparent) 140deg,
+    transparent 230deg,
+    color-mix(in srgb, var(--clinic-primary, #047857) 52%, transparent) 310deg,
+    transparent 360deg
+  );
+  opacity: 0;
+  transition: opacity 180ms ease;
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask-composite: exclude;
+}
+
+.premium-shell :where(article, section, form, details, div).shadow-sm:not(aside):not(nav):hover,
+.premium-shell :where(article, section, form, details, div).shadow-sm:not(aside):not(nav):focus-within {
+  box-shadow: var(--shadow-lift), 0 18px 46px color-mix(in srgb, var(--clinic-primary, #047857) 18%, transparent);
   transform: translateY(-1px);
+}
+
+.premium-shell :where(article, section, form, details, div).shadow-sm:not(aside):not(nav):hover::after,
+.premium-shell :where(article, section, form, details, div).shadow-sm:not(aside):not(nav):focus-within::after {
+  animation: premium-card-spin 2.6s linear infinite;
+  opacity: 1;
 }
 
 .premium-shell input,
@@ -170,5 +207,82 @@ textarea {
     radial-gradient(circle at 30% 20%, rgba(255, 255, 255, 0.92), transparent 34%),
     linear-gradient(135deg, color-mix(in srgb, var(--clinic-accent, #10b981) 24%, white), color-mix(in srgb, var(--clinic-primary, #047857) 16%, white));
   box-shadow: 0 12px 28px color-mix(in srgb, var(--clinic-primary, #047857) 14%, transparent);
+}
+
+@property --premium-card-angle {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+
+.premium-panel,
+.premium-animated-card {
+  position: relative;
+  isolation: isolate;
+}
+
+.premium-panel::after,
+.premium-animated-card::after {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  padding: 1px;
+  border-radius: inherit;
+  content: "";
+  background: conic-gradient(
+    from var(--premium-card-angle),
+    transparent 0deg,
+    color-mix(in srgb, var(--clinic-primary, #047857) 74%, transparent) 70deg,
+    color-mix(in srgb, var(--clinic-accent, #10b981) 74%, transparent) 140deg,
+    transparent 230deg,
+    color-mix(in srgb, var(--clinic-primary, #047857) 52%, transparent) 310deg,
+    transparent 360deg
+  );
+  opacity: 0;
+  transition: opacity 180ms ease;
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask-composite: exclude;
+}
+
+.premium-panel:hover::after,
+.premium-panel:focus-within::after,
+.premium-animated-card:hover::after,
+.premium-animated-card:focus-within::after {
+  animation: premium-card-spin 2.6s linear infinite;
+  opacity: 1;
+}
+
+.premium-panel:hover,
+.premium-panel:focus-within,
+.premium-animated-card:hover,
+.premium-animated-card:focus-within {
+  box-shadow: var(--shadow-lift), 0 18px 46px color-mix(in srgb, var(--clinic-primary, #047857) 18%, transparent);
+}
+
+@media (hover: none) {
+  .premium-panel::after,
+  .premium-animated-card::after,
+  .premium-shell :where(article, section, form, details, div).shadow-sm:not(aside):not(nav)::after {
+    opacity: 0.42;
+  }
+
+  .premium-panel,
+  .premium-animated-card,
+  .premium-shell :where(article, section, form, details, div).shadow-sm:not(aside):not(nav) {
+    box-shadow: var(--shadow-lift), 0 18px 46px color-mix(in srgb, var(--clinic-primary, #047857) 12%, transparent);
+  }
+}
+
+@keyframes premium-card-spin {
+  to {
+    --premium-card-angle: 360deg;
+  }
 }
 

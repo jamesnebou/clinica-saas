@@ -30,12 +30,18 @@ function formatDate(value) {
   return new Date(`${value}`.includes("T") ? value : `${value}T12:00:00`).toLocaleDateString("pt-BR");
 }
 
-async function getOpenCharge(clinicaId) {
+function isOpenChargeStatus(status) {
+  return ["pending", "pendente", "overdue", "vencido"].includes(String(status || "").toLowerCase());
+}
+
+async function getOpenCharge(activeClinic) {
+  if (["cancelada", "inativa"].includes(String(activeClinic?.status || "").toLowerCase())) return null;
+  if (["cancelada", "isenta"].includes(String(activeClinic?.assinatura_status || "").toLowerCase())) return null;
+
   const { data, error } = await supabaseAdmin
     .from("asaas_cobrancas")
     .select("id, status, valor, vencimento, invoice_url")
-    .eq("clinica_id", clinicaId)
-    .in("status", ["pending", "pendente", "overdue", "vencido"])
+    .eq("clinica_id", activeClinic.id)
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -45,7 +51,7 @@ async function getOpenCharge(clinicaId) {
     return null;
   }
 
-  return data || null;
+  return isOpenChargeStatus(data?.status) ? data : null;
 }
 
 export default async function DashboardLayout({ children }) {
@@ -65,7 +71,7 @@ export default async function DashboardLayout({ children }) {
   const membership = getCurrentMembership(context.memberships, activeClinic.id);
   const role = membership?.papel || "recepcao";
   const allowedNavItems = navItems.filter((item) => canAccessSection(role, item.section));
-  const openCharge = await getOpenCharge(activeClinic.id);
+  const openCharge = await getOpenCharge(activeClinic);
 
   return (
     <div

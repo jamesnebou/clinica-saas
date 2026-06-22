@@ -77,3 +77,35 @@ export async function listAsaasSubscriptionPayments(subscriptionId) {
 
   return payload?.data || [];
 }
+
+export async function createAsaasCustomerForPatient({ clinicId, nome, email, telefone, cpf }) {
+  return asaasRequest("/customers", {
+    method: "POST",
+    body: JSON.stringify({
+      name: nome,
+      email: email || undefined,
+      phone: telefone || undefined,
+      mobilePhone: telefone || undefined,
+      cpfCnpj: cpf || undefined,
+      externalReference: `site-booking:${clinicId}:${email || telefone || nome}`,
+      notificationDisabled: false,
+    }),
+  });
+}
+
+export async function createAsaasPaymentForBooking({ customerId, value, description, externalReference, billingType = "UNDEFINED" }) {
+  const dueDate = new Date();
+  dueDate.setDate(dueDate.getDate() + 1);
+
+  return asaasRequest("/payments", {
+    method: "POST",
+    body: JSON.stringify({
+      customer: customerId,
+      billingType,
+      value: Number(value || 0),
+      dueDate: dueDate.toISOString().slice(0, 10),
+      description,
+      externalReference,
+    }),
+  });
+}
