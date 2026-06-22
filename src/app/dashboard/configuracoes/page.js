@@ -2,9 +2,10 @@
 import { requireClinicSection } from "@/lib/auth/session";
 import { EmptyClinicState, Field, PageHeader, SubmitButton, TextArea } from "@/components/app-shell/ui";
 import { updateClinicSettingsAction } from "../actions";
-import { createClient } from "@/lib/supabase/server";
+import { supabaseAdmin } from "@/lib/supabase/admin";
 
 export const metadata = { title: "Configuracoes | Clinica SaaS" };
+export const dynamic = "force-dynamic";
 
 const weekDays = [
   ["1", "Seg"],
@@ -20,22 +21,78 @@ function Notice({ children }) {
   return <div className="mt-6 rounded-lg border border-[color-mix(in_srgb,var(--clinic-primary)_24%,#e5e5e5)] bg-[color-mix(in_srgb,var(--clinic-accent)_10%,white)] px-4 py-3 text-sm text-[var(--clinic-primary)]">{children}</div>;
 }
 
+function parseDomainNotes(value) {
+  if (!value) return null;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return { message: value };
+  }
+}
+
+function dnsHint(domain) {
+  const value = String(domain || "").toLowerCase();
+  if (value.startsWith("www.")) {
+    return "No DNS do cliente, crie um CNAME para www apontando para cname.vercel-dns.com.";
+  }
+  return "Para dominio raiz, confira na Vercel o registro solicitado. Normalmente sera um A/ALIAS conforme a verificacao do projeto.";
+}
+
+function DomainStatusCard({ domain }) {
+  const notes = parseDomainNotes(domain.observacoes);
+  const status = domain.status || "pendente";
+  const ready = ["ativo", "verificado"].includes(status);
+
+  return (
+    <div className="rounded-lg border border-neutral-200 bg-neutral-50 px-4 py-3 text-sm text-neutral-700">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <strong className="text-neutral-950">{domain.dominio}</strong>
+        <span className={`rounded-full px-3 py-1 text-xs font-bold uppercase tracking-[0.14em] ${ready ? "bg-emerald-100 text-emerald-800" : status === "erro" ? "bg-red-100 text-red-800" : "bg-amber-100 text-amber-800"}`}>
+          {ready ? "pronto" : status}
+        </span>
+      </div>
+      <p className="mt-2 text-xs leading-5 text-neutral-600">
+        {ready ? "Dominio pronto para abrir o site publico da clinica." : notes?.message || "Aguardando verificacao do dominio na Vercel."}
+      </p>
+      {!ready ? <p className="mt-2 rounded-md bg-white px-3 py-2 text-xs leading-5 text-neutral-600">{dnsHint(domain.dominio)}</p> : null}
+      {Array.isArray(notes?.verification) && notes.verification.length ? (
+        <div className="mt-3 space-y-2">
+          {notes.verification.map((item, index) => (
+            <p key={`${domain.dominio}-${index}`} className="rounded-md bg-white px-3 py-2 text-xs leading-5 text-neutral-600">
+              Verificacao Vercel: <strong>{item.type || "DNS"}</strong>{" "}
+              {item.domain ? <span>em <strong>{item.domain}</strong>{" "}</span> : null}
+              {item.value ? <span>com valor <strong>{item.value}</strong></span> : null}
+            </p>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export default async function ConfiguracoesPage({ searchParams }) {
   const params = await searchParams;
-  const { activeClinic } = await requireClinicSection("configuracoes");
+  const context = await requireClinicSection("configuracoes");
+  const initialClinic = context.activeClinic;
 
-  if (!activeClinic) {
+  if (!initialClinic) {
     return <main className="px-5 py-8 sm:px-8 lg:px-10"><EmptyClinicState /></main>;
   }
 
+  const { data: freshClinic } = await supabaseAdmin
+    .from("clinicas")
+    .select("id, nome, slug, documento, telefone, email, endereco, cidade, estado, metadata")
+    .eq("id", initialClinic.id)
+    .maybeSingle();
+
+  const activeClinic = freshClinic || initialClinic;
   const meta = activeClinic.metadata || {};
   const site = meta.site_publico || {};
   const schedule = meta.horario_funcionamento || {};
   const selectedDays = Array.isArray(schedule.dias) && schedule.dias.length ? schedule.dias.map(String) : ["1", "2", "3", "4", "5", "6"];
-  const supabase = await createClient();
-  const { data: domains = [] } = await supabase
+  const { data: domains = [] } = await supabaseAdmin
     .from("clinica_dominios")
-    .select("dominio, status")
+    .select("dominio, status, observacoes")
     .eq("clinica_id", activeClinic.id)
     .order("created_at", { ascending: false });
 
@@ -159,9 +216,7 @@ export default async function ConfiguracoesPage({ searchParams }) {
             {domains.length ? (
               <div className="mt-5 grid gap-2">
                 {domains.map((domain) => (
-                  <p key={domain.dominio} className="rounded-lg bg-neutral-50 px-3 py-2 text-xs text-neutral-600">
-                    {domain.dominio} - status: <strong>{domain.status}</strong>
-                  </p>
+                  <DomainStatusCard key={domain.dominio} domain={domain} />
                 ))}
               </div>
             ) : null}

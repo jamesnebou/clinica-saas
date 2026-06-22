@@ -36,7 +36,9 @@ function nextSuggestedDate() {
 }
 
 function googleEmbedUrl(clinic, site) {
-  if (site.google_maps_url) return site.google_maps_url;
+  const mapsUrl = String(site.google_maps_url || "").trim();
+  if (/^https:\/\/www\.google\.com\/maps\/embed/i.test(mapsUrl)) return mapsUrl;
+  if (/^https:\/\/www\.google\.com\/maps/i.test(mapsUrl) && mapsUrl.includes("output=embed")) return mapsUrl;
   const address = [clinic.endereco, clinic.cidade, clinic.estado].filter(Boolean).join(", ");
   return `https://www.google.com/maps?q=${encodeURIComponent(address || clinic.nome)}&output=embed`;
 }

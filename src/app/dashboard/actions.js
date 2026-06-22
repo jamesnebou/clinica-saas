@@ -7,6 +7,7 @@ import { requireClinic } from "@/lib/auth/session";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { uploadClientPhoto, uploadClinicLogo, uploadClinicSiteImage } from "@/lib/supabase/storage";
 import { assertClinicLimit, assertClinicOperational } from "@/lib/saas/plans";
+import { addVercelProjectDomain, normalizeCustomDomain } from "@/lib/vercel/domains";
 
 async function getScopedSupabase() {
   const context = await requireClinic();
@@ -1082,12 +1083,34 @@ export async function updateClinicSettingsAction(formData) {
   }
 
   if (dominio) {
-    const normalizedDomain = dominio.replace(/^https?:\/\//i, "").replace(/\/.*$/, "").toLowerCase();
+    const normalizedDomain = normalizeCustomDomain(dominio);
+    let vercelDomain;
+    try {
+      vercelDomain = await addVercelProjectDomain(normalizedDomain);
+    } catch (error) {
+      vercelDomain = {
+        configured: true,
+        ok: false,
+        status: "erro",
+        verified: false,
+        message: error.message || "Nao foi possivel conectar na Vercel para adicionar o dominio.",
+      };
+    }
+    const now = new Date().toISOString();
     const { error: domainError } = await supabaseAdmin.from("clinica_dominios").upsert({
       clinica_id: clinicaId,
       dominio: normalizedDomain,
-      status: "pendente",
-      observacoes: "Aguardando apontamento DNS e configuracao na Vercel.",
+      status: vercelDomain.status || "pendente",
+      verificado_em: vercelDomain.status === "ativo" ? now : null,
+      observacoes: JSON.stringify({
+        provider: "vercel",
+        configured: Boolean(vercelDomain.configured),
+        ok: Boolean(vercelDomain.ok),
+        verified: Boolean(vercelDomain.verified),
+        message: vercelDomain.message || null,
+        verification: vercelDomain.payload?.verification || null,
+        updated_at: now,
+      }),
     }, { onConflict: "dominio" });
 
     if (domainError) throw domainError;
