@@ -10,6 +10,7 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 const navItems = [
   { href: "/dashboard", label: "Visao geral", icon: "dashboard", section: "dashboard" },
   { href: "/dashboard/agenda", label: "Agenda", icon: "agenda", section: "agenda" },
+  { href: "/dashboard/notificacoes", label: "Notificacoes", icon: "notificacoes", section: "notificacoes" },
   { href: "/dashboard/clientes", label: "Clientes", icon: "clientes", section: "clientes" },
   { href: "/dashboard/crm", label: "CRM", icon: "crm", section: "crm" },
   { href: "/dashboard/profissionais", label: "Profissionais", icon: "profissionais", section: "profissionais" },
@@ -54,6 +55,25 @@ async function getOpenCharge(activeClinic) {
   return isOpenChargeStatus(data?.status) ? data : null;
 }
 
+async function getNotificationBadgeCount(activeClinic) {
+  const since = new Date();
+  since.setDate(since.getDate() - 7);
+
+  const { count, error } = await supabaseAdmin
+    .from("site_agendamentos_publicos")
+    .select("id", { count: "exact", head: true })
+    .eq("clinica_id", activeClinic.id)
+    .in("pagamento_status", ["pendente", "erro"])
+    .gte("created_at", since.toISOString());
+
+  if (error) {
+    console.error("Erro ao carregar notificacoes pendentes:", error);
+    return 0;
+  }
+
+  return count || 0;
+}
+
 export default async function DashboardLayout({ children }) {
   const context = await requireClinic();
   const { user, activeClinic } = context;
@@ -70,8 +90,13 @@ export default async function DashboardLayout({ children }) {
   const billingState = getClinicBillingState(activeClinic);
   const membership = getCurrentMembership(context.memberships, activeClinic.id);
   const role = membership?.papel || "recepcao";
-  const allowedNavItems = navItems.filter((item) => canAccessSection(role, item.section));
-  const openCharge = await getOpenCharge(activeClinic);
+  const [openCharge, notificationCount] = await Promise.all([
+    getOpenCharge(activeClinic),
+    getNotificationBadgeCount(activeClinic),
+  ]);
+  const allowedNavItems = navItems
+    .filter((item) => canAccessSection(role, item.section))
+    .map((item) => item.section === "notificacoes" && notificationCount > 0 ? { ...item, badge: notificationCount } : item);
 
   return (
     <div

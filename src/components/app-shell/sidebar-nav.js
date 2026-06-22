@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { CalendarDays, CreditCard, KanbanSquare, LayoutDashboard, Menu, ReceiptText, Scissors, Settings, Stethoscope, UserCog, UsersRound, X } from "lucide-react";
+import { Bell, CalendarDays, CreditCard, KanbanSquare, LayoutDashboard, Menu, ReceiptText, Scissors, Settings, Stethoscope, UserCog, UsersRound, X } from "lucide-react";
 import { useState } from "react";
 
 const iconMap = {
   dashboard: LayoutDashboard,
   agenda: CalendarDays,
+  notificacoes: Bell,
   clientes: UsersRound,
   crm: KanbanSquare,
   profissionais: Stethoscope,
@@ -39,7 +40,12 @@ export function SidebarNav({ items }) {
             ].join(" ")}
           >
             <Icon size={17} />
-            {item.label}
+            <span className="min-w-0 flex-1 truncate">{item.label}</span>
+            {item.badge ? (
+              <span className="ml-auto inline-flex min-w-5 items-center justify-center rounded-full bg-[var(--clinic-primary)] px-1.5 py-0.5 text-[11px] font-bold leading-none text-white">
+                {item.badge > 99 ? "99+" : item.badge}
+              </span>
+            ) : null}
           </Link>
         );
       })}
@@ -102,7 +108,12 @@ export function MobileSidebarMenu({ items, brandName, logoUrl }) {
                     ].join(" ")}
                   >
                     <Icon size={18} />
-                    {item.label}
+                    <span className="min-w-0 flex-1 truncate">{item.label}</span>
+                    {item.badge ? (
+                      <span className="ml-auto inline-flex min-w-5 items-center justify-center rounded-full bg-[var(--clinic-primary)] px-1.5 py-0.5 text-[11px] font-bold leading-none text-white">
+                        {item.badge > 99 ? "99+" : item.badge}
+                      </span>
+                    ) : null}
                   </Link>
                 );
               })}

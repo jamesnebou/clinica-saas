@@ -7,11 +7,11 @@ export const ROLE_LABELS = {
 };
 
 export const ROLE_ACCESS = {
-  owner: ["dashboard", "agenda", "clientes", "crm", "profissionais", "procedimentos", "usuarios", "configuracoes", "financeiro", "assinatura"],
-  admin: ["dashboard", "agenda", "clientes", "crm", "profissionais", "procedimentos", "usuarios", "configuracoes", "financeiro", "assinatura"],
-  recepcao: ["dashboard", "agenda", "clientes", "crm", "profissionais", "procedimentos"],
-  financeiro: ["dashboard", "clientes", "crm", "financeiro", "assinatura"],
-  profissional: ["dashboard", "agenda", "clientes", "crm", "procedimentos"],
+  owner: ["dashboard", "agenda", "notificacoes", "clientes", "crm", "profissionais", "procedimentos", "usuarios", "configuracoes", "financeiro", "assinatura"],
+  admin: ["dashboard", "agenda", "notificacoes", "clientes", "crm", "profissionais", "procedimentos", "usuarios", "configuracoes", "financeiro", "assinatura"],
+  recepcao: ["dashboard", "agenda", "notificacoes", "clientes", "crm", "profissionais", "procedimentos"],
+  financeiro: ["dashboard", "notificacoes", "clientes", "crm", "financeiro", "assinatura"],
+  profissional: ["dashboard", "agenda", "notificacoes", "clientes", "crm", "procedimentos"],
 };
 
 export function getCurrentMembership(memberships, clinicaId) {

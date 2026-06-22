@@ -92,6 +92,35 @@ function StatusBadge({ status }) {
   );
 }
 
+function PaymentBadge({ pagamentoStatus, valorPago }) {
+  const status = String(pagamentoStatus || "").toLowerCase();
+  const paid = Number(valorPago || 0) > 0 || status === "pago";
+
+  if (paid) {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700">
+        <CheckCircle2 size={13} />
+        Sinal pago
+      </span>
+    );
+  }
+
+  if (["parcial", "pendente", ""].includes(status)) {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-bold text-amber-800">
+        <AlertTriangle size={13} />
+        Pagamento pendente
+      </span>
+    );
+  }
+
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full border border-neutral-200 bg-neutral-50 px-3 py-1 text-xs font-bold text-neutral-600">
+      {status || "sem pagamento"}
+    </span>
+  );
+}
+
 function SelectField({ label, name, defaultValue = "", required = false, children }) {
   return (
     <label className="block">
@@ -119,7 +148,7 @@ export default async function AgendaPage({ searchParams }) {
   const supabase = await createClient();
   let agendaQuery = supabase
     .from("agendamentos")
-    .select("id, cliente_id, profissional_id, procedimento_id, inicio, fim, status, valor, observacoes, clientes(nome, telefone), profissionais(nome), procedimentos(nome)")
+    .select("id, cliente_id, profissional_id, procedimento_id, inicio, fim, status, valor, valor_pago, pagamento_status, observacoes, clientes(nome, telefone), profissionais(nome), procedimentos(nome)")
     .eq("clinica_id", activeClinic.id)
     .gte("inicio", start)
     .lt("inicio", end)
@@ -244,9 +273,9 @@ export default async function AgendaPage({ searchParams }) {
                   <article key={item.id} className="rounded-lg border border-neutral-200 p-4">
                     <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
                       <div>
-                        <div className="flex flex-wrap items-center gap-2"><h3 className="font-semibold">{item.clientes?.nome || "Cliente nao informado"}</h3><StatusBadge status={item.status} /></div>
+                        <div className="flex flex-wrap items-center gap-2"><h3 className="font-semibold">{item.clientes?.nome || "Cliente nao informado"}</h3><StatusBadge status={item.status} /><PaymentBadge pagamentoStatus={item.pagamento_status} valorPago={item.valor_pago} /></div>
                         <p className="mt-1 text-sm text-neutral-600">{item.procedimentos?.nome || "Procedimento"} com {item.profissionais?.nome || "profissional"}</p>
-                        <p className="mt-1 text-xs text-neutral-500">{new Date(item.inicio).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })} - {new Date(item.fim).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })} · {formatMoney(item.valor)}</p>
+                        <p className="mt-1 text-xs text-neutral-500">{new Date(item.inicio).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })} - {new Date(item.fim).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })} · {formatMoney(item.valor)} · recebido {formatMoney(item.valor_pago)}</p>
                       </div>
                       <div className="flex flex-wrap gap-2">
                         {whats ? <a className="inline-flex h-9 items-center gap-2 rounded-lg border border-[color-mix(in_srgb,var(--clinic-primary)_24%,#e5e5e5)] px-3 text-sm font-semibold text-[var(--clinic-primary)]" href={whats} target="_blank" rel="noreferrer"><MessageCircle size={15} /> WhatsApp</a> : null}
