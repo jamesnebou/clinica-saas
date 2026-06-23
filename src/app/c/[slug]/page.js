@@ -200,7 +200,7 @@ export default async function PublicClinicPage({ params, searchParams }) {
       </section>
 
       <section className="public-section-warm mx-auto max-w-7xl px-5 py-24 sm:px-8">
-        <SectionHeading eyebrow="A clinica" title="Ambiente pensado para acolher, cuidar e transformar" description="Mostre ao paciente onde ele sera atendido. Fotos reais aumentam confianca e elevam a percepcao de valor antes do agendamento." center />
+        <SectionHeading eyebrow="A clínica" title="Ambiente pensado para acolher, cuidar e transformar" description="O Nosso espaço foi feito para o seu conforto e aconchego. Com uma sala climatizada e pensada no seu bem estar." center />
         <div className="mt-10 grid gap-4 lg:grid-cols-[1.15fr_0.85fr]">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={gallery[0]} alt="Clinica" className="h-[460px] w-full rounded-[2rem] object-cover shadow-[0_24px_70px_rgba(23,19,15,0.16)]" />
@@ -216,7 +216,7 @@ export default async function PublicClinicPage({ params, searchParams }) {
       <section id="servicos" className="public-services-section relative overflow-hidden py-24 text-white">
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_22%_0%,color-mix(in_srgb,var(--clinic-accent)_22%,transparent),transparent_32rem),radial-gradient(circle_at_85%_18%,color-mix(in_srgb,var(--clinic-primary)_24%,transparent),transparent_30rem)]" />
         <div className="relative z-10">
-          <SectionHeading eyebrow="Nossos servicos" title="Protocolos em destaque" description="Passe pelos tratamentos e escolha o melhor ponto de partida para sua avaliacao." center tone="dark" />
+          <SectionHeading eyebrow="Nossos serviços" title="Protocólos em destaque" description="Passe pelos tratamentos e escolha o melhor ponto de partida para sua avaliação." center tone="dark" />
         </div>
         <div className="relative z-10 mt-12 overflow-hidden">
           <div className="public-services-track flex w-max gap-5 px-5 sm:px-8">
@@ -244,7 +244,7 @@ export default async function PublicClinicPage({ params, searchParams }) {
       </section>
 
       <section id="depoimentos" className="public-section-soft mx-auto max-w-7xl px-5 py-24 sm:px-8">
-        <SectionHeading eyebrow="Depoimentos" title="O que pacientes dizem" description="A satisfacao dos pacientes e o maior reconhecimento." center />
+        <SectionHeading eyebrow="Depoimentos" title="O que pacientes dizem:" description="A satisfação dos pacientes é o maior reconhecimento." center />
         {site.google_reviews_url ? (
           <div className="mt-6 text-center">
             <a href={site.google_reviews_url} target="_blank" className="inline-flex items-center gap-2 rounded-full border border-neutral-200 bg-white/70 px-5 py-3 text-sm font-bold text-neutral-800 shadow-sm backdrop-blur">
@@ -271,7 +271,7 @@ export default async function PublicClinicPage({ params, searchParams }) {
 
       <section id="agendar" className="public-section-warm mx-auto grid max-w-7xl gap-8 px-5 py-24 sm:px-8 lg:grid-cols-[0.9fr_1.1fr]">
         <div className="rounded-[1.75rem] border border-white/70 bg-white/72 p-7 shadow-[0_20px_54px_rgba(20,18,15,0.09)] backdrop-blur">
-          <SectionHeading eyebrow="Agendamento" title="Reserve seu horario" description="Escolha procedimento, profissional e horario. A disponibilidade e validada com a agenda real da clinica." />
+          <SectionHeading eyebrow="Agendamento" title="Reserve seu horário" description="Escolha procedimento, profissional e horário. A disponibilidade e validada com a agenda real da clínica." />
           <div className="mt-8 space-y-4 text-sm text-neutral-700">
             <p className="flex gap-3"><Clock size={18} className="text-[var(--clinic-primary)]" /> Atendimento de {schedule.inicio || "08:00"} as {schedule.fim || "18:00"}, conforme disponibilidade.</p>
             <p className="flex gap-3"><CreditCard size={18} className="text-[var(--clinic-primary)]" /> Quando houver sinal, voce sera direcionado para um checkout seguro.</p>
@@ -285,7 +285,7 @@ export default async function PublicClinicPage({ params, searchParams }) {
 
       <section id="localizacao" className="public-section-soft mx-auto grid max-w-7xl gap-8 px-5 py-24 sm:px-8 lg:grid-cols-[0.85fr_1.15fr] lg:items-center">
         <div className="rounded-[2rem] border border-white/70 bg-white/72 p-7 shadow-[0_20px_54px_rgba(20,18,15,0.08)] backdrop-blur">
-          <SectionHeading eyebrow="Localizacao" title="Como chegar" description="Use o mapa para chegar ate a clinica ou fale com a equipe pelo WhatsApp antes do atendimento." />
+          <SectionHeading eyebrow="Localização" title="Como chegar?" description="Use o mapa para chegar até a clínica ou fale com a equipe pelo WhatsApp antes do atendimento." />
           <div className="mt-8 space-y-4 text-sm leading-7 text-neutral-700">
             {address ? <p className="flex gap-3"><MapPin size={19} className="mt-1 shrink-0 text-[var(--clinic-primary)]" /> <span>{address}</span></p> : null}
             {clinic.telefone ? <p className="flex gap-3"><MessageCircle size={19} className="mt-1 shrink-0 text-[var(--clinic-primary)]" /> <span>{clinic.telefone}</span></p> : null}
@@ -317,10 +317,10 @@ export default async function PublicClinicPage({ params, searchParams }) {
             <div className="mt-5 grid gap-3 text-sm text-white/68">
               <a href="#topo">Inicio</a>
               <a href="#sobre">Sobre</a>
-              <a href="#servicos">Servicos</a>
+              <a href="#serviços">Servicos</a>
               <a href="#depoimentos">Depoimentos</a>
               <a href="#agendar">Agendamento</a>
-              <a href="#localizacao">Localizacao</a>
+              <a href="#localização">Localizacao</a>
               <a href="/termos">Termos de uso</a>
               <a href="/privacidade">Privacidade</a>
             </div>
