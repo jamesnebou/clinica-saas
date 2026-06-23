@@ -343,7 +343,7 @@ export default async function PublicClinicPage({ params, searchParams }) {
       </footer>
 
       {whatsapp ? (
-        <a href={`https://wa.me/55${whatsapp}`} target="_blank" className="whatsapp-pulse fixed bottom-6 right-6 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-[#20c55e] text-white shadow-[0_18px_44px_rgba(32,197,94,0.34)]">
+        <a href={`https://wa.me/55${whatsapp}`} target="_blank" className="public-whatsapp-float whatsapp-pulse flex h-14 w-14 items-center justify-center rounded-full bg-[#20c55e] text-white shadow-[0_18px_44px_rgba(32,197,94,0.34)]">
           <MessageCircle size={27} />
         </a>
       ) : null}

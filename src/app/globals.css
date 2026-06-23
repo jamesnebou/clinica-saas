@@ -322,6 +322,10 @@ textarea {
   z-index: 1;
 }
 
+.public-site-shell :where(h1, h2, h3, h4) {
+  font-weight: 900;
+}
+
 .public-section-soft,
 .public-section-warm {
   position: relative;
@@ -435,6 +439,20 @@ textarea {
 
 .whatsapp-pulse {
   animation: whatsapp-pulse 1.8s ease-in-out infinite;
+}
+
+.public-whatsapp-float {
+  position: fixed;
+  right: max(1.25rem, env(safe-area-inset-right));
+  bottom: max(1.25rem, env(safe-area-inset-bottom));
+  z-index: 60;
+}
+
+@media (min-width: 640px) {
+  .public-whatsapp-float {
+    right: 2rem;
+    bottom: 2rem;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

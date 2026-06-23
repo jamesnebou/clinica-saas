@@ -16,7 +16,7 @@ export function PageHeader({ eyebrow, title, description, action }) {
       <div className="absolute bottom-[-2px] left-0 h-[3px] w-20 rounded-full bg-[var(--clinic-primary)] shadow-[0_0_24px_color-mix(in_srgb,var(--clinic-accent)_55%,transparent)]" />
       <div>
         <p className="text-xs font-bold uppercase tracking-[0.28em] text-[var(--clinic-primary)]">{eyebrow}</p>
-        <h1 className="mt-2 max-w-4xl text-3xl font-semibold tracking-tight text-neutral-950 sm:text-4xl">{title}</h1>
+        <h1 className="mt-2 max-w-4xl text-3xl font-black tracking-tight text-neutral-950 sm:text-4xl">{title}</h1>
         {description ? <p className="mt-3 max-w-3xl text-sm leading-6 text-neutral-600">{description}</p> : null}
       </div>
       {action}
@@ -37,7 +37,7 @@ export function SectionTitle({ icon: Icon, title, description }) {
     <div>
       <div className="flex items-center gap-2">
         {Icon ? <span className="metric-orb inline-flex h-9 w-9 items-center justify-center rounded-lg text-[var(--clinic-primary)]"><Icon size={19} /></span> : null}
-        <h2 className="text-lg font-semibold tracking-tight">{title}</h2>
+        <h2 className="text-lg font-black tracking-tight">{title}</h2>
       </div>
       {description ? <p className="mt-2 text-sm leading-6 text-neutral-600">{description}</p> : null}
     </div>

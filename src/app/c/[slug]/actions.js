@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { createAsaasCustomerForPatient, createAsaasPaymentForBooking, isAsaasConfigured } from "@/lib/asaas/client";
+import { notifyClinicPublicBooking } from "@/lib/notifications/booking";
 
 function text(formData, key) {
   return String(formData.get(key) || "").trim();
@@ -226,7 +227,7 @@ export async function createPublicBookingAction(formData) {
     }
   }
 
-  const { error: publicError } = await supabaseAdmin.from("site_agendamentos_publicos").insert({
+  const { data: publicBooking, error: publicError } = await supabaseAdmin.from("site_agendamentos_publicos").insert({
     clinica_id: clinic.id,
     cliente_id: clienteId,
     agendamento_id: agendamento.id,
@@ -242,7 +243,7 @@ export async function createPublicBookingAction(formData) {
     asaas_payment_id: asaasPaymentId,
     invoice_url: invoiceUrl,
     payload: paymentPayload,
-  });
+  }).select("id, nome, telefone, email, data_hora, valor_total, valor_sinal").single();
 
   if (publicError) throw publicError;
 
@@ -263,6 +264,13 @@ export async function createPublicBookingAction(formData) {
   revalidatePath(`/c/${slug}`);
   revalidatePath("/dashboard");
   revalidatePath("/dashboard/agenda");
+
+  await notifyClinicPublicBooking({
+    clinic,
+    booking: publicBooking,
+    procedimento,
+    invoiceUrl,
+  });
 
   if (invoiceUrl) {
     redirect(invoiceUrl);
