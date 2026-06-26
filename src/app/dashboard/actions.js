@@ -8,6 +8,7 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 import { uploadClientPhoto, uploadClinicLogo, uploadClinicSiteImage } from "@/lib/supabase/storage";
 import { assertClinicLimit, assertClinicOperational } from "@/lib/saas/plans";
 import { addVercelProjectDomain, normalizeCustomDomain } from "@/lib/vercel/domains";
+import { sendWhatsAppIntegrationTest } from "@/lib/notifications/booking";
 
 async function getScopedSupabase() {
   const context = await requireClinic();
@@ -1180,6 +1181,35 @@ export async function updateClinicSettingsAction(formData) {
   revalidatePath("/dashboard/configuracoes");
   revalidatePath(`/c/${activeClinic.slug}`);
   redirect("/dashboard/configuracoes?ok=configuracoes");
+}
+
+export async function testClinicWhatsappIntegrationAction() {
+  const { clinicaId, activeClinic, memberships } = await getScopedSupabase();
+  requireClinicManager(memberships, clinicaId, "/dashboard/configuracoes");
+
+  const { data: integration, error } = await supabaseAdmin
+    .from("clinica_integracoes")
+    .select("whatsapp_ativo, whatsapp_provider, whatsapp_numero_destino, whatsapp_webhook_url, whatsapp_token")
+    .eq("clinica_id", clinicaId)
+    .maybeSingle();
+
+  if (error) throw error;
+
+  if (!integration?.whatsapp_ativo) {
+    redirectWithMessage("/dashboard/configuracoes", "whatsapp", "Ative a notificacao por WhatsApp e salve as configuracoes antes do teste.");
+  }
+
+  if (!integration?.whatsapp_webhook_url || !integration?.whatsapp_token || !integration?.whatsapp_numero_destino) {
+    redirectWithMessage("/dashboard/configuracoes", "whatsapp", "Preencha URL da Z-API, Client-Token e WhatsApp destino. Salve e teste novamente.");
+  }
+
+  try {
+    await sendWhatsAppIntegrationTest({ clinic: activeClinic, integration });
+  } catch (error) {
+    redirectWithMessage("/dashboard/configuracoes", "whatsapp", error.message || "Nao foi possivel enviar o teste de WhatsApp.");
+  }
+
+  redirect("/dashboard/configuracoes?ok=whatsapp");
 }
 
 

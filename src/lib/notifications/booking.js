@@ -115,6 +115,28 @@ async function sendWhatsAppNotification({ clinic, booking, procedimento, invoice
   return response.json().catch(() => ({ ok: true }));
 }
 
+export async function sendWhatsAppIntegrationTest({ clinic, integration }) {
+  const now = new Date().toISOString();
+
+  return sendWhatsAppNotification({
+    clinic,
+    integration,
+    invoiceUrl: null,
+    procedimento: {
+      nome: "Teste de integracao WhatsApp",
+    },
+    booking: {
+      id: `test-${now}`,
+      nome: "Teste Clinica SaaS",
+      telefone: integration?.whatsapp_numero_destino || clinic.telefone || "-",
+      email: clinic.email || "-",
+      data_hora: now,
+      valor_total: 0,
+      valor_sinal: 0,
+    },
+  });
+}
+
 export async function notifyClinicPublicBooking({ clinic, booking, procedimento, invoiceUrl, integration }) {
   const tasks = [
     sendEmailNotification({ clinic, booking, procedimento, invoiceUrl, integration }),

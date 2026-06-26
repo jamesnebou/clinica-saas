@@ -1,7 +1,7 @@
 ﻿import { Clock, CreditCard, Mail, MessageCircle, Palette, Settings } from "lucide-react";
 import { requireClinicSection } from "@/lib/auth/session";
 import { EmptyClinicState, Field, PageHeader, SubmitButton, TextArea } from "@/components/app-shell/ui";
-import { updateClinicSettingsAction } from "../actions";
+import { testClinicWhatsappIntegrationAction, updateClinicSettingsAction } from "../actions";
 import { ConfigTabs } from "./config-tabs";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 
@@ -108,6 +108,7 @@ export default async function ConfiguracoesPage({ searchParams }) {
         <PageHeader eyebrow="Clinica" title="Configuracoes da clinica" description="Ajuste dados comerciais, identidade visual, expediente, politica de cancelamento e WhatsApp padrao." />
 
         {params?.ok === "configuracoes" ? <Notice>Configuracoes atualizadas com sucesso.</Notice> : null}
+        {params?.ok === "whatsapp" ? <Notice>Mensagem de teste enviada pelo WhatsApp.</Notice> : null}
         {params?.erro ? <div className="mt-6 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">{params?.mensagem || "Nao foi possivel atualizar as configuracoes."}</div> : null}
 
         <form action={updateClinicSettingsAction} className="mt-8 space-y-6">
@@ -292,6 +293,16 @@ export default async function ConfiguracoesPage({ searchParams }) {
                   <Field label="WhatsApp destino" name="whatsapp_numero_destino" defaultValue={integration?.whatsapp_numero_destino || activeClinic.telefone || ""} placeholder="5577999999999" />
                   <Field label="URL Z-API send-text" name="whatsapp_webhook_url" defaultValue={integration?.whatsapp_webhook_url || ""} placeholder="https://api.z-api.io/instances/.../token/.../send-text" />
                   <Field label="Client-Token Z-API" name="whatsapp_token" type="password" placeholder={integration?.whatsapp_token ? "Token salvo. Preencha apenas para trocar." : "Cole o Client-Token da Z-API"} />
+                </div>
+                <div className="mt-4 flex flex-wrap items-center gap-3">
+                  <button
+                    type="submit"
+                    formAction={testClinicWhatsappIntegrationAction}
+                    className="h-10 rounded-lg border border-[color-mix(in_srgb,var(--clinic-primary)_24%,#d4d4d4)] bg-white px-4 text-sm font-bold text-[var(--clinic-primary)] shadow-sm transition hover:bg-[color-mix(in_srgb,var(--clinic-accent)_8%,white)]"
+                  >
+                    Enviar teste de WhatsApp
+                  </button>
+                  <span className="text-xs leading-5 text-neutral-500">Salve as configuracoes antes de testar uma chave nova.</span>
                 </div>
               </div>
             </div>
