@@ -1,12 +1,13 @@
 "use client";
 
 import { Children, isValidElement, useState } from "react";
-import { Clock, CreditCard, Globe2, MessageCircle, Palette, Settings } from "lucide-react";
+import { Clock, CreditCard, Globe2, MessageCircle, Palette, Quote, Settings } from "lucide-react";
 
 const tabs = [
   { id: "dados", label: "Dados", icon: Settings },
   { id: "identidade", label: "Identidade", icon: Palette },
   { id: "site", label: "Site", icon: Globe2 },
+  { id: "depoimentos", label: "Depoimentos", icon: Quote },
   { id: "expediente", label: "Expediente", icon: Clock },
   { id: "politicas", label: "Politicas", icon: MessageCircle },
   { id: "integracoes", label: "Integracoes", icon: CreditCard },

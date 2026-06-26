@@ -20,10 +20,13 @@ async function findSlugByDomain(host) {
   const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   const domain = String(host || "").toLowerCase().split(":")[0];
+  const withoutWww = domain.replace(/^www\./, "");
+  const candidates = Array.from(new Set([domain, withoutWww, `www.${withoutWww}`].filter(Boolean)));
 
   if (!supabaseUrl || !serviceRoleKey || !domain) return null;
 
-  const response = await fetch(`${supabaseUrl}/rest/v1/clinica_dominios?dominio=eq.${encodeURIComponent(domain)}&status=in.(ativo,verificado)&select=clinicas(slug)`, {
+  const encodedCandidates = candidates.map((item) => `"${item.replaceAll('"', '\\"')}"`).join(",");
+  const response = await fetch(`${supabaseUrl}/rest/v1/clinica_dominios?dominio=in.(${encodedCandidates})&status=in.(ativo,verificado,pendente)&select=dominio,status,clinicas(slug)`, {
     headers: {
       apikey: serviceRoleKey,
       authorization: `Bearer ${serviceRoleKey}`,
@@ -33,7 +36,9 @@ async function findSlugByDomain(host) {
 
   if (!response.ok) return null;
   const data = await response.json().catch(() => []);
-  return data?.[0]?.clinicas?.slug || null;
+  const exact = data?.find((item) => item.dominio === domain);
+  const verified = data?.find((item) => ["ativo", "verificado"].includes(item.status));
+  return exact?.clinicas?.slug || verified?.clinicas?.slug || data?.[0]?.clinicas?.slug || null;
 }
 
 export async function proxy(request) {

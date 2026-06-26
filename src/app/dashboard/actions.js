@@ -1023,6 +1023,68 @@ export async function convertCrmOpportunityAction(formData) {
   redirect(`/dashboard/clientes/${clienteId}`);
 }
 
+export async function updateClinicAccountAction(formData) {
+  const { clinicaId, memberships, user } = await getScopedSupabase();
+  const nome = nullableText(formData, "usuario_nome");
+  const email = normalizeEmail(nullableText(formData, "usuario_email"));
+  const password = text(formData, "usuario_senha");
+  const passwordConfirmation = text(formData, "usuario_senha_confirmacao");
+  const currentMembershipRow = currentMembership(memberships, clinicaId);
+
+  if (!user?.id) {
+    redirectWithMessage("/dashboard/configuracoes", "conta", "Usuario autenticado nao encontrado.");
+  }
+
+  if (!email) {
+    redirectWithMessage("/dashboard/configuracoes", "conta", "Informe o e-mail de login.");
+  }
+
+  if (password || passwordConfirmation) {
+    if (password.length < 8) {
+      redirectWithMessage("/dashboard/configuracoes", "conta", "A nova senha precisa ter pelo menos 8 caracteres.");
+    }
+
+    if (password !== passwordConfirmation) {
+      redirectWithMessage("/dashboard/configuracoes", "conta", "A confirmacao da senha nao confere.");
+    }
+  }
+
+  const authPayload = {
+    email,
+    email_confirm: true,
+    user_metadata: {
+      ...(user.user_metadata || {}),
+      nome: nome || currentMembershipRow?.nome || user.email,
+    },
+  };
+
+  if (password) {
+    authPayload.password = password;
+  }
+
+  const { error: authError } = await supabaseAdmin.auth.admin.updateUserById(user.id, authPayload);
+  if (authError) {
+    redirectWithMessage("/dashboard/configuracoes", "conta", authError.message || "Nao foi possivel atualizar o acesso.");
+  }
+
+  const { error: membershipError } = await supabaseAdmin
+    .from("usuarios_clinica")
+    .update({
+      nome: nome || currentMembershipRow?.nome || email,
+      email,
+    })
+    .eq("user_id", user.id);
+
+  if (membershipError) {
+    redirectWithMessage("/dashboard/configuracoes", "conta", membershipError.message || "Nao foi possivel atualizar o usuario da clinica.");
+  }
+
+  revalidatePath("/dashboard");
+  revalidatePath("/dashboard/configuracoes");
+  revalidatePath("/dashboard/usuarios");
+  redirect("/dashboard/configuracoes?ok=conta");
+}
+
 export async function updateClinicSettingsAction(formData) {
   const { clinicaId, activeClinic, memberships } = await getScopedSupabase();
   requireClinicManager(memberships, clinicaId, "/dashboard/configuracoes");
@@ -1056,6 +1118,12 @@ export async function updateClinicSettingsAction(formData) {
     .maybeSingle();
 
   if (currentIntegrationError) throw currentIntegrationError;
+
+  const depoimentos = [1, 2, 3, 4].map((index) => ({
+    nome: nullableText(formData, `depoimento_${index}_nome`),
+    procedimento: nullableText(formData, `depoimento_${index}_procedimento`),
+    texto: nullableText(formData, `depoimento_${index}_texto`),
+  })).filter((item) => item.nome || item.procedimento || item.texto);
 
   const nextMetadata = {
     ...metadata,
@@ -1097,6 +1165,9 @@ export async function updateClinicSettingsAction(formData) {
       instagram_url: nullableText(formData, "site_instagram_url"),
       google_maps_url: nullableText(formData, "site_google_maps_url"),
       google_reviews_url: nullableText(formData, "site_google_reviews_url"),
+      google_reviews_ativo: formData.get("site_google_reviews_ativo") === "on",
+      google_place_id: nullableText(formData, "site_google_place_id"),
+      depoimentos,
     },
   };
 
@@ -1145,6 +1216,25 @@ export async function updateClinicSettingsAction(formData) {
 
   if (dominio) {
     const normalizedDomain = normalizeCustomDomain(dominio);
+    const { data: existingDomain, error: existingDomainError } = await supabaseAdmin
+      .from("clinica_dominios")
+      .select("id, clinica_id, dominio, status, verificado_em, observacoes")
+      .eq("dominio", normalizedDomain)
+      .maybeSingle();
+
+    if (existingDomainError) throw existingDomainError;
+
+    if (existingDomain?.clinica_id && existingDomain.clinica_id !== clinicaId) {
+      redirectWithMessage("/dashboard/configuracoes", "dominio", "Este dominio ja esta vinculado a outra clinica.");
+    }
+
+    if (existingDomain?.clinica_id === clinicaId) {
+      revalidatePath("/dashboard");
+      revalidatePath("/dashboard/configuracoes");
+      revalidatePath(`/c/${activeClinic.slug}`);
+      redirect("/dashboard/configuracoes?ok=configuracoes");
+    }
+
     let vercelDomain;
     try {
       vercelDomain = await addVercelProjectDomain(normalizedDomain);

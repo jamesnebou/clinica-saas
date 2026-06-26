@@ -1,7 +1,7 @@
 ﻿import { Clock, CreditCard, Mail, MessageCircle, Palette, Settings } from "lucide-react";
 import { requireClinicSection } from "@/lib/auth/session";
 import { EmptyClinicState, Field, PageHeader, SubmitButton, TextArea } from "@/components/app-shell/ui";
-import { testClinicWhatsappIntegrationAction, updateClinicSettingsAction } from "../actions";
+import { testClinicWhatsappIntegrationAction, updateClinicAccountAction, updateClinicSettingsAction } from "../actions";
 import { ConfigTabs } from "./config-tabs";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 
@@ -87,6 +87,7 @@ export default async function ConfiguracoesPage({ searchParams }) {
     .maybeSingle();
 
   const activeClinic = freshClinic || initialClinic;
+  const membership = context.memberships?.find((item) => item.clinica_id === activeClinic.id) || context.memberships?.[0] || null;
   const meta = activeClinic.metadata || {};
   const site = meta.site_publico || {};
   const schedule = meta.horario_funcionamento || {};
@@ -109,6 +110,7 @@ export default async function ConfiguracoesPage({ searchParams }) {
 
         {params?.ok === "configuracoes" ? <Notice>Configuracoes atualizadas com sucesso.</Notice> : null}
         {params?.ok === "whatsapp" ? <Notice>Mensagem de teste enviada pelo WhatsApp.</Notice> : null}
+        {params?.ok === "conta" ? <Notice>Dados de acesso atualizados com sucesso.</Notice> : null}
         {params?.erro ? <div className="mt-6 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">{params?.mensagem || "Nao foi possivel atualizar as configuracoes."}</div> : null}
 
         <form action={updateClinicSettingsAction} className="mt-8 space-y-6">
@@ -124,6 +126,25 @@ export default async function ConfiguracoesPage({ searchParams }) {
               <div className="grid gap-4 sm:grid-cols-[1fr_120px]">
                 <Field label="Cidade" name="cidade" defaultValue={activeClinic.cidade || ""} />
                 <Field label="UF" name="estado" defaultValue={activeClinic.estado || ""} />
+              </div>
+            </div>
+            <div className="mt-6 rounded-lg border border-[color-mix(in_srgb,var(--clinic-primary)_20%,#e5e5e5)] bg-[color-mix(in_srgb,var(--clinic-accent)_7%,white)] p-4">
+              <h3 className="text-base font-black tracking-tight text-neutral-950">Dados de acesso do usuario logado</h3>
+              <p className="mt-2 text-sm leading-6 text-neutral-600">Altere o nome, e-mail de login ou senha da sua propria conta. Estes dados ficam salvos no Supabase Auth e no vinculo de usuarios da clinica.</p>
+              <div className="mt-4 grid gap-4 md:grid-cols-2">
+                <Field label="Nome do usuario" name="usuario_nome" defaultValue={membership?.nome || context.user?.user_metadata?.nome || ""} />
+                <Field label="E-mail de login" name="usuario_email" type="email" defaultValue={context.user?.email || membership?.email || ""} />
+                <Field label="Nova senha" name="usuario_senha" type="password" placeholder="Preencha apenas se quiser trocar" />
+                <Field label="Confirmar nova senha" name="usuario_senha_confirmacao" type="password" placeholder="Repita a nova senha" />
+              </div>
+              <div className="mt-4 flex justify-end">
+                <button
+                  type="submit"
+                  formAction={updateClinicAccountAction}
+                  className="h-10 rounded-lg border border-[color-mix(in_srgb,var(--clinic-primary)_24%,#d4d4d4)] bg-white px-4 text-sm font-bold text-[var(--clinic-primary)] shadow-sm transition hover:bg-[color-mix(in_srgb,var(--clinic-accent)_8%,white)]"
+                >
+                  Atualizar dados de acesso
+                </button>
               </div>
             </div>
           </section>
@@ -228,6 +249,40 @@ export default async function ConfiguracoesPage({ searchParams }) {
                 ))}
               </div>
             ) : null}
+          </section>
+
+          <section className="rounded-lg border border-neutral-200 bg-white p-5 shadow-sm">
+            <div className="flex items-center gap-2"><Mail size={20} className="text-[var(--clinic-primary)]" /><h2 className="text-lg font-semibold">Depoimentos do site</h2></div>
+            <p className="mt-2 text-sm text-neutral-600">Use avaliacoes reais do Google por Place ID ou mantenha depoimentos manuais como fallback.</p>
+            <div className="mt-5 rounded-lg border border-[color-mix(in_srgb,var(--clinic-primary)_22%,#e5e5e5)] bg-[color-mix(in_srgb,var(--clinic-accent)_8%,white)] p-4">
+              <label className="inline-flex items-center gap-2 text-sm font-bold text-neutral-800">
+                <input type="checkbox" name="site_google_reviews_ativo" defaultChecked={Boolean(site.google_reviews_ativo)} />
+                Buscar avaliacoes reais via Google Places API
+              </label>
+              <div className="mt-4 grid gap-4 lg:grid-cols-2">
+                <Field label="Google Place ID da clinica" name="site_google_place_id" defaultValue={site.google_place_id || ""} placeholder="ChIJ..." />
+                <div className="rounded-lg border border-white/70 bg-white/70 px-4 py-3 text-xs leading-5 text-neutral-600">
+                  Configure <strong>GOOGLE_MAPS_API_KEY</strong> no ambiente do SaaS. A busca e feita no servidor com cache de 6 horas para reduzir chamadas.
+                </div>
+              </div>
+            </div>
+            <div className="mt-5 grid gap-5">
+              {[1, 2, 3, 4].map((index) => {
+                const depoimento = site.depoimentos?.[index - 1] || {};
+                return (
+                  <div key={index} className="rounded-lg border border-neutral-200 bg-neutral-50 p-4">
+                    <p className="text-xs font-black uppercase tracking-[0.18em] text-[var(--clinic-primary)]">Depoimento {index}</p>
+                    <div className="mt-4 grid gap-4 lg:grid-cols-2">
+                      <Field label="Nome" name={`depoimento_${index}_nome`} defaultValue={depoimento.nome || ""} placeholder="Mariana S." />
+                      <Field label="Procedimento" name={`depoimento_${index}_procedimento`} defaultValue={depoimento.procedimento || ""} placeholder="Tratamento facial" />
+                      <div className="lg:col-span-2">
+                        <TextArea label="Texto do depoimento" name={`depoimento_${index}_texto`} defaultValue={depoimento.texto || ""} placeholder="Escreva uma avaliacao curta, natural e confiavel." />
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </section>
 
           <section className="rounded-lg border border-neutral-200 bg-white p-5 shadow-sm">

@@ -1,5 +1,6 @@
 import { Camera, CheckCircle2, Clock, CreditCard, MapPin, MessageCircle, Quote, ShieldCheck, Sparkles, Star } from "lucide-react";
 import { notFound } from "next/navigation";
+import { getGooglePlaceReviews } from "@/lib/google/places";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { PublicBookingForm } from "./booking-form";
 
@@ -117,12 +118,20 @@ export default async function PublicClinicPage({ params, searchParams }) {
   const servicesLoop = [...procedimentos, ...procedimentos];
   const year = new Date().getFullYear();
 
-  const testimonials = [
-    ["Mariana S.", "Tratamento facial", "Atendimento impecavel, ambiente acolhedor e resultado muito natural. Me senti segura desde a primeira avaliacao."],
-    ["Fernanda L.", "Harmonizacao", "A equipe explicou tudo com clareza e respeitou meu objetivo. O resultado ficou exatamente como eu queria."],
-    ["Juliana M.", "Protocolo estetico", "A clinica passa muita confianca. Gostei da organizacao, do cuidado e do acompanhamento depois do procedimento."],
-    ["Ana P.", "Skincare", "Experiencia excelente, pontualidade e orientacoes precisas. Recomendo para quem busca cuidado serio e sofisticado."],
+  const fallbackTestimonials = [
+    { nome: "Mariana S.", procedimento: "Tratamento facial", texto: "Atendimento impecavel, ambiente acolhedor e resultado muito natural. Me senti segura desde a primeira avaliacao." },
+    { nome: "Fernanda L.", procedimento: "Harmonizacao", texto: "A equipe explicou tudo com clareza e respeitou meu objetivo. O resultado ficou exatamente como eu queria." },
+    { nome: "Juliana M.", procedimento: "Protocolo estetico", texto: "A clinica passa muita confianca. Gostei da organizacao, do cuidado e do acompanhamento depois do procedimento." },
+    { nome: "Ana P.", procedimento: "Skincare", texto: "Experiencia excelente, pontualidade e orientacoes precisas. Recomendo para quem busca cuidado serio e sofisticado." },
   ];
+  const manualTestimonials = Array.isArray(site.depoimentos) && site.depoimentos.length
+    ? site.depoimentos.filter((item) => item?.nome || item?.procedimento || item?.texto)
+    : fallbackTestimonials;
+  const googleReviews = site.google_reviews_ativo
+    ? await getGooglePlaceReviews({ placeId: site.google_place_id, limit: 4 })
+    : { reviews: [], rating: null, userRatingCount: null, googleMapsUri: null };
+  const testimonials = googleReviews.reviews.length ? googleReviews.reviews : manualTestimonials;
+  const googleReviewsUrl = site.google_reviews_url || googleReviews.googleMapsUri;
 
   return (
     <main
@@ -150,7 +159,10 @@ export default async function PublicClinicPage({ params, searchParams }) {
             <a href="#depoimentos">Depoimentos</a>
             <a href="#localizacao">Localizacao</a>
           </nav>
-          <a href="#agendar" className="rounded-full bg-white px-5 py-2.5 text-sm font-bold text-[#17130f]">Agendar</a>
+          <div className="flex items-center gap-2">
+            <a href="/login-cliente" className="hidden rounded-full border border-white/20 px-4 py-2 text-xs font-bold text-white/60 transition hover:bg-white/10 hover:text-white sm:inline-flex">Area da clinica</a>
+            <a href="#agendar" className="rounded-full bg-white px-5 py-2.5 text-sm font-bold text-[#17130f]">Agendar</a>
+          </div>
         </div>
       </header>
 
@@ -245,24 +257,32 @@ export default async function PublicClinicPage({ params, searchParams }) {
 
       <section id="depoimentos" className="public-section-soft mx-auto max-w-7xl px-5 py-24 sm:px-8">
         <SectionHeading eyebrow="Depoimentos" title="O que pacientes dizem:" description="A satisfação dos pacientes é o maior reconhecimento." center />
-        {site.google_reviews_url ? (
-          <div className="mt-6 text-center">
-            <a href={site.google_reviews_url} target="_blank" className="inline-flex items-center gap-2 rounded-full border border-neutral-200 bg-white/70 px-5 py-3 text-sm font-bold text-neutral-800 shadow-sm backdrop-blur">
-              <Star size={17} className="fill-amber-400 text-amber-400" /> Ver avaliacoes reais no Google
-            </a>
+        {googleReviewsUrl || googleReviews.rating ? (
+          <div className="mt-6 flex flex-wrap justify-center gap-3 text-center">
+            {googleReviews.rating ? (
+              <span className="inline-flex items-center gap-2 rounded-full border border-neutral-200 bg-white/70 px-5 py-3 text-sm font-bold text-neutral-800 shadow-sm backdrop-blur">
+                <Star size={17} className="fill-amber-400 text-amber-400" /> {Number(googleReviews.rating).toFixed(1)} no Google
+                {googleReviews.userRatingCount ? <span className="font-semibold text-neutral-500">({googleReviews.userRatingCount} avaliacoes)</span> : null}
+              </span>
+            ) : null}
+            {googleReviewsUrl ? (
+              <a href={googleReviewsUrl} target="_blank" className="inline-flex items-center gap-2 rounded-full border border-neutral-200 bg-white/70 px-5 py-3 text-sm font-bold text-neutral-800 shadow-sm backdrop-blur">
+                <Star size={17} className="fill-amber-400 text-amber-400" /> Ver avaliacoes no Google
+              </a>
+            ) : null}
           </div>
         ) : null}
         <div className="mt-10 grid gap-5 md:grid-cols-2">
-          {testimonials.map(([name, service, text]) => (
-            <article key={name} className="rounded-[1.75rem] border border-neutral-200 bg-white/70 p-7 shadow-[0_18px_44px_rgba(23,19,15,0.07)] backdrop-blur">
+          {testimonials.map((item, index) => (
+            <article key={`${item.nome || "depoimento"}-${index}`} className="rounded-[1.75rem] border border-neutral-200 bg-white/70 p-7 shadow-[0_18px_44px_rgba(23,19,15,0.07)] backdrop-blur">
               <Quote size={34} className="text-[var(--clinic-primary)] opacity-35" />
-              <p className="mt-5 text-sm leading-7 text-neutral-700">{text}</p>
+              <p className="mt-5 text-sm leading-7 text-neutral-700">{item.texto || "Experiencia excelente, atendimento cuidadoso e resultado alinhado ao que eu buscava."}</p>
               <div className="mt-7 flex items-end justify-between gap-4">
                 <div>
-                  <strong>{name}</strong>
-                  <p className="mt-1 text-xs text-neutral-500">{service}</p>
+                  <strong>{item.nome || "Paciente"}</strong>
+                  <p className="mt-1 text-xs text-neutral-500">{item.procedimento || "Atendimento estetico"}</p>
                 </div>
-                <span className="text-amber-400">★★★★★</span>
+                <span className="text-amber-400">{"★".repeat(Math.max(1, Math.min(5, Number(item.rating || 5))))}</span>
               </div>
             </article>
           ))}
@@ -323,6 +343,7 @@ export default async function PublicClinicPage({ params, searchParams }) {
               <a href="#localização">Localizacao</a>
               <a href="/termos">Termos de uso</a>
               <a href="/privacidade">Privacidade</a>
+              <a href="/login-cliente">Area da clinica</a>
             </div>
           </div>
           <div>
