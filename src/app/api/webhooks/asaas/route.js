@@ -11,6 +11,22 @@ function getWebhookToken(request) {
   return request.headers.get("asaas-access-token") || request.headers.get("x-webhook-token") || "";
 }
 
+async function isAllowedWebhookToken(token) {
+  const expectedToken = process.env.ASAAS_WEBHOOK_TOKEN;
+  if (expectedToken && token === expectedToken) return true;
+  if (!token) return !expectedToken;
+
+  const { data, error } = await supabaseAdmin
+    .from("clinica_integracoes")
+    .select("clinica_id")
+    .eq("asaas_webhook_token", token)
+    .eq("asaas_ativo", true)
+    .limit(1);
+
+  if (error) throw error;
+  return Boolean(data?.length);
+}
+
 function normalizePaymentStatus(status) {
   const value = String(status || "").toUpperCase();
 
@@ -145,9 +161,7 @@ async function findClinicBySubscription(subscription) {
 }
 
 export async function POST(request) {
-  const expectedToken = process.env.ASAAS_WEBHOOK_TOKEN;
-
-  if (expectedToken && getWebhookToken(request) !== expectedToken) {
+  if (!(await isAllowedWebhookToken(getWebhookToken(request)))) {
     return unauthorized();
   }
 

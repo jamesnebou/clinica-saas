@@ -10,6 +10,10 @@ function formatDateTime(value) {
   return new Date(value).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
 }
 
+function normalizeProvider(value) {
+  return String(value || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
 function notificationText({ clinic, booking, procedimento, invoiceUrl }) {
   return [
     `Novo agendamento direto do site - ${clinic.nome}`,
@@ -44,10 +48,10 @@ function notificationHtml({ clinic, booking, procedimento, invoiceUrl }) {
   `;
 }
 
-async function sendEmailNotification({ clinic, booking, procedimento, invoiceUrl }) {
+async function sendEmailNotification({ clinic, booking, procedimento, invoiceUrl, integration }) {
   const apiKey = process.env.RESEND_API_KEY;
-  const to = process.env.BOOKING_NOTIFICATION_EMAIL || clinic.email;
-  const from = process.env.RESEND_FROM_EMAIL || "Clinica SaaS <onboarding@resend.dev>";
+  const to = integration?.email_ativo ? integration.email_destino || clinic.email : null;
+  const from = integration?.email_remetente || process.env.RESEND_FROM_EMAIL || "Clinica SaaS <onboarding@resend.dev>";
 
   if (!apiKey || !to) return { skipped: true };
 
@@ -70,27 +74,31 @@ async function sendEmailNotification({ clinic, booking, procedimento, invoiceUrl
 
   if (!response.ok) {
     const payload = await response.json().catch(() => ({}));
-    throw new Error(payload?.message || "Nao foi possivel enviar e-mail de notificacao.");
+    throw new Error(payload?.message || payload?.error || "Nao foi possivel enviar e-mail de notificacao.");
   }
 
   return response.json().catch(() => ({ ok: true }));
 }
 
-async function sendWhatsAppNotification({ clinic, booking, procedimento, invoiceUrl }) {
-  const webhookUrl = process.env.WHATSAPP_NOTIFY_WEBHOOK_URL;
-  const token = process.env.WHATSAPP_NOTIFY_TOKEN;
-  const to = onlyDigits(process.env.BOOKING_NOTIFICATION_WHATSAPP || clinic.telefone);
+async function sendWhatsAppNotification({ clinic, booking, procedimento, invoiceUrl, integration }) {
+  const webhookUrl = integration?.whatsapp_ativo ? integration.whatsapp_webhook_url : null;
+  const token = integration?.whatsapp_token;
+  const to = onlyDigits(integration?.whatsapp_numero_destino || clinic.telefone);
 
   if (!webhookUrl || !to) return { skipped: true };
 
   const message = notificationText({ clinic, booking, procedimento, invoiceUrl });
+  const isZapi = normalizeProvider(integration?.whatsapp_provider) === "zapi";
   const response = await fetch(webhookUrl, {
     method: "POST",
     headers: {
       "content-type": "application/json",
-      ...(token ? { authorization: `Bearer ${token}` } : {}),
+      ...(token ? isZapi ? { "Client-Token": token } : { authorization: `Bearer ${token}` } : {}),
     },
-    body: JSON.stringify({
+    body: JSON.stringify(isZapi ? {
+      phone: to.startsWith("55") ? to : `55${to}`,
+      message,
+    } : {
       to: to.startsWith("55") ? to : `55${to}`,
       message,
       clinic_id: clinic.id,
@@ -100,16 +108,17 @@ async function sendWhatsAppNotification({ clinic, booking, procedimento, invoice
   });
 
   if (!response.ok) {
-    throw new Error("Nao foi possivel enviar WhatsApp de notificacao.");
+    const payload = await response.json().catch(() => ({}));
+    throw new Error(payload?.message || payload?.error || payload?.errorMessage || "Nao foi possivel enviar WhatsApp de notificacao.");
   }
 
   return response.json().catch(() => ({ ok: true }));
 }
 
-export async function notifyClinicPublicBooking({ clinic, booking, procedimento, invoiceUrl }) {
+export async function notifyClinicPublicBooking({ clinic, booking, procedimento, invoiceUrl, integration }) {
   const tasks = [
-    sendEmailNotification({ clinic, booking, procedimento, invoiceUrl }),
-    sendWhatsAppNotification({ clinic, booking, procedimento, invoiceUrl }),
+    sendEmailNotification({ clinic, booking, procedimento, invoiceUrl, integration }),
+    sendWhatsAppNotification({ clinic, booking, procedimento, invoiceUrl, integration }),
   ];
 
   const results = await Promise.allSettled(tasks);

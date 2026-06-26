@@ -1,7 +1,8 @@
-﻿import { Clock, MessageCircle, Palette, Settings } from "lucide-react";
+﻿import { Clock, CreditCard, Mail, MessageCircle, Palette, Settings } from "lucide-react";
 import { requireClinicSection } from "@/lib/auth/session";
 import { EmptyClinicState, Field, PageHeader, SubmitButton, TextArea } from "@/components/app-shell/ui";
 import { updateClinicSettingsAction } from "../actions";
+import { ConfigTabs } from "./config-tabs";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 
 export const metadata = { title: "Configuracoes | Clinica SaaS" };
@@ -95,6 +96,11 @@ export default async function ConfiguracoesPage({ searchParams }) {
     .select("dominio, status, observacoes")
     .eq("clinica_id", activeClinic.id)
     .order("created_at", { ascending: false });
+  const { data: integration } = await supabaseAdmin
+    .from("clinica_integracoes")
+    .select("asaas_ativo, asaas_base_url, asaas_api_key, asaas_webhook_token, email_ativo, email_destino, email_remetente, whatsapp_ativo, whatsapp_provider, whatsapp_numero_destino, whatsapp_webhook_url, whatsapp_token")
+    .eq("clinica_id", activeClinic.id)
+    .maybeSingle();
 
   return (
     <main className="px-5 py-8 sm:px-8 lg:px-10">
@@ -105,6 +111,7 @@ export default async function ConfiguracoesPage({ searchParams }) {
         {params?.erro ? <div className="mt-6 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">{params?.mensagem || "Nao foi possivel atualizar as configuracoes."}</div> : null}
 
         <form action={updateClinicSettingsAction} className="mt-8 space-y-6">
+          <ConfigTabs>
           <section className="rounded-lg border border-neutral-200 bg-white p-5 shadow-sm">
             <div className="flex items-center gap-2"><Settings size={20} className="text-[var(--clinic-primary)]" /><h2 className="text-lg font-semibold">Dados da clinica</h2></div>
             <div className="mt-5 grid gap-4 md:grid-cols-2">
@@ -246,9 +253,63 @@ export default async function ConfiguracoesPage({ searchParams }) {
             </div>
           </section>
 
-          <SubmitButton>Salvar configuracoes</SubmitButton>
+          <section className="rounded-lg border border-neutral-200 bg-white p-5 shadow-sm">
+            <div className="flex items-center gap-2"><CreditCard size={20} className="text-[var(--clinic-primary)]" /><h2 className="text-lg font-semibold">Integracoes da clinica</h2></div>
+            <p className="mt-2 text-sm text-neutral-600">Estas credenciais pertencem somente a esta clinica. Deixe campos sensiveis em branco para manter o valor ja salvo.</p>
+            <div className="mt-5 grid gap-5">
+              <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-4">
+                <label className="inline-flex items-center gap-2 text-sm font-bold text-neutral-800">
+                  <input type="checkbox" name="asaas_ativo" defaultChecked={Boolean(integration?.asaas_ativo)} />
+                  Ativar checkout Asaas desta clinica
+                </label>
+                <div className="mt-4 grid gap-4 lg:grid-cols-2">
+                  <Field label="Asaas API URL" name="asaas_base_url" defaultValue={integration?.asaas_base_url || "https://sandbox.asaas.com/api/v3"} />
+                  <Field label="Asaas API Key" name="asaas_api_key" type="password" placeholder={integration?.asaas_api_key ? "Chave salva. Preencha apenas para trocar." : "Cole a API key da clinica"} />
+                  <Field label="Token do webhook Asaas" name="asaas_webhook_token" type="password" placeholder={integration?.asaas_webhook_token ? "Token salvo. Preencha apenas para trocar." : "Token configurado no webhook da clinica"} />
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-4">
+                <div className="flex items-center gap-2"><Mail size={18} className="text-[var(--clinic-primary)]" /><strong>Notificacao por e-mail</strong></div>
+                <label className="mt-3 inline-flex items-center gap-2 text-sm font-bold text-neutral-800">
+                  <input type="checkbox" name="email_ativo" defaultChecked={Boolean(integration?.email_ativo)} />
+                  Enviar e-mail para novos agendamentos
+                </label>
+                <div className="mt-4 grid gap-4 lg:grid-cols-2">
+                  <Field label="E-mail que recebe os avisos" name="email_destino" type="email" defaultValue={integration?.email_destino || activeClinic.email || ""} />
+                  <Field label="Remetente" name="email_remetente" defaultValue={integration?.email_remetente || ""} placeholder="Clinica <avisos@seudominio.com.br>" />
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-4">
+                <div className="flex items-center gap-2"><MessageCircle size={18} className="text-[var(--clinic-primary)]" /><strong>Notificacao por WhatsApp</strong></div>
+                <label className="mt-3 inline-flex items-center gap-2 text-sm font-bold text-neutral-800">
+                  <input type="checkbox" name="whatsapp_ativo" defaultChecked={Boolean(integration?.whatsapp_ativo)} />
+                  Enviar WhatsApp para novos agendamentos
+                </label>
+                <div className="mt-4 grid gap-4 lg:grid-cols-2">
+                  <Field label="Provider" name="whatsapp_provider" defaultValue={integration?.whatsapp_provider || "zapi"} />
+                  <Field label="WhatsApp destino" name="whatsapp_numero_destino" defaultValue={integration?.whatsapp_numero_destino || activeClinic.telefone || ""} placeholder="5577999999999" />
+                  <Field label="URL Z-API send-text" name="whatsapp_webhook_url" defaultValue={integration?.whatsapp_webhook_url || ""} placeholder="https://api.z-api.io/instances/.../token/.../send-text" />
+                  <Field label="Client-Token Z-API" name="whatsapp_token" type="password" placeholder={integration?.whatsapp_token ? "Token salvo. Preencha apenas para trocar." : "Cole o Client-Token da Z-API"} />
+                </div>
+              </div>
+            </div>
+          </section>
+          </ConfigTabs>
+          <div className="flex justify-end border-t border-neutral-200 pt-6">
+            <SubmitButton>Salvar configuracoes</SubmitButton>
+          </div>
         </form>
       </section>
     </main>
   );
 }
+
+
+
+
+
+
+
+

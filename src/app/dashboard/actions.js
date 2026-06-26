@@ -85,6 +85,10 @@ function normalizePhone(value) {
   return String(value || "").replace(/\D/g, "");
 }
 
+function normalizeProvider(value) {
+  return String(value || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
 async function findAuthUserByEmail(email) {
   let page = 1;
   const perPage = 100;
@@ -1044,6 +1048,14 @@ export async function updateClinicSettingsAction(formData) {
     redirectWithMessage("/dashboard/configuracoes", "upload", error.message || "Nao foi possivel enviar a imagem.");
   }
 
+  const { data: currentIntegration, error: currentIntegrationError } = await supabaseAdmin
+    .from("clinica_integracoes")
+    .select("asaas_api_key, asaas_webhook_token, whatsapp_token")
+    .eq("clinica_id", clinicaId)
+    .maybeSingle();
+
+  if (currentIntegrationError) throw currentIntegrationError;
+
   const nextMetadata = {
     ...metadata,
     brand_name: nullableText(formData, "brand_name") || requireValue(text(formData, "nome"), "Informe o nome da clinica."),
@@ -1109,6 +1121,26 @@ export async function updateClinicSettingsAction(formData) {
   if (!updatedClinic?.id) {
     redirectWithMessage("/dashboard/configuracoes", "salvar", "As configuracoes nao foram gravadas. Tente novamente.");
   }
+
+  const { error: integrationError } = await supabaseAdmin
+    .from("clinica_integracoes")
+    .upsert({
+      clinica_id: clinicaId,
+      asaas_ativo: formData.get("asaas_ativo") === "on",
+      asaas_base_url: nullableText(formData, "asaas_base_url") || "https://sandbox.asaas.com/api/v3",
+      asaas_api_key: nullableText(formData, "asaas_api_key") || currentIntegration?.asaas_api_key || null,
+      asaas_webhook_token: nullableText(formData, "asaas_webhook_token") || currentIntegration?.asaas_webhook_token || null,
+      email_ativo: formData.get("email_ativo") === "on",
+      email_destino: nullableText(formData, "email_destino"),
+      email_remetente: nullableText(formData, "email_remetente"),
+      whatsapp_ativo: formData.get("whatsapp_ativo") === "on",
+      whatsapp_provider: normalizeProvider(nullableText(formData, "whatsapp_provider")) || "zapi",
+      whatsapp_numero_destino: nullableText(formData, "whatsapp_numero_destino"),
+      whatsapp_webhook_url: nullableText(formData, "whatsapp_webhook_url"),
+      whatsapp_token: nullableText(formData, "whatsapp_token") || currentIntegration?.whatsapp_token || null,
+    }, { onConflict: "clinica_id" });
+
+  if (integrationError) throw integrationError;
 
   if (dominio) {
     const normalizedDomain = normalizeCustomDomain(dominio);

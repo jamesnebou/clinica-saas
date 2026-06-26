@@ -1,16 +1,16 @@
-function getAsaasConfig() {
-  const apiKey = process.env.ASAAS_API_KEY;
-  const baseUrl = String(process.env.ASAAS_BASE_URL || "https://sandbox.asaas.com/api/v3").replace(/\/$/, "");
+function getAsaasConfig(config = {}) {
+  const apiKey = config.apiKey || config.asaas_api_key || process.env.ASAAS_API_KEY;
+  const baseUrl = String(config.baseUrl || config.asaas_base_url || process.env.ASAAS_BASE_URL || "https://sandbox.asaas.com/api/v3").replace(/\/$/, "");
 
   return { apiKey, baseUrl };
 }
 
-export function isAsaasConfigured() {
-  return Boolean(process.env.ASAAS_API_KEY);
+export function isAsaasConfigured(config = {}) {
+  return Boolean(config?.asaas_ativo && (config.apiKey || config.asaas_api_key)) || Boolean(!config?.clinica_id && process.env.ASAAS_API_KEY);
 }
 
-async function asaasRequest(path, options = {}) {
-  const { apiKey, baseUrl } = getAsaasConfig();
+async function asaasRequest(path, options = {}, config = {}) {
+  const { apiKey, baseUrl } = getAsaasConfig(config);
 
   if (!apiKey) {
     throw new Error("ASAAS_API_KEY nao configurada.");
@@ -78,7 +78,7 @@ export async function listAsaasSubscriptionPayments(subscriptionId) {
   return payload?.data || [];
 }
 
-export async function createAsaasCustomerForPatient({ clinicId, nome, email, telefone, cpf }) {
+export async function createAsaasCustomerForPatient({ clinicId, nome, email, telefone, cpf, integration }) {
   return asaasRequest("/customers", {
     method: "POST",
     body: JSON.stringify({
@@ -90,10 +90,10 @@ export async function createAsaasCustomerForPatient({ clinicId, nome, email, tel
       externalReference: `site-booking:${clinicId}:${email || telefone || nome}`,
       notificationDisabled: false,
     }),
-  });
+  }, integration);
 }
 
-export async function createAsaasPaymentForBooking({ customerId, value, description, externalReference, billingType = "UNDEFINED" }) {
+export async function createAsaasPaymentForBooking({ customerId, value, description, externalReference, billingType = "UNDEFINED", integration }) {
   const dueDate = new Date();
   dueDate.setDate(dueDate.getDate() + 1);
 
@@ -107,5 +107,5 @@ export async function createAsaasPaymentForBooking({ customerId, value, descript
       description,
       externalReference,
     }),
-  });
+  }, integration);
 }

@@ -105,6 +105,15 @@ export async function createPublicBookingAction(formData) {
   if (clinicError) throw clinicError;
   if (!clinic) publicRedirect(slug, { erro: "clinica", mensagem: "Clinica indisponivel para agendamento online." });
 
+  const { data: integration, error: integrationError } = await supabaseAdmin
+    .from("clinica_integracoes")
+    .select("clinica_id, asaas_ativo, asaas_api_key, asaas_base_url, email_ativo, email_destino, email_remetente, whatsapp_ativo, whatsapp_provider, whatsapp_numero_destino, whatsapp_webhook_url, whatsapp_token")
+    .eq("clinica_id", clinic.id)
+    .maybeSingle();
+
+  if (integrationError) throw integrationError;
+  const clinicIntegration = integration || { clinica_id: clinic.id };
+
   const siteConfig = clinic.metadata?.site_publico || {};
   if (siteConfig.publicado === false) {
     publicRedirect(slug, { erro: "site", mensagem: "O agendamento online desta clinica ainda nao esta publicado." });
@@ -180,7 +189,7 @@ export async function createPublicBookingAction(formData) {
   const valorSinal = calculateDeposit(procedimento);
   const pagamentoStatus = valorSinal > 0 ? "pendente" : "sem_sinal";
 
-  if (valorSinal > 0 && !isAsaasConfigured()) {
+  if (valorSinal > 0 && !isAsaasConfigured(clinicIntegration)) {
     publicRedirect(slug, { erro: "pagamento", mensagem: "Checkout online indisponivel no momento. A clinica precisa configurar o Asaas para receber o sinal pelo site." });
   }
 
@@ -208,15 +217,16 @@ export async function createPublicBookingAction(formData) {
   let asaasPaymentId = null;
   let paymentPayload = {};
 
-  if (valorSinal > 0 && isAsaasConfigured()) {
+  if (valorSinal > 0 && isAsaasConfigured(clinicIntegration)) {
     try {
-      const customer = await createAsaasCustomerForPatient({ clinicId: clinic.id, nome, email, telefone, cpf });
+      const customer = await createAsaasCustomerForPatient({ clinicId: clinic.id, nome, email, telefone, cpf, integration: clinicIntegration });
       const payment = await createAsaasPaymentForBooking({
         customerId: customer.id,
         value: valorSinal,
         description: `Sinal ${procedimento.nome} - ${clinic.nome}`,
         externalReference: agendamento.id,
         billingType: "UNDEFINED",
+        integration: clinicIntegration,
       });
       invoiceUrl = payment.invoiceUrl || payment.bankSlipUrl || null;
       asaasPaymentId = payment.id || null;
@@ -270,6 +280,7 @@ export async function createPublicBookingAction(formData) {
     booking: publicBooking,
     procedimento,
     invoiceUrl,
+    integration: clinicIntegration,
   });
 
   if (invoiceUrl) {
