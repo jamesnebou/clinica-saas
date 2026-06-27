@@ -66,7 +66,7 @@ export default async function FinanceiroPage({ searchParams }) {
   const procedimentos = procedimentosResult.data || [];
   const pacotes = pacotesResult.data || [];
   const clientePacotes = clientePacotesResult.data || [];
-  const agendamentosFaturaveis = agendamentos.filter((item) => !["cancelado", "faltou"].includes(item.status));
+  const agendamentosFaturaveis = agendamentos.filter((item) => !["cancelado", "faltou"].includes(item.status) && item.pagamento_status !== "cancelado");
   const faturamentoPrevisto = agendamentosFaturaveis.reduce((acc, item) => acc + Number(item.valor || 0), 0);
   const recebidoAgendamentos = agendamentosFaturaveis.reduce((acc, item) => acc + Number(item.valor_pago || 0), 0);
   const recebido = recebidoAgendamentos + pagamentos.filter((item) => !item.agendamento_id).reduce((acc, item) => acc + Number(item.valor_pago || 0), 0);

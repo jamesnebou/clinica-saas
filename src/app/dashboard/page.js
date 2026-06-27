@@ -92,7 +92,7 @@ export default async function DashboardPage({ searchParams }) {
   const proximos = proximosResult.data || [];
   const siteBookings = siteBookingsResult.data || [];
   const pendingSiteBookings = siteBookings.filter((item) => ["pendente", "erro"].includes(item.pagamento_status));
-  const isFaturavel = (item) => !["cancelado", "faltou"].includes(item.status);
+  const isFaturavel = (item) => !["cancelado", "faltou"].includes(item.status) && item.pagamento_status !== "cancelado";
   const hojeFaturavel = hoje.filter(isFaturavel);
   const periodoFaturavel = período.filter(isFaturavel);
 

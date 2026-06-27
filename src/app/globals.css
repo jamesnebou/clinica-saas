@@ -566,3 +566,28 @@ textarea {
     transform: translateX(12%) rotate(0deg);
   }
 }
+/* Public site scroll reveal controlled by IntersectionObserver. */
+.public-site-shell .public-reveal {
+  opacity: 0;
+  transform: translateY(46px) scale(0.985);
+  transition: opacity 680ms ease, transform 680ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  animation: none;
+}
+
+.public-site-shell .public-reveal:nth-of-type(even) {
+  transform: translateX(-42px) scale(0.985);
+}
+
+.public-site-shell .public-reveal.is-visible {
+  opacity: 1;
+  transform: translate3d(0, 0, 0) scale(1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .public-site-shell .public-reveal,
+  .public-site-shell .public-reveal:nth-of-type(even) {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+}

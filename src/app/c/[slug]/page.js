@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { getGooglePlaceReviews } from "@/lib/google/places";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { PublicBookingForm } from "./booking-form";
+import { PublicScrollEffects } from "./scroll-effects";
 
 export const dynamic = "force-dynamic";
 
@@ -173,6 +174,7 @@ export default async function PublicClinicPage({ params, searchParams }) {
         background: "fixed radial-gradient(circle at 8% 0%, color-mix(in srgb, var(--clinic-accent) 20%, transparent), transparent 34rem), fixed radial-gradient(circle at 96% 12%, color-mix(in srgb, var(--clinic-primary) 16%, transparent), transparent 30rem), linear-gradient(145deg, #fffaf5 0%, #f3eee7 45%, #ebe5dc 100%)",
       }}
     >
+      <PublicScrollEffects />
       <header className="fixed inset-x-0 top-0 z-50 border-b border-white/20 bg-[#17130f]/45 px-5 py-4 text-white backdrop-blur-xl sm:px-8">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-5">
           <a href="#topo" className="flex min-w-0 items-center gap-3">
