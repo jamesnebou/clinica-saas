@@ -217,5 +217,3 @@ export default async function FinanceiroPage({ searchParams }) {
     </main>
   );
 }
-
-

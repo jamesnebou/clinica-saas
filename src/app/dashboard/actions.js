@@ -5,11 +5,12 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { requireClinic } from "@/lib/auth/session";
 import { supabaseAdmin } from "@/lib/supabase/admin";
-import { uploadClientPhoto, uploadClinicLogo, uploadClinicSiteImage } from "@/lib/supabase/storage";
+import { uploadClientPhoto, uploadClinicLogo, uploadClinicSiteImage, uploadProcedureImage } from "@/lib/supabase/storage";
 import { assertClinicLimit, assertClinicOperational } from "@/lib/saas/plans";
 import { ensureVercelProjectDomain, getVercelProjectDomain, normalizeCustomDomain, removeVercelProjectDomain } from "@/lib/vercel/domains";
 import { sendWhatsAppIntegrationTest } from "@/lib/notifications/booking";
 import { buildScheduleFromForm, isWithinWorkingPeriods } from "@/lib/clinic/schedule";
+import { ACCESS_SECTIONS } from "@/lib/auth/permissions";
 
 async function getScopedSupabase() {
   const context = await requireClinic();
@@ -55,6 +56,7 @@ async function redirectLimitError({ clinic, resource, redirectTo }) {
 }
 
 const CLINIC_ROLES = new Set(["owner", "admin", "recepcao", "financeiro", "profissional"]);
+const ACCESS_SECTION_SET = new Set(ACCESS_SECTIONS);
 
 function currentMembership(memberships, clinicaId) {
   return (memberships || []).find((item) => item.clinica_id === clinicaId) || memberships?.[0] || null;
@@ -63,6 +65,22 @@ function currentMembership(memberships, clinicaId) {
 function redirectWithMessage(path, code, message) {
   const params = new URLSearchParams({ erro: code, mensagem: message });
   redirect(`${path}?${params.toString()}`);
+}
+
+function userRedirectPath(formData, fallback = "/dashboard/usuarios") {
+  const redirectTo = text(formData, "redirect_to");
+  return redirectTo.startsWith("/dashboard") ? redirectTo : fallback;
+}
+
+function permissionsFromForm(formData, papel) {
+  if (papel === "owner") return { secoes: [] };
+
+  const selectedSections = formData
+    .getAll("secoes_permitidas")
+    .map((value) => String(value || "").trim())
+    .filter((section) => ACCESS_SECTION_SET.has(section));
+
+  return { secoes: Array.from(new Set(selectedSections)) };
 }
 
 function vercelDomainObservacoes(vercelDomain) {
@@ -255,6 +273,7 @@ export async function deleteProfissionalAction(formData) {
 
 export async function createProcedimentoAction(formData) {
   const { supabase, clinicaId } = await getScopedSupabase();
+  const uploadedImage = await uploadProcedureImage({ clinicaId, file: formData.get("imagem_file") });
 
   const { error } = await supabase.from("procedimentos").insert({
     clinica_id: clinicaId,
@@ -270,6 +289,10 @@ export async function createProcedimentoAction(formData) {
     ordem_site: Math.max(0, numberValue(formData, "ordem_site", 0)),
     cuidados_antes: nullableText(formData, "cuidados_antes"),
     cuidados_depois: nullableText(formData, "cuidados_depois"),
+    imagem_url: uploadedImage?.publicUrl || null,
+    imagem_storage_path: uploadedImage?.path || null,
+    imagem_mime_type: uploadedImage?.mimeType || null,
+    imagem_tamanho_bytes: uploadedImage?.size || null,
   });
 
   if (error) throw error;
@@ -279,7 +302,14 @@ export async function createProcedimentoAction(formData) {
 
 export async function updateProcedimentoAction(formData) {
   const { supabase, clinicaId } = await getScopedSupabase();
-  const id = requireValue(text(formData, "id"), "Procedimento nao informado.");
+  const id = requireValue(text(formData, "id"), "Procedimento não informado.");
+  const uploadedImage = await uploadProcedureImage({ clinicaId, procedimentoId: id, file: formData.get("imagem_file") });
+  const imagePayload = uploadedImage ? {
+    imagem_url: uploadedImage.publicUrl,
+    imagem_storage_path: uploadedImage.path,
+    imagem_mime_type: uploadedImage.mimeType,
+    imagem_tamanho_bytes: uploadedImage.size,
+  } : {};
 
   const { error } = await supabase
     .from("procedimentos")
@@ -296,6 +326,7 @@ export async function updateProcedimentoAction(formData) {
       ordem_site: Math.max(0, numberValue(formData, "ordem_site", 0)),
       cuidados_antes: nullableText(formData, "cuidados_antes"),
       cuidados_depois: nullableText(formData, "cuidados_depois"),
+      ...imagePayload,
     })
     .eq("id", id)
     .eq("clinica_id", clinicaId);
@@ -376,14 +407,14 @@ async function buildAgendaPayload({ supabase, formData, clinicaId, activeClinic,
   const inicio = parseDateTime(inicioRaw);
 
   if (!inicio) {
-    redirectAgendaError(formData, "Informe uma data valida para o agendamento.");
+    redirectAgendaError(formData, "Informe uma data válida para o agendamento.");
   }
 
   let fimRaw = text(formData, "fim");
   let fim = fimRaw ? parseDateTime(fimRaw) : await resolveFimByProcedimento({ supabase, clinicaId, procedimentoId, inicio });
 
   if (!fim) {
-    redirectAgendaError(formData, "Informe o fim do agendamento ou selecione um procedimento com duracao cadastrada.", inicioRaw.slice(0, 10));
+    redirectAgendaError(formData, "Informe o fim do agendamento ou selecione um procedimento com duração cadastrada.", inicioRaw.slice(0, 10));
   }
 
   if (!fimRaw) {
@@ -392,7 +423,7 @@ async function buildAgendaPayload({ supabase, formData, clinicaId, activeClinic,
   }
 
   if (fim <= inicio) {
-    redirectAgendaError(formData, "O horario final precisa ser maior que o horario inicial.", inicio.toISOString().slice(0, 10));
+    redirectAgendaError(formData, "O horário final precisa ser maior que o horário inicial.", inicio.toISOString().slice(0, 10));
   }
 
   assertWithinWorkingHours({ clinic: activeClinic, inicioRaw, fimRaw, inicio, fim, formData });
@@ -810,8 +841,9 @@ export async function sellClientePacoteAction(formData) {
 }
 export async function inviteClinicUserAction(formData) {
   const { supabase, clinicaId, activeClinic, memberships } = await getScopedSupabase();
-  requireClinicManager(memberships, clinicaId, "/dashboard/usuarios");
-  await redirectLimitError({ clinic: activeClinic, resource: "usuarios", redirectTo: "/dashboard/usuarios" });
+  const redirectTo = userRedirectPath(formData);
+  requireClinicManager(memberships, clinicaId, redirectTo);
+  await redirectLimitError({ clinic: activeClinic, resource: "usuarios", redirectTo });
 
   const email = normalizeEmail(requireValue(text(formData, "email"), "Informe o e-mail do usuario."));
   const papel = requireValue(text(formData, "papel"), "Informe o papel do usuario.");
@@ -833,6 +865,7 @@ export async function inviteClinicUserAction(formData) {
     nome: nullableText(formData, "nome") || email,
     email,
     papel,
+    permissoes: permissionsFromForm(formData, papel),
     ativo: true,
     invited_at: new Date().toISOString(),
     accepted_at: authResult.user?.id ? new Date().toISOString() : null,
@@ -840,13 +873,15 @@ export async function inviteClinicUserAction(formData) {
 
   if (error) throw error;
   revalidatePath("/dashboard/usuarios");
+  revalidatePath("/dashboard/configuracoes");
   revalidatePath("/dashboard/assinatura");
-  redirect(`/dashboard/usuarios?ok=${authResult.existed ? "senha" : "convite"}`);
+  redirect(`${redirectTo}?ok=${authResult.existed ? "senha" : "convite"}`);
 }
 
 export async function updateClinicUserAction(formData) {
   const { supabase, clinicaId, memberships } = await getScopedSupabase();
-  requireClinicManager(memberships, clinicaId, "/dashboard/usuarios");
+  const redirectTo = userRedirectPath(formData);
+  requireClinicManager(memberships, clinicaId, redirectTo);
 
   const id = requireValue(text(formData, "id"), "Usuario nao informado.");
   const papel = requireValue(text(formData, "papel"), "Informe o papel do usuario.");
@@ -886,6 +921,7 @@ export async function updateClinicUserAction(formData) {
     .update({
       nome: nullableText(formData, "nome"),
       papel,
+      permissoes: permissionsFromForm(formData, papel),
       ativo,
     })
     .eq("clinica_id", clinicaId)
@@ -893,8 +929,9 @@ export async function updateClinicUserAction(formData) {
 
   if (error) throw error;
   revalidatePath("/dashboard/usuarios");
+  revalidatePath("/dashboard/configuracoes");
   revalidatePath("/dashboard/assinatura");
-  redirect("/dashboard/usuarios?ok=usuario");
+  redirect(`${redirectTo}?ok=usuario`);
 }
 
 function crmRedirectUrl(formData) {
@@ -1153,6 +1190,7 @@ export async function updateClinicSettingsAction(formData) {
       ["site_clinica_foto_2_file", "clinica-2"],
       ["site_clinica_foto_3_file", "clinica-3"],
       ["site_favicon_file", "favicon"],
+      ["site_campaign_image_file", "campaign"],
     ]) {
       const uploaded = await uploadClinicSiteImage({ clinicaId, file: formData.get(field), slot });
       if (uploaded?.publicUrl) siteUploads[field] = uploaded;
@@ -1216,6 +1254,21 @@ export async function updateClinicSettingsAction(formData) {
       google_reviews_ativo: formData.get("site_google_reviews_ativo") === "on",
       google_place_id: nullableText(formData, "site_google_place_id"),
       depoimentos,
+      campanha_ativa: formData.get("site_campanha_ativa") === "on",
+      campanha_titulo: nullableText(formData, "site_campanha_titulo"),
+      campanha_subtitulo: nullableText(formData, "site_campanha_subtitulo"),
+      campanha_texto: nullableText(formData, "site_campanha_texto"),
+      campanha_cta_label: nullableText(formData, "site_campanha_cta_label"),
+      campanha_cta_url: nullableText(formData, "site_campanha_cta_url"),
+      campanha_media_url: nullableText(formData, "site_campanha_media_url"),
+      campanha_image_url: siteUploads.site_campaign_image_file?.publicUrl || metadata.site_publico?.campanha_image_url || "",
+      campanha_image_storage_path: siteUploads.site_campaign_image_file?.path || metadata.site_publico?.campanha_image_storage_path || null,
+      video_ativo: formData.get("site_video_ativo") === "on",
+      video_titulo: nullableText(formData, "site_video_titulo"),
+      video_subtitulo: nullableText(formData, "site_video_subtitulo"),
+      video_url: nullableText(formData, "site_video_url"),
+      video_cta_label: nullableText(formData, "site_video_cta_label"),
+      video_cta_url: nullableText(formData, "site_video_cta_url"),
     },
   };
 

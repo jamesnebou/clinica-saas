@@ -7,6 +7,28 @@ import { MobileSidebarMenu, SidebarNav } from "@/components/app-shell/sidebar-na
 import { canAccessSection, getCurrentMembership } from "@/lib/auth/permissions";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 
+
+export async function generateMetadata() {
+  try {
+    const { activeClinic } = await requireClinic();
+    const metadata = activeClinic?.metadata || {};
+    const site = metadata.site_publico || {};
+    const brandName = metadata.brand_name || activeClinic?.nome || "Cl\u00ednica SaaS";
+    const faviconUrl = site.favicon_url || metadata.logo_url || "";
+
+    return {
+      title: `${brandName} | Dashboard`,
+      icons: faviconUrl ? {
+        icon: [{ url: faviconUrl }],
+        shortcut: [{ url: faviconUrl }],
+        apple: [{ url: faviconUrl }],
+      } : undefined,
+    };
+  } catch {
+    return { title: "Dashboard | Cl\u00ednica SaaS" };
+  }
+}
+
 const navItems = [
   { href: "/dashboard", label: "Visao geral", icon: "dashboard", section: "dashboard" },
   { href: "/dashboard/agenda", label: "Agenda", icon: "agenda", section: "agenda" },
@@ -93,7 +115,7 @@ export default async function DashboardLayout({ children }) {
   const metadata = activeClinic.metadata || {};
   const primaryColor = safeColor(metadata.primary_color, "#047857");
   const accentColor = safeColor(metadata.accent_color, "#10b981");
-  const brandName = metadata.brand_name || activeClinic.nome || "Clinica SaaS";
+  const brandName = metadata.brand_name || activeClinic.nome || "Cl\u00ednica SaaS";
   const logoUrl = metadata.logo_url || "";
   const billingState = getClinicBillingState(activeClinic);
   const membership = getCurrentMembership(context.memberships, activeClinic.id);
@@ -103,7 +125,7 @@ export default async function DashboardLayout({ children }) {
     getNotificationBadgeCount(activeClinic),
   ]);
   const allowedNavItems = navItems
-    .filter((item) => canAccessSection(role, item.section))
+    .filter((item) => canAccessSection(role, item.section, membership))
     .map((item) => item.section === "notificacoes" && notificationCount > 0 ? { ...item, badge: notificationCount } : item);
 
   return (

@@ -94,7 +94,7 @@ export default async function DashboardPage({ searchParams }) {
   const pendingSiteBookings = siteBookings.filter((item) => ["pendente", "erro"].includes(item.pagamento_status));
   const isFaturavel = (item) => !["cancelado", "faltou"].includes(item.status) && item.pagamento_status !== "cancelado";
   const hojeFaturavel = hoje.filter(isFaturavel);
-  const periodoFaturavel = período.filter(isFaturavel);
+  const periodoFaturavel = periodo.filter(isFaturavel);
 
   const dayMap = new Map(days.map((item) => [item.key, item]));
   for (const item of periodo) {
@@ -116,7 +116,7 @@ export default async function DashboardPage({ searchParams }) {
   const recebidoPeriodo = periodoFaturavel.reduce((acc, item) => acc + Number(item.valor_pago || 0), 0);
   const previstoPeriodo = periodoFaturavel.reduce((acc, item) => acc + Number(item.valor || 0), 0);
   const pendentePeriodo = Math.max(0, previstoPeriodo - recebidoPeriodo);
-  const statusCounts = período.reduce((acc, item) => {
+  const statusCounts = periodo.reduce((acc, item) => {
     acc[item.status] = (acc[item.status] || 0) + 1;
     return acc;
   }, {});

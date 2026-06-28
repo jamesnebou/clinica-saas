@@ -34,7 +34,7 @@ export async function getUserClinics() {
 
   const { data, error } = await supabase
     .from("usuarios_clinica")
-    .select("id, clinica_id, papel, nome, email, ativo, clinicas(id, nome, slug, documento, telefone, email, cidade, estado, status, plano, metadata, trial_ends_at, billing_email, asaas_customer_id, asaas_subscription_id, assinatura_status, proxima_cobranca_em, bloqueada_em, bloqueio_motivo)")
+    .select("id, clinica_id, papel, nome, email, ativo, permissoes, clinicas(id, nome, slug, documento, telefone, email, cidade, estado, status, plano, metadata, trial_ends_at, billing_email, asaas_customer_id, asaas_subscription_id, assinatura_status, proxima_cobranca_em, bloqueada_em, bloqueio_motivo)")
     .eq("ativo", true)
     .order("created_at", { ascending: true });
 
@@ -65,7 +65,7 @@ export async function requireClinicSection(section) {
   }
 
   const membership = getCurrentMembership(context.memberships, activeClinic.id);
-  if (!canAccessSection(membership?.papel, section)) {
+  if (!canAccessSection(membership?.papel, section, membership)) {
     redirect("/dashboard?erro=permissao");
   }
 

@@ -1,16 +1,18 @@
-"use client";
+﻿"use client";
 
 import { Children, isValidElement, useState } from "react";
-import { Clock, CreditCard, Globe2, MessageCircle, Palette, Quote, Settings } from "lucide-react";
+import { Clock, CreditCard, Globe2, Megaphone, MessageCircle, Palette, Quote, Settings, UsersRound } from "lucide-react";
 
 const tabs = [
   { id: "dados", label: "Dados", icon: Settings },
   { id: "identidade", label: "Identidade", icon: Palette },
   { id: "site", label: "Site", icon: Globe2 },
   { id: "depoimentos", label: "Depoimentos", icon: Quote },
+  { id: "campanhas", label: "Campanhas", icon: Megaphone },
   { id: "expediente", label: "Expediente", icon: Clock },
-  { id: "politicas", label: "Politicas", icon: MessageCircle },
-  { id: "integracoes", label: "Integracoes", icon: CreditCard },
+  { id: "politicas", label: "Políticas", icon: MessageCircle },
+  { id: "integracoes", label: "Integrações", icon: CreditCard },
+  { id: "acessos", label: "Acessos", icon: UsersRound },
 ];
 
 export function ConfigTabs({ children }) {
@@ -21,7 +23,7 @@ export function ConfigTabs({ children }) {
   return (
     <div className="space-y-6">
       <div className="overflow-x-auto rounded-lg border border-neutral-200 bg-white p-2 shadow-sm">
-        <div className="flex min-w-max gap-2" role="tablist" aria-label="Configuracoes da clinica">
+        <div className="flex min-w-max gap-2" role="tablist" aria-label="Configurações da clínica">
           {tabs.map((tab) => {
             const Icon = tab.icon;
             const selected = activeTab === tab.id;
@@ -55,3 +57,6 @@ export function ConfigTabs({ children }) {
     </div>
   );
 }
+
+
+

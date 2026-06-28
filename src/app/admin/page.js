@@ -119,13 +119,13 @@ export default async function AdminSaasPage() {
                           <span className="rounded-full bg-neutral-100 px-3 py-1 text-xs font-bold uppercase text-neutral-700">{clinic.status}</span>
                           <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold uppercase text-emerald-700">{clinic.plano}</span>
                         </div>
-                        <p className="mt-2 text-sm text-neutral-500">{clinic.email || clinic.billing_email || "Sem e-mail"} · {clinic.cidade || "Cidade nao informada"}</p>
+                        <p className="mt-2 text-sm text-neutral-500">{clinic.email || clinic.billing_email || "Sem e-mail"} · {clinic.cidade || "Cidade não informada"}</p>
                       </div>
                       <div className="grid grid-cols-2 gap-2 text-xs text-neutral-600 sm:grid-cols-4 lg:min-w-[420px]">
                         <span className="rounded-lg bg-neutral-50 px-3 py-2">Usuarios <b>{limitText(clinic.usage.usuarios, plan?.limite_usuarios || 0)}</b></span>
                         <span className="rounded-lg bg-neutral-50 px-3 py-2">Profissionais <b>{limitText(clinic.usage.profissionais, plan?.limite_profissionais || 0)}</b></span>
                         <span className="rounded-lg bg-neutral-50 px-3 py-2">Clientes <b>{limitText(clinic.usage.clientes, plan?.limite_clientes || 0)}</b></span>
-                        <span className="rounded-lg bg-neutral-50 px-3 py-2">Agenda/mes <b>{limitText(clinic.usage.agendamentos_mes, plan?.limite_agendamentos_mes || 0)}</b></span>
+                        <span className="rounded-lg bg-neutral-50 px-3 py-2">Agenda/mês <b>{limitText(clinic.usage.agendamentos_mes, plan?.limite_agendamentos_mes || 0)}</b></span>
                       </div>
                     </div>
                   </summary>
@@ -142,12 +142,16 @@ export default async function AdminSaasPage() {
                       {plans.map((planOption) => <option key={planOption.slug} value={planOption.slug}>{planOption.nome} · {formatMoney(planOption.preco_mensal)}</option>)}
                     </SelectField>
                     <Field label="Fim do trial" name="trial_ends_at" type="date" defaultValue={formatDateInput(clinic.trial_ends_at)} />
-                    <Field label="E-mail cobranca" name="billing_email" type="email" defaultValue={clinic.billing_email || clinic.email || ""} />
-                    <Field label="Proxima cobranca" name="proxima_cobranca_em" type="date" defaultValue={clinic.proxima_cobranca_em || ""} />
+                    <Field label="E-mail cobrança" name="billing_email" type="email" defaultValue={clinic.billing_email || clinic.email || ""} />
+                    <Field label="Próxima cobrança" name="proxima_cobranca_em" type="date" defaultValue={clinic.proxima_cobranca_em || ""} />
                     <Field label="Asaas customer ID" name="asaas_customer_id" defaultValue={clinic.asaas_customer_id || ""} />
                     <Field label="Asaas subscription ID" name="asaas_subscription_id" defaultValue={clinic.asaas_subscription_id || ""} />
-                    <div className="md:col-span-3"><TextArea label="Motivo de bloqueio/observacao" name="bloqueio_motivo" defaultValue={clinic.bloqueio_motivo || ""} /></div>
-                    <div className="md:col-span-3"><SubmitButton>Salvar clinica</SubmitButton></div>
+                    <label className="flex items-center gap-2 rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm font-semibold text-neutral-700 md:col-span-3">
+                      <input type="checkbox" name="isento_cobranca" defaultChecked={clinic.assinatura_status === "isenta"} />
+                      Isentar cobrança desta clínica
+                    </label>
+                    <div className="md:col-span-3"><TextArea label="Motivo de bloqueio/observação" name="bloqueio_motivo" defaultValue={clinic.bloqueio_motivo || ""} /></div>
+                    <div className="md:col-span-3"><SubmitButton>Salvar clínica</SubmitButton></div>
                   </form>
                 </details>
               );
@@ -199,11 +203,11 @@ export default async function AdminSaasPage() {
                     <div className="flex items-start justify-between gap-3">
                       <div>
                         <p className="font-semibold">{plan.nome}</p>
-                        <p className="mt-1 text-xs text-neutral-500">{plan.slug} · {formatMoney(plan.preco_mensal)}/mes</p>
+                        <p className="mt-1 text-xs text-neutral-500">{plan.slug} · {formatMoney(plan.preco_mensal)}/mês</p>
                       </div>
                       <span className="rounded-full bg-neutral-100 px-2 py-1 text-xs font-semibold text-neutral-700">{plan.ativo ? "ativo" : "inativo"}</span>
                     </div>
-                    <p className="mt-3 text-xs leading-5 text-neutral-600">{plan.limite_usuarios} usuarios · {plan.limite_profissionais} profissionais · {plan.limite_clientes} clientes · {plan.limite_agendamentos_mes} agendamentos/mes</p>
+                    <p className="mt-3 text-xs leading-5 text-neutral-600">{plan.limite_usuarios} usuários · {plan.limite_profissionais} profissionais · {plan.limite_clientes} clientes · {plan.limite_agendamentos_mes} agendamentos/mês</p>
                   </div>
                 ))}
               </div>
@@ -219,7 +223,7 @@ export default async function AdminSaasPage() {
                   <Field label="Usuarios" name="limite_usuarios" type="number" defaultValue="3" />
                   <Field label="Profissionais" name="limite_profissionais" type="number" defaultValue="3" />
                   <Field label="Clientes" name="limite_clientes" type="number" defaultValue="300" />
-                  <Field label="Agendamentos/mes" name="limite_agendamentos_mes" type="number" defaultValue="500" />
+                  <Field label="Agendamentos/mês" name="limite_agendamentos_mes" type="number" defaultValue="500" />
                 </div>
                 <Field label="Ordem" name="ordem" type="number" defaultValue="0" />
                 <TextArea label="Descricao" name="descricao" />

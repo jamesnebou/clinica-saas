@@ -1,34 +1,17 @@
-import { Fragment } from "react";
+﻿import { Fragment } from "react";
 import { Camera, CheckCircle2, Clock, CreditCard, MapPin, MessageCircle, Quote, ShieldCheck, Sparkles, Star } from "lucide-react";
 import { notFound } from "next/navigation";
 import { getGooglePlaceReviews } from "@/lib/google/places";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { PublicBookingForm } from "./booking-form";
 import { PublicScrollEffects } from "./scroll-effects";
+import { PublicServicesSection } from "./services-section";
 
 export const dynamic = "force-dynamic";
-
-function money(value) {
-  return Number(value || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-}
-
-function depositValue(procedimento) {
-  const price = Number(procedimento?.preco || 0);
-  const fixed = Number(procedimento?.sinal_valor || 0);
-  const percent = Number(procedimento?.sinal_percentual || 0);
-  const value = fixed > 0 ? fixed : percent > 0 ? price * (percent / 100) : 0;
-  return Math.max(0, Math.min(price, Number(value.toFixed(2))));
-}
 
 function safeColor(value, fallback) {
   const color = String(value || "").trim();
   return /^#[0-9a-f]{6}$/i.test(color) ? color : fallback;
-}
-
-function serviceLabel(procedimento) {
-  const signal = depositValue(procedimento);
-  if (signal <= 0) return "Agendamento sem sinal online";
-  return `Sinal de ${money(signal)} no checkout`;
 }
 
 function googleEmbedUrl(clinic, site) {
@@ -91,9 +74,9 @@ export async function generateMetadata({ params }) {
   const { data } = await supabaseAdmin.from("clinicas").select("nome, metadata").eq("slug", slug).maybeSingle();
   const site = data?.metadata?.site_publico || {};
   return {
-    title: `${site.titulo_hero || data?.metadata?.brand_name || data?.nome || "Clínica"} | Agendamento`,
-    description: site.subtitulo_hero || "Conheça os procedimentos e agende seu atendimento.",
-    icons: site.favicon_url ? { icon: site.favicon_url, shortcut: site.favicon_url, apple: site.favicon_url } : undefined,
+    title: `${site.titulo_hero || data?.metadata?.brand_name || data?.nome || "ClÃ­nica"} | Agendamento`,
+    description: site.subtitulo_hero || "ConheÃ§a os procedimentos e agende seu atendimento.",
+    icons: site.favicon_url ? { icon: [{ url: site.favicon_url }], shortcut: [{ url: site.favicon_url }], apple: [{ url: site.favicon_url }] } : undefined,
   };
 }
 
@@ -121,7 +104,7 @@ export default async function PublicClinicPage({ params, searchParams }) {
   const [{ data: procedimentos = [] }, { data: profissionais = [] }] = await Promise.all([
     supabaseAdmin
       .from("procedimentos")
-      .select("id, nome, categoria, descricao, duracao_minutos, preco, cuidados_antes, cuidados_depois, sinal_percentual, sinal_valor, destaque_site, ordem_site")
+      .select("id, nome, categoria, descricao, duracao_minutos, preco, cuidados_antes, cuidados_depois, sinal_percentual, sinal_valor, destaque_site, ordem_site, imagem_url")
       .eq("clinica_id", clinic.id)
       .eq("ativo", true)
       .eq("publicado_site", true)
@@ -141,20 +124,19 @@ export default async function PublicClinicPage({ params, searchParams }) {
   const whatsapp = String(clinic.telefone || "").replace(/\D/g, "");
   const schedule = meta.horario_funcionamento || {};
   const professionalName = site.nome_profissional || profissionais[0]?.nome || brandName;
-  const professionalBio = site.bio_profissional || profissionais[0]?.observacoes || "Atendimento cuidadoso, escuta ativa e plano de tratamento alinhado ao seu objetivo estético.";
+  const professionalBio = site.bio_profissional || profissionais[0]?.observacoes || "Atendimento cuidadoso, escuta ativa e plano de tratamento alinhado ao seu objetivo estÃ©tico.";
   const heroImage = site.hero_image_url || site.profissional_image_url || fallbackImage(brandName, true);
   const professionalImage = site.profissional_image_url || site.hero_image_url || fallbackImage(professionalName);
   const clinicPhotos = [site.clinica_foto_1, site.clinica_foto_2, site.clinica_foto_3].filter(Boolean);
-  const gallery = clinicPhotos.length ? clinicPhotos : [heroImage, professionalImage, fallbackImage("Clínica")];
+  const gallery = clinicPhotos.length ? clinicPhotos : [heroImage, professionalImage, fallbackImage("ClÃ­nica")];
   const address = [clinic.endereco, clinic.cidade, clinic.estado].filter(Boolean).join(" - ");
-  const servicesLoop = [...procedimentos, ...procedimentos];
   const year = new Date().getFullYear();
 
   const fallbackTestimonials = [
-    { nome: "Mariana S.", procedimento: "Tratamento facial", texto: "Atendimento impecavel, ambiente acolhedor e resultado muito natural. Me senti segura desde a primeira avaliação." },
+    { nome: "Mariana S.", procedimento: "Tratamento facial", texto: "Atendimento impecavel, ambiente acolhedor e resultado muito natural. Me senti segura desde a primeira avaliaÃ§Ã£o." },
     { nome: "Fernanda L.", procedimento: "Harmonizacao", texto: "A equipe explicou tudo com clareza e respeitou meu objetivo. O resultado ficou exatamente como eu queria." },
     { nome: "Juliana M.", procedimento: "Protocolo estetico", texto: "A clinica passa muita confianca. Gostei da organizacao, do cuidado e do acompanhamento depois do procedimento." },
-    { nome: "Ana P.", procedimento: "Skincare", texto: "Experiência excelente, pontualidade e orientações precisas. Recomendo para quem busca cuidado serio e sofisticado." },
+    { nome: "Ana P.", procedimento: "Skincare", texto: "ExperiÃªncia excelente, pontualidade e orientaÃ§Ãµes precisas. Recomendo para quem busca cuidado serio e sofisticado." },
   ];
   const manualTestimonials = Array.isArray(site.depoimentos) && site.depoimentos.length
     ? site.depoimentos.filter((item) => item?.nome || item?.procedimento || item?.texto)
@@ -188,12 +170,12 @@ export default async function PublicClinicPage({ params, searchParams }) {
           </a>
           <nav className="hidden items-center gap-5 text-sm font-semibold text-white/78 lg:flex">
             <a href="#sobre">Sobre</a>
-            <a href="#servicos">Serviços</a>
+            <a href="#servicos">ServiÃ§os</a>
             <a href="#depoimentos">Depoimentos</a>
-            <a href="#localizacao">Localização</a>
+            <a href="#localizacao">LocalizaÃ§Ã£o</a>
           </nav>
           <div className="flex items-center gap-2">
-            <a href="/login-cliente" className="hidden rounded-full border border-white/20 px-4 py-2 text-xs font-bold text-white/60 transition hover:bg-white/10 hover:text-white sm:inline-flex">Área da clínica</a>
+            <a href="/login-cliente" className="hidden rounded-full border border-white/20 px-4 py-2 text-xs font-bold text-white/60 transition hover:bg-white/10 hover:text-white sm:inline-flex">Ãrea da clÃ­nica</a>
             <a href="#agendar" className="rounded-full bg-white px-5 py-2.5 text-sm font-bold text-[#17130f]">Agendar</a>
           </div>
         </div>
@@ -209,16 +191,16 @@ export default async function PublicClinicPage({ params, searchParams }) {
             // eslint-disable-next-line @next/next/no-img-element
             <img src={logoUrl} alt={`Logo ${brandName}`} className="mx-auto mb-8 h-28 w-28 rounded-full object-contain shadow-[0_24px_60px_rgba(0,0,0,0.24)]" />
           ) : null}
-          <p className="text-xs font-bold uppercase tracking-[0.34em] text-white/70">{site.eyebrow || "Estética premium e atendimento personalizado"}</p>
+          <p className="text-xs font-bold uppercase tracking-[0.34em] text-white/70">{site.eyebrow || "EstÃ©tica premium e atendimento personalizado"}</p>
           <h1 className="mx-auto mt-5 max-w-5xl text-5xl font-semibold leading-[1.03] tracking-tight sm:text-7xl">
             {site.titulo_hero || `Beleza, cuidado e tecnologia em ${brandName}`}
           </h1>
           <p className="mx-auto mt-6 max-w-3xl text-lg leading-8 text-white/82">
-            {site.subtitulo_hero || "Conheça a clínica, veja os procedimentos e reserve seu horário online com segurança."}
+            {site.subtitulo_hero || "ConheÃ§a a clÃ­nica, veja os procedimentos e reserve seu horÃ¡rio online com seguranÃ§a."}
           </p>
           <div className="mt-8 flex flex-wrap justify-center gap-3">
             <a href="#agendar" className="rounded-full bg-[var(--clinic-accent)] px-7 py-4 text-sm font-bold text-[#17130f] shadow-[0_20px_48px_rgba(0,0,0,0.24)]">Agendar consulta</a>
-            <a href="#servicos" className="rounded-full border border-white/40 bg-white/10 px-7 py-4 text-sm font-bold text-white backdrop-blur">Conheça os serviços</a>
+            <a href="#servicos" className="rounded-full border border-white/40 bg-white/10 px-7 py-4 text-sm font-bold text-white backdrop-blur">ConheÃ§a os serviÃ§os</a>
           </div>
         </div>
         <div className="absolute bottom-8 left-1/2 h-10 w-6 -translate-x-1/2 rounded-full border border-white/55">
@@ -226,12 +208,12 @@ export default async function PublicClinicPage({ params, searchParams }) {
         </div>
       </section>
 
-      <section id="sobre" className="public-reveal public-section-soft mx-auto grid max-w-7xl gap-14 px-5 py-24 sm:px-8 lg:grid-cols-[0.95fr_1.05fr] lg:items-center">
+      <section id="sobre" className="public-section-soft mx-auto grid max-w-7xl gap-14 px-5 py-24 sm:px-8 lg:grid-cols-[0.95fr_1.05fr] lg:items-center">
         <div className="relative">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={professionalImage} alt={professionalName} className="aspect-[4/5] w-full rounded-[2rem] object-cover shadow-[0_30px_86px_rgba(23,19,15,0.18)]" />
+          <img src={professionalImage} alt={professionalName} className="public-card-reveal public-reveal-left aspect-[4/5] w-full rounded-[2rem] object-cover shadow-[0_30px_86px_rgba(23,19,15,0.18)]" />
         </div>
-        <div>
+        <div className="public-card-reveal public-reveal-right">
           <SectionHeading eyebrow="Sobre" title={professionalName} />
           <RichText text={professionalBio} className="mt-6 text-base leading-8 text-neutral-700" />
           <div className="mt-8 flex flex-wrap gap-3">
@@ -244,76 +226,64 @@ export default async function PublicClinicPage({ params, searchParams }) {
         </div>
       </section>
 
-      <section className="public-reveal public-section-warm mx-auto max-w-7xl px-5 py-24 sm:px-8">
-        <SectionHeading eyebrow="A clínica" title="Ambiente pensado para acolher, cuidar e transformar" description="O nosso espaço foi feito para o seu conforto e aconchego, com ambientes pensados para bem-estar, privacidade e segurança." center />
+      {site.video_ativo ? (
+        <section className="site-video-section px-5 py-24 sm:px-8">
+          <div className="public-card-reveal public-reveal-up site-dark-glass-card mx-auto max-w-7xl p-6 text-white lg:p-10">
+            <div className="grid gap-8 lg:grid-cols-[0.85fr_1.15fr] lg:items-center">
+              <div>
+                <SectionHeading eyebrow="VÃ­deo" title={site.video_titulo || "ConheÃ§a a clÃ­nica"} description={site.video_subtitulo || "Veja de perto a estrutura, a abordagem e os cuidados que tornam a experiÃªncia mais segura e personalizada."} tone="dark" />
+                <a href={site.video_cta_url || "#agendar"} className="mt-8 inline-flex rounded-full bg-[var(--clinic-accent)] px-6 py-3 text-sm font-black text-[#17130f]">{site.video_cta_label || "Agendar avaliaÃ§Ã£o"}</a>
+              </div>
+              <div className="site-video-frame aspect-video overflow-hidden rounded-[1.5rem]">
+                {site.video_url ? <iframe src={site.video_url} title={site.video_titulo || brandName} className="h-full w-full border-0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowFullScreen /> : <div className="flex h-full items-center justify-center px-6 text-center text-sm text-white/56">Adicione a URL do vÃ­deo nas configuraÃ§Ãµes.</div>}
+              </div>
+            </div>
+          </div>
+        </section>
+      ) : null}
+
+      <section className="public-section-warm mx-auto max-w-7xl px-5 py-24 sm:px-8">
+        <SectionHeading eyebrow="A clÃ­nica" title="Ambiente pensado para acolher, cuidar e transformar" description="O nosso espaÃ§o foi feito para o seu conforto e aconchego, com ambientes pensados para bem-estar, privacidade e seguranÃ§a." center />
         <div className="mt-10 grid gap-4 lg:grid-cols-[1.15fr_0.85fr]">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={gallery[0]} alt="Clínica" className="h-[460px] w-full rounded-[2rem] object-cover shadow-[0_24px_70px_rgba(23,19,15,0.16)]" />
+          <img src={gallery[0]} alt="ClÃ­nica" className="public-card-reveal public-reveal-left h-[460px] w-full rounded-[2rem] object-cover shadow-[0_24px_70px_rgba(23,19,15,0.16)]" />
           <div className="grid gap-4">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={gallery[1]} alt="Espaço da clínica" className="h-[222px] w-full rounded-[2rem] object-cover shadow-[0_20px_54px_rgba(23,19,15,0.12)]" />
+            <img src={gallery[1]} alt="EspaÃ§o da clÃ­nica" className="public-card-reveal public-reveal-right h-[222px] w-full rounded-[2rem] object-cover shadow-[0_20px_54px_rgba(23,19,15,0.12)]" />
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={gallery[2]} alt="Atendimento" className="h-[222px] w-full rounded-[2rem] object-cover shadow-[0_20px_54px_rgba(23,19,15,0.12)]" />
+            <img src={gallery[2]} alt="Atendimento" className="public-card-reveal public-reveal-up h-[222px] w-full rounded-[2rem] object-cover shadow-[0_20px_54px_rgba(23,19,15,0.12)]" />
           </div>
         </div>
       </section>
 
-      <section id="servicos" className="public-reveal public-services-section relative overflow-hidden py-24 text-white">
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_22%_0%,color-mix(in_srgb,var(--clinic-accent)_22%,transparent),transparent_32rem),radial-gradient(circle_at_85%_18%,color-mix(in_srgb,var(--clinic-primary)_24%,transparent),transparent_30rem)]" />
-        <div className="relative z-10">
-          <SectionHeading eyebrow="Nossos serviços" title="Protocolos em destaque" description="Passe pelos tratamentos e escolha o melhor ponto de partida para sua avaliação." center tone="dark" />
-        </div>
-        <div className="relative z-10 mt-12 overflow-hidden">
-          <div className="public-services-track flex w-max gap-5 px-5 sm:px-8">
-            {servicesLoop.map((item, index) => (
-              <article key={`${item.id}-${index}`} data-featured={item.destaque_site ? "true" : "false"} className="public-service-card public-service-card-dark w-[330px] shrink-0 rounded-[1.75rem] border border-white/10 bg-white/[0.075] p-6 text-white backdrop-blur-2xl md:w-[390px]">
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <p className="text-xs font-bold uppercase tracking-[0.22em] text-[var(--clinic-accent)]">{item.categoria || "Procedimento"}</p>
-                    <h3 className="mt-3 text-2xl font-semibold text-white">{item.nome}</h3>
-                  </div>
-                  <span className="rounded-full border border-white/10 bg-white/10 px-3 py-1 text-xs font-bold text-white/78">{item.duracao_minutos} min</span>
-                </div>
-                <p className="mt-5 min-h-24 text-sm leading-7 text-white/62">{item.descricao || "Procedimento com avaliação profissional e orientações personalizadas."}</p>
-                <div className="mt-7 flex items-end justify-between gap-4 border-t border-white/10 pt-5">
-                  <div>
-                    <p className="text-xs text-white/42">Valor</p>
-                    <strong className="text-2xl text-white">{money(item.preco)}</strong>
-                  </div>
-                  <p className="max-w-36 text-right text-xs font-semibold text-white/50">{serviceLabel(item)}</p>
-                </div>
-              </article>
-            ))}
-          </div>
-        </div>
-      </section>
+      <PublicServicesSection procedimentos={procedimentos} />
 
-      <section id="depoimentos" className="public-reveal public-section-soft mx-auto max-w-7xl px-5 py-24 sm:px-8">
-        <SectionHeading eyebrow="Depoimentos" title="O que pacientes dizem:" description="A satisfação dos pacientes é o maior reconhecimento." center />
+      <section id="depoimentos" className="public-section-soft mx-auto max-w-7xl px-5 py-24 sm:px-8">
+        <SectionHeading eyebrow="Depoimentos" title="O que pacientes dizem:" description="A satisfaÃ§Ã£o dos pacientes Ã© o maior reconhecimento." center />
         {googleReviewsUrl || googleReviews.rating ? (
           <div className="mt-6 flex flex-wrap justify-center gap-3 text-center">
             {googleReviews.rating ? (
               <span className="inline-flex items-center gap-2 rounded-full border border-neutral-200 bg-white/70 px-5 py-3 text-sm font-bold text-neutral-800 shadow-sm backdrop-blur">
                 <Star size={17} className="fill-amber-400 text-amber-400" /> {Number(googleReviews.rating).toFixed(1)} no Google
-                {googleReviews.userRatingCount ? <span className="font-semibold text-neutral-500">({googleReviews.userRatingCount} avaliações)</span> : null}
+                {googleReviews.userRatingCount ? <span className="font-semibold text-neutral-500">({googleReviews.userRatingCount} avaliaÃ§Ãµes)</span> : null}
               </span>
             ) : null}
             {googleReviewsUrl ? (
               <a href={googleReviewsUrl} target="_blank" className="inline-flex items-center gap-2 rounded-full border border-neutral-200 bg-white/70 px-5 py-3 text-sm font-bold text-neutral-800 shadow-sm backdrop-blur">
-                <Star size={17} className="fill-amber-400 text-amber-400" /> Ver avaliações no Google
+                <Star size={17} className="fill-amber-400 text-amber-400" /> Ver avaliaÃ§Ãµes no Google
               </a>
             ) : null}
           </div>
         ) : null}
         <div className="mt-10 grid gap-5 md:grid-cols-2">
           {testimonials.map((item, index) => (
-            <article key={`${item.nome || "depoimento"}-${index}`} className="public-hover-card rounded-[1.75rem] border border-neutral-200 bg-white/70 p-7 shadow-[0_18px_44px_rgba(23,19,15,0.07)] backdrop-blur">
+            <article key={`${item.nome || "depoimento"}-${index}`} className={`public-card-reveal ${index % 2 === 0 ? "public-reveal-left" : "public-reveal-right"} public-hover-card rounded-[1.75rem] border border-neutral-200 bg-white/70 p-7 shadow-[0_18px_44px_rgba(23,19,15,0.07)] backdrop-blur`}>
               <Quote size={34} className="text-[var(--clinic-primary)] opacity-35" />
-              <p className="mt-5 text-sm leading-7 text-neutral-700">{item.texto || "Experiência excelente, atendimento cuidadoso e resultado alinhado ao que eu buscava."}</p>
+              <p className="mt-5 text-sm leading-7 text-neutral-700">{item.texto || "ExperiÃªncia excelente, atendimento cuidadoso e resultado alinhado ao que eu buscava."}</p>
               <div className="mt-7 flex items-end justify-between gap-4">
                 <div>
                   <strong>{item.nome || "Paciente"}</strong>
-                  <p className="mt-1 text-xs text-neutral-500">{item.procedimento || "Atendimento estético"}</p>
+                  <p className="mt-1 text-xs text-neutral-500">{item.procedimento || "Atendimento estÃ©tico"}</p>
                 </div>
                 <span className="text-amber-400">{"?".repeat(Math.max(1, Math.min(5, Number(item.rating || 5))))}</span>
               </div>
@@ -322,23 +292,43 @@ export default async function PublicClinicPage({ params, searchParams }) {
         </div>
       </section>
 
-      <section id="agendar" className="public-reveal public-booking-section mx-auto grid max-w-7xl gap-8 px-5 py-24 sm:px-8 lg:grid-cols-[0.9fr_1.1fr]">
-        <div className="public-hover-card rounded-[1.75rem] border border-white/70 bg-white/72 p-7 shadow-[0_20px_54px_rgba(20,18,15,0.09)] backdrop-blur">
-          <SectionHeading eyebrow="Agendamento" title="Reserve seu horário" description="Escolha procedimento, profissional e horário. A disponibilidade ? validada com a agenda real da clínica." />
+      {site.campanha_ativa ? (
+        <section className="site-campaign-section px-5 py-24 sm:px-8">
+          <div className="public-card-reveal public-reveal-up site-dark-glass-card mx-auto grid max-w-7xl gap-8 p-6 text-white lg:grid-cols-[1.05fr_0.95fr] lg:p-10 lg:items-center">
+            <div>
+              <SectionHeading eyebrow="Campanha" title={site.campanha_titulo || "Protocolo em campanha"} description={site.campanha_subtitulo || "Uma condiÃ§Ã£o especial para iniciar seu cuidado com orientaÃ©o profissional."} tone="dark" />
+              <RichText text={site.campanha_texto || "Destaque aqui o produto, serviÃ§o ou protocolo que a clÃ­nica deseja vender mais neste momento."} className="mt-6 text-base leading-8 text-white/70" />
+              <a href={site.campanha_cta_url || "#agendar"} className="mt-8 inline-flex rounded-full bg-[var(--clinic-accent)] px-6 py-3 text-sm font-black text-[#17130f]">{site.campanha_cta_label || "Quero saber mais"}</a>
+            </div>
+            <div className="site-video-frame overflow-hidden rounded-[1.75rem]">
+              {site.campanha_media_url ? <iframe src={site.campanha_media_url} title={site.campanha_titulo || "Campanha"} className="aspect-video w-full border-0" allowFullScreen /> : (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={site.campanha_image_url || heroImage} alt={site.campanha_titulo || brandName} className="h-[420px] w-full object-cover" />
+              )}
+            </div>
+          </div>
+        </section>
+      ) : null}
+
+      <section id="agendar" className="public-booking-section mx-auto grid max-w-7xl gap-8 px-5 py-24 sm:px-8 lg:grid-cols-[0.9fr_1.1fr]">
+        <div className="public-card-reveal public-reveal-left public-hover-card rounded-[1.75rem] border border-white/70 bg-white/72 p-7 shadow-[0_20px_54px_rgba(20,18,15,0.09)] backdrop-blur">
+          <SectionHeading eyebrow="Agendamento" title="Reserve seu horÃ¡rio" description="Escolha procedimento, profissional e horÃ¡rio. A disponibilidade Ã© validada com a agenda real da clÃ­nica." />
           <div className="mt-8 space-y-4 text-sm text-neutral-700">
-            <p className="flex gap-3"><Clock size={18} className="text-[var(--clinic-primary)]" /> Atendimento de {schedule.inicio || "08:00"} às {schedule.fim || "18:00"}, conforme disponibilidade.</p>
-            <p className="flex gap-3"><CreditCard size={18} className="text-[var(--clinic-primary)]" /> Quando houver sinal, você será direcionado para um checkout seguro.</p>
-            <p className="flex gap-3"><ShieldCheck size={18} className="text-[var(--clinic-primary)]" /> Seus dados entram na agenda e no CRM da clínica automaticamente.</p>
+            <p className="flex gap-3"><Clock size={18} className="text-[var(--clinic-primary)]" /> Atendimento de {schedule.inicio || "08:00"} Ã s {schedule.fim || "18:00"}, conforme disponibilidade.</p>
+            <p className="flex gap-3"><CreditCard size={18} className="text-[var(--clinic-primary)]" /> Quando houver sinal, vocÃª serÃ¡ direcionado para um checkout seguro.</p>
+            <p className="flex gap-3"><ShieldCheck size={18} className="text-[var(--clinic-primary)]" /> Seus dados entram na agenda e no CRM da clÃ­nica automaticamente.</p>
             {address ? <p className="flex gap-3"><MapPin size={18} className="text-[var(--clinic-primary)]" /> {address}</p> : null}
           </div>
         </div>
 
-        <PublicBookingForm slug={clinic.slug} procedimentos={procedimentos} profissionais={profissionais} query={query} />
+        <div className="public-card-reveal public-reveal-right">
+          <PublicBookingForm slug={clinic.slug} procedimentos={procedimentos} profissionais={profissionais} query={query} />
+        </div>
       </section>
 
-      <section id="localizacao" className="public-reveal public-section-soft mx-auto grid max-w-7xl gap-8 px-5 py-24 sm:px-8 lg:grid-cols-[0.85fr_1.15fr] lg:items-center">
-        <div className="public-hover-card rounded-[2rem] border border-white/70 bg-white/72 p-7 shadow-[0_20px_54px_rgba(20,18,15,0.08)] backdrop-blur">
-          <SectionHeading eyebrow="Localização" title="Como chegar?" description="Use o mapa para chegar até a clínica ou fale com a equipe pelo WhatsApp antes do atendimento." />
+      <section id="localizacao" className="public-section-soft mx-auto grid max-w-7xl gap-8 px-5 py-24 sm:px-8 lg:grid-cols-[0.85fr_1.15fr] lg:items-center">
+        <div className="public-card-reveal public-reveal-left public-hover-card rounded-[2rem] border border-white/70 bg-white/72 p-7 shadow-[0_20px_54px_rgba(20,18,15,0.08)] backdrop-blur">
+          <SectionHeading eyebrow="LocalizaÃ§Ã£o" title="Como chegar?" description="Use o mapa para chegar atÃ© a clÃ­nica ou fale com a equipe pelo WhatsApp antes do atendimento." />
           <div className="mt-8 space-y-4 text-sm leading-7 text-neutral-700">
             {address ? <p className="flex gap-3"><MapPin size={19} className="mt-1 shrink-0 text-[var(--clinic-primary)]" /> <span>{address}</span></p> : null}
             {clinic.telefone ? <p className="flex gap-3"><MessageCircle size={19} className="mt-1 shrink-0 text-[var(--clinic-primary)]" /> <span>{clinic.telefone}</span></p> : null}
@@ -349,7 +339,7 @@ export default async function PublicClinicPage({ params, searchParams }) {
             {whatsapp ? <a href={`https://wa.me/55${whatsapp}`} target="_blank" className="rounded-full border border-neutral-300 bg-white/70 px-5 py-3 text-sm font-bold text-neutral-900">Chamar no WhatsApp</a> : null}
           </div>
         </div>
-        <div className="overflow-hidden rounded-[2rem] border border-white/70 bg-white/70 shadow-[0_24px_70px_rgba(23,19,15,0.12)] backdrop-blur">
+        <div className="public-card-reveal public-reveal-right overflow-hidden rounded-[2rem] border border-white/70 bg-white/70 shadow-[0_24px_70px_rgba(23,19,15,0.12)] backdrop-blur">
           <iframe src={googleEmbedUrl(clinic, site)} title={`Mapa ${brandName}`} loading="lazy" className="h-[460px] w-full border-0" referrerPolicy="no-referrer-when-downgrade" />
         </div>
       </section>
@@ -363,20 +353,20 @@ export default async function PublicClinicPage({ params, searchParams }) {
             ) : null}
             <h3 className="mt-5 text-xl font-semibold">{brandName}</h3>
             <p className="mt-3 max-w-sm text-sm leading-7 text-white/65">{professionalName}</p>
-            <p className="mt-1 text-sm text-white/55">{site.eyebrow || "Estética premium e atendimento personalizado"}</p>
+            <p className="mt-1 text-sm text-white/55">{site.eyebrow || "EstÃ©tica premium e atendimento personalizado"}</p>
           </div>
           <div>
-            <h4 className="font-semibold">Links rápidos</h4>
+            <h4 className="font-semibold">Links rÃ¡pidos</h4>
             <div className="mt-5 grid gap-3 text-sm text-white/68">
-              <a href="#topo">Início</a>
+              <a href="#topo">InÃ­cio</a>
               <a href="#sobre">Sobre</a>
-              <a href="#servicos">Serviços</a>
+              <a href="#servicos">ServiÃ§os</a>
               <a href="#depoimentos">Depoimentos</a>
               <a href="#agendar">Agendamento</a>
-              <a href="#localizacao">Localização</a>
+              <a href="#localizacao">LocalizaÃ§Ã£o</a>
               <a href="/termos">Termos de uso</a>
               <a href="/privacidade">Privacidade</a>
-              <a href="/login-cliente">Área da clínica</a>
+              <a href="/login-cliente">Ãrea da clÃ­nica</a>
             </div>
           </div>
           <div>
@@ -392,7 +382,7 @@ export default async function PublicClinicPage({ params, searchParams }) {
           </div>
         </div>
         <div className="mx-auto mt-12 max-w-7xl border-t border-white/10 pt-8 text-center text-xs text-white/50">
-          © {year} {brandName}. Todos os direitos reservados.
+          Â© {year} {brandName}. Todos os direitos reservados.
         </div>
       </footer>
 
@@ -404,3 +394,5 @@ export default async function PublicClinicPage({ params, searchParams }) {
     </main>
   );
 }
+
+

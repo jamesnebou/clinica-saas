@@ -4,7 +4,7 @@ import { useEffect } from "react";
 
 export function PublicScrollEffects() {
   useEffect(() => {
-    const elements = Array.from(document.querySelectorAll(".public-reveal"));
+    const elements = Array.from(document.querySelectorAll(".public-card-reveal"));
 
     if (!elements.length) return undefined;
 
@@ -14,7 +14,7 @@ export function PublicScrollEffects() {
           entry.target.classList.toggle("is-visible", entry.isIntersecting);
         }
       },
-      { threshold: 0.16, rootMargin: "0px 0px -8% 0px" }
+      { threshold: 0.12, rootMargin: "0px 0px -10% 0px" }
     );
 
     elements.forEach((element) => observer.observe(element));

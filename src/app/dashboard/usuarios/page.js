@@ -4,6 +4,7 @@ import { requireClinicSection } from "@/lib/auth/session";
 import { Card, EmptyClinicState, EmptyState, Field, LimitNotice, Notice, PageHeader, SectionTitle, SelectField, SubmitButton } from "@/components/app-shell/ui";
 import { getClinicPlan, getClinicUsage } from "@/lib/saas/plans";
 import { inviteClinicUserAction, updateClinicUserAction } from "../actions";
+import { ACCESS_SECTION_LABELS, ROLE_ACCESS } from "@/lib/auth/permissions";
 
 export const metadata = { title: "Usuarios | Clinica SaaS" };
 
@@ -14,6 +15,12 @@ const roles = [
   ["financeiro", "Financeiro"],
   ["profissional", "Profissional"],
 ];
+
+function selectedSections(usuario) {
+  const custom = usuario?.permissoes?.secoes;
+  if (Array.isArray(custom) && custom.length) return custom;
+  return ROLE_ACCESS[usuario?.papel] || [];
+}
 
 export default async function UsuariosPage({ searchParams }) {
   const params = await searchParams;
@@ -27,7 +34,7 @@ export default async function UsuariosPage({ searchParams }) {
   const [{ data: usuarios = [] }, plan, usage] = await Promise.all([
     supabase
       .from("usuarios_clinica")
-      .select("id, nome, email, papel, ativo, invited_at, accepted_at, created_at")
+      .select("id, nome, email, papel, ativo, permissoes, invited_at, accepted_at, created_at")
       .eq("clinica_id", activeClinic.id)
       .order("created_at", { ascending: true }),
     getClinicPlan(activeClinic),
@@ -84,6 +91,23 @@ export default async function UsuariosPage({ searchParams }) {
                       <option value="true">Ativo</option>
                       <option value="false">Desativado</option>
                     </SelectField>
+                  </div>
+                  <div className="mt-4 rounded-lg border border-neutral-100 bg-neutral-50 p-3">
+                    <p className="text-sm font-bold text-neutral-800">Abas permitidas</p>
+                    <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                      {ACCESS_SECTION_LABELS.map(([section, label]) => (
+                        <label key={section} className="inline-flex items-center gap-2 text-sm text-neutral-700">
+                          <input
+                            type="checkbox"
+                            name="secoes_permitidas"
+                            value={section}
+                            defaultChecked={selectedSections(usuario).includes(section)}
+                            disabled={usuario.papel === "owner"}
+                          />
+                          {label}
+                        </label>
+                      ))}
+                    </div>
                   </div>
                   <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
                     <p className="inline-flex items-center gap-2 text-xs text-neutral-500"><ShieldCheck size={14} /> {usuario.accepted_at ? "Acesso criado no Auth" : "Vinculo pendente de login/Auth"}</p>

@@ -1,4 +1,4 @@
-﻿import { supabaseAdmin } from "@/lib/supabase/admin";
+import { supabaseAdmin } from "@/lib/supabase/admin";
 
 export const ACTIVE_CLINIC_STATUSES = new Set(["trial", "ativa"]);
 export const BILLING_WARNING_STATUSES = new Set(["trial", "inadimplente", "cancelada", "bloqueada"]);
@@ -111,8 +111,13 @@ export async function getClinicUsage(clinicaId) {
 
 export function getClinicBillingState(clinic) {
   const status = clinic?.status || "trial";
+  const assinaturaStatus = String(clinic?.assinatura_status || "").toLowerCase();
   const trialEndsAt = clinic?.trial_ends_at ? new Date(clinic.trial_ends_at) : null;
   const trialExpired = status === "trial" && trialEndsAt && trialEndsAt < new Date();
+
+  if (assinaturaStatus === "isenta") {
+    return { blocked: false, level: "ok", title: "Assinatura isenta", message: "Esta clínica está liberada por isenção comercial." };
+  }
 
   if (status === "cancelada" || status === "bloqueada") {
     return { blocked: true, level: "danger", title: "Clinica bloqueada", message: clinic?.bloqueio_motivo || "A assinatura desta clinica esta cancelada ou bloqueada." };
@@ -180,4 +185,3 @@ export async function assertClinicLimit({ clinic, resource }) {
     throw new Error(`Limite de ${plan[config.limitKey]} ${resource} atingido no plano ${plan.nome}.`);
   }
 }
-

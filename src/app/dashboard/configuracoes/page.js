@@ -1,10 +1,11 @@
-import { Clock, CreditCard, Mail, MessageCircle, Palette, Settings } from "lucide-react";
+import { Clock, CreditCard, Mail, MessageCircle, Palette, Settings, ShieldCheck, UsersRound } from "lucide-react";
 import { requireClinicSection } from "@/lib/auth/session";
 import { EmptyClinicState, Field, PageHeader, SubmitButton, TextArea } from "@/components/app-shell/ui";
-import { removeClinicDomainAction, syncClinicDomainAction, testClinicWhatsappIntegrationAction, updateClinicAccountAction, updateClinicSettingsAction } from "../actions";
+import { removeClinicDomainAction, syncClinicDomainAction, testClinicWhatsappIntegrationAction, updateClinicAccountAction, updateClinicSettingsAction, updateClinicUserAction } from "../actions";
 import { ConfigTabs } from "./config-tabs";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { normalizeSchedule } from "@/lib/clinic/schedule";
+import { ACCESS_SECTION_LABELS, ROLE_ACCESS } from "@/lib/auth/permissions";
 
 export const metadata = { title: "Configuracoes | Clínica SaaS" };
 export const dynamic = "force-dynamic";
@@ -18,6 +19,20 @@ const weekDays = [
   ["6", "Sab"],
   ["0", "Dom"],
 ];
+
+const clinicRoles = [
+  ["owner", "Owner"],
+  ["admin", "Admin"],
+  ["recepcao", "Recepção"],
+  ["financeiro", "Financeiro"],
+  ["profissional", "Profissional"],
+];
+
+function userSelectedSections(usuario) {
+  const custom = usuario?.permissoes?.secoes;
+  if (Array.isArray(custom) && custom.length) return custom;
+  return ROLE_ACCESS[usuario?.papel] || [];
+}
 
 function Notice({ children }) {
   return <div className="mt-6 rounded-lg border border-[color-mix(in_srgb,var(--clinic-primary)_24%,#e5e5e5)] bg-[color-mix(in_srgb,var(--clinic-accent)_10%,white)] px-4 py-3 text-sm text-[var(--clinic-primary)]">{children}</div>;
@@ -54,7 +69,7 @@ function DomainStatusCard({ domain }) {
         </span>
       </div>
       <p className="mt-2 text-xs leading-5 text-neutral-600">
-        {ready ? "Dominio pronto para abrir o site publico da clinica." : notes?.message || "Aguardando verificacao do dominio na Vercel."}
+        {ready ? "Domínio pronto para abrir o site público da clínica." : notes?.message || "Aguardando verificação do domínio na Vercel."}
       </p>
       {!ready ? <p className="mt-2 rounded-md bg-white px-3 py-2 text-xs leading-5 text-neutral-600">{dnsHint(domain.dominio)}</p> : null}
       {Array.isArray(notes?.verification) && notes.verification.length ? (
@@ -124,16 +139,21 @@ export default async function ConfiguracoesPage({ searchParams }) {
     .select("asaas_ativo, asaas_base_url, asaas_api_key, asaas_webhook_token, email_ativo, email_destino, email_remetente, whatsapp_ativo, whatsapp_provider, whatsapp_numero_destino, whatsapp_webhook_url, whatsapp_token")
     .eq("clinica_id", activeClinic.id)
     .maybeSingle();
+  const { data: usuarios = [] } = await supabaseAdmin
+    .from("usuarios_clinica")
+    .select("id, nome, email, papel, ativo, permissoes, accepted_at, created_at")
+    .eq("clinica_id", activeClinic.id)
+    .order("created_at", { ascending: true });
 
   return (
     <main className="px-5 py-8 sm:px-8 lg:px-10">
       <section className="mx-auto max-w-7xl">
         <PageHeader eyebrow="Clínica" title="Configuracoes da clinica" description="Ajuste dados comerciais, identidade visual, expediente, politica de cancelamento e WhatsApp padrao." />
 
-        {params?.ok === "configuracoes" ? <Notice>Configuracoes atualizadas com sucesso.</Notice> : null}
+        {params?.ok === "configuracoes" ? <Notice>Configurações atualizadas com sucesso.</Notice> : null}
         {params?.ok === "whatsapp" ? <Notice>Mensagem de teste enviada pelo WhatsApp.</Notice> : null}
         {params?.ok === "conta" ? <Notice>Dados de acesso atualizados com sucesso.</Notice> : null}
-        {params?.erro ? <div className="mt-6 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">{params?.mensagem || "Nao foi possivel atualizar as configuracoes."}</div> : null}
+        {params?.erro ? <div className="mt-6 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">{params?.mensagem || "Não foi possível atualizar as configurações."}</div> : null}
 
         <form action={updateClinicSettingsAction} className="mt-8 space-y-6">
           <ConfigTabs>
@@ -208,9 +228,9 @@ export default async function ConfiguracoesPage({ searchParams }) {
           </section>
 
           <section className="rounded-lg border border-neutral-200 bg-white p-5 shadow-sm">
-            <div className="flex items-center gap-2"><Settings size={20} className="text-[var(--clinic-primary)]" /><h2 className="text-lg font-semibold">Site p?blico de vendas e agendamento</h2></div>
+            <div className="flex items-center gap-2"><Settings size={20} className="text-[var(--clinic-primary)]" /><h2 className="text-lg font-semibold">Site público de vendas e agendamento</h2></div>
             <div className="mt-5 rounded-lg border border-neutral-200 bg-neutral-50 px-4 py-3 text-sm text-neutral-600">
-              Link p?blico atual: <a href={`/c/${activeClinic.slug}`} target="_blank" className="font-bold text-[var(--clinic-primary)] underline">/c/{activeClinic.slug}</a>
+              Link público atual: <a href={`/c/${activeClinic.slug}`} target="_blank" className="font-bold text-[var(--clinic-primary)] underline">/c/{activeClinic.slug}</a>
             </div>
             <div className="mt-5 grid gap-4 lg:grid-cols-2">
               <label className="flex items-center gap-2 rounded-lg border border-neutral-200 px-3 py-2 text-sm font-semibold text-neutral-700">
@@ -314,6 +334,35 @@ export default async function ConfiguracoesPage({ searchParams }) {
           </section>
 
           <section className="rounded-lg border border-neutral-200 bg-white p-5 shadow-sm">
+            <div className="flex items-center gap-2"><Settings size={20} className="text-[var(--clinic-primary)]" /><h2 className="text-lg font-semibold">Campanha em destaque e vídeo</h2></div>
+            <p className="mt-2 text-sm leading-6 text-neutral-600">Use esta área para destacar uma oferta, produto, serviço ou vídeo institucional no site público.</p>
+            <div className="mt-5 grid gap-5">
+              <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-4">
+                <label className="inline-flex items-center gap-2 text-sm font-bold text-neutral-800"><input type="checkbox" name="site_campanha_ativa" defaultChecked={Boolean(site.campanha_ativa)} />Mostrar campanha em destaque no site</label>
+                <div className="mt-4 grid gap-4 lg:grid-cols-2">
+                  <Field label="Título da campanha" name="site_campanha_titulo" defaultValue={site.campanha_titulo || ""} placeholder="Protocolo premium em destaque" />
+                  <Field label="Subtítulo da campanha" name="site_campanha_subtitulo" defaultValue={site.campanha_subtitulo || ""} placeholder="Oferta, lançamento ou protocolo principal" />
+                  <div className="lg:col-span-2"><TextArea label="Texto da campanha" name="site_campanha_texto" defaultValue={site.campanha_texto || ""} placeholder="Explique o produto ou serviço que a clínica quer vender mais." /></div>
+                  <Field label="Texto do botão" name="site_campanha_cta_label" defaultValue={site.campanha_cta_label || ""} placeholder="Quero saber mais" />
+                  <Field label="Link do botão" name="site_campanha_cta_url" defaultValue={site.campanha_cta_url || ""} placeholder="#agendar ou https://..." />
+                  <Field label="URL de vídeo ou mídia" name="site_campanha_media_url" defaultValue={site.campanha_media_url || ""} placeholder="YouTube, Vimeo, Instagram ou arquivo externo" />
+                  <label className="block"><span className="text-sm font-medium text-neutral-700">Imagem da campanha</span><input name="site_campaign_image_file" type="file" accept="image/jpeg,image/png,image/webp,image/svg+xml" className="mt-2 block w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm file:mr-4 file:rounded-md file:border-0 file:bg-[var(--clinic-primary)] file:px-3 file:py-2 file:text-sm file:font-semibold file:text-white" /><span className="mt-2 block text-xs leading-5 text-neutral-500">Opcional. Recomendado: 1600x1000 px. Limite 50 MB.</span>{site.campanha_image_url ? <span className="mt-2 block text-xs font-semibold text-[var(--clinic-primary)]">Imagem salva.</span> : null}</label>
+                </div>
+              </div>
+              <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-4">
+                <label className="inline-flex items-center gap-2 text-sm font-bold text-neutral-800"><input type="checkbox" name="site_video_ativo" defaultChecked={Boolean(site.video_ativo)} />Mostrar seção de vídeo institucional</label>
+                <div className="mt-4 grid gap-4 lg:grid-cols-2">
+                  <Field label="Título do vídeo" name="site_video_titulo" defaultValue={site.video_titulo || ""} placeholder="Conhe?a a cl?nica por dentro" />
+                  <Field label="Subtítulo do vídeo" name="site_video_subtitulo" defaultValue={site.video_subtitulo || ""} placeholder="Uma mensagem da profissional para novos pacientes" />
+                  <Field label="URL do vídeo" name="site_video_url" defaultValue={site.video_url || ""} placeholder="https://www.youtube.com/embed/..." />
+                  <Field label="Texto do CTA" name="site_video_cta_label" defaultValue={site.video_cta_label || ""} placeholder="Agendar avaliação" />
+                  <Field label="Link do CTA" name="site_video_cta_url" defaultValue={site.video_cta_url || ""} placeholder="#agendar" />
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section className="rounded-lg border border-neutral-200 bg-white p-5 shadow-sm">
             <div className="flex items-center gap-2"><Clock size={20} className="text-[var(--clinic-primary)]" /><h2 className="text-lg font-semibold">Horário de funcionamento</h2></div>
             <p className="mt-2 text-sm leading-6 text-neutral-600">Configure cada dia separadamente. Use o segundo período apenas quando a clínica realmente fechar no meio do dia.</p>
             <div className="mt-5 grid gap-3">
@@ -402,11 +451,118 @@ export default async function ConfiguracoesPage({ searchParams }) {
               </div>
             </div>
           </section>
+
+          <section className="rounded-lg border border-neutral-200 bg-white p-5 shadow-sm">
+            <div className="flex items-center gap-2">
+              <UsersRound size={20} className="text-[var(--clinic-primary)]" />
+              <h2 className="text-lg font-semibold">Gestão de acessos</h2>
+            </div>
+            <p className="mt-2 text-sm leading-6 text-neutral-600">
+              Defina a função de cada usuário e quais abas ele pode acessar dentro da dashboard da clínica.
+            </p>
+
+            <div className="mt-5 space-y-4">
+              {usuarios.length === 0 ? (
+                <div className="rounded-lg border border-dashed border-neutral-300 bg-neutral-50 px-4 py-6 text-sm text-neutral-600">
+                  Nenhum usuário cadastrado para esta clínica.
+                </div>
+              ) : usuarios.map((usuario) => {
+                const formId = `access-user-${usuario.id}`;
+                const owner = usuario.papel === "owner";
+                const allowedSections = userSelectedSections(usuario);
+
+                return (
+                  <div key={usuario.id} className="rounded-lg border border-neutral-200 bg-neutral-50 p-4">
+                    <input form={formId} type="hidden" name="id" value={usuario.id} />
+                    <input form={formId} type="hidden" name="redirect_to" value="/dashboard/configuracoes" />
+                    <div className="grid gap-4 lg:grid-cols-[1.2fr_1fr_170px_150px] lg:items-end">
+                      <label className="block">
+                        <span className="text-sm font-medium text-neutral-700">Nome</span>
+                        <input
+                          form={formId}
+                          name="nome"
+                          defaultValue={usuario.nome || ""}
+                          className="mt-2 block h-11 w-full rounded-lg border border-neutral-200 bg-white px-3 text-sm outline-none transition focus:border-[var(--clinic-primary)] focus:ring-2 focus:ring-[color-mix(in_srgb,var(--clinic-primary)_18%,transparent)]"
+                        />
+                      </label>
+                      <div>
+                        <p className="text-sm font-medium text-neutral-700">E-mail</p>
+                        <p className="mt-2 min-h-11 break-all rounded-lg border border-neutral-100 bg-white px-3 py-3 text-sm text-neutral-600">{usuario.email}</p>
+                      </div>
+                      <label className="block">
+                        <span className="text-sm font-medium text-neutral-700">Função</span>
+                        <select
+                          form={formId}
+                          name="papel"
+                          defaultValue={usuario.papel}
+                          className="mt-2 block h-11 w-full rounded-lg border border-neutral-200 bg-white px-3 text-sm outline-none transition focus:border-[var(--clinic-primary)] focus:ring-2 focus:ring-[color-mix(in_srgb,var(--clinic-primary)_18%,transparent)]"
+                        >
+                          {clinicRoles.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                        </select>
+                      </label>
+                      <label className="block">
+                        <span className="text-sm font-medium text-neutral-700">Status</span>
+                        <select
+                          form={formId}
+                          name="ativo"
+                          defaultValue={usuario.ativo ? "true" : "false"}
+                          className="mt-2 block h-11 w-full rounded-lg border border-neutral-200 bg-white px-3 text-sm outline-none transition focus:border-[var(--clinic-primary)] focus:ring-2 focus:ring-[color-mix(in_srgb,var(--clinic-primary)_18%,transparent)]"
+                        >
+                          <option value="true">Ativo</option>
+                          <option value="false">Desativado</option>
+                        </select>
+                      </label>
+                    </div>
+
+                    <div className="mt-4 rounded-lg border border-white bg-white/80 p-3">
+                      <p className="flex items-center gap-2 text-sm font-bold text-neutral-800">
+                        <ShieldCheck size={16} className="text-[var(--clinic-primary)]" />
+                        Abas permitidas
+                      </p>
+                      {owner ? (
+                        <p className="mt-2 text-xs leading-5 text-neutral-500">Owner sempre tem acesso total para evitar bloqueio administrativo.</p>
+                      ) : null}
+                      <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                        {ACCESS_SECTION_LABELS.map(([section, label]) => (
+                          <label key={`${usuario.id}-${section}`} className="inline-flex items-center gap-2 text-sm text-neutral-700">
+                            <input
+                              form={formId}
+                              type="checkbox"
+                              name="secoes_permitidas"
+                              value={section}
+                              defaultChecked={owner || allowedSections.includes(section)}
+                              disabled={owner}
+                            />
+                            {label}
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+                      <p className="text-xs text-neutral-500">{usuario.accepted_at ? "Acesso ativo no Auth." : "Vínculo criado, aguardando primeiro login."}</p>
+                      <button
+                        form={formId}
+                        formAction={updateClinicUserAction}
+                        type="submit"
+                        className="h-10 rounded-lg bg-[var(--clinic-primary)] px-4 text-sm font-bold text-white shadow-sm transition hover:brightness-95"
+                      >
+                        Salvar acesso
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
           </ConfigTabs>
           <div className="flex justify-end border-t border-neutral-200 pt-6">
             <SubmitButton>Salvar configuracoes</SubmitButton>
           </div>
         </form>
+        {usuarios.map((usuario) => (
+          <form key={`access-form-${usuario.id}`} id={`access-user-${usuario.id}`} className="hidden"></form>
+        ))}
       </section>
     </main>
   );

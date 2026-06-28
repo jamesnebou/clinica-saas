@@ -145,8 +145,12 @@ export async function updateClinicCommercialAction(formData) {
   const trialEndsAt = nullableText(formData, "trial_ends_at");
   const proximaCobranca = nullableText(formData, "proxima_cobranca_em");
   const bloqueioMotivo = nullableText(formData, "bloqueio_motivo");
+  const isentoCobranca = formData.get("isento_cobranca") === "on";
+  const statusFinal = isentoCobranca ? "ativa" : status;
 
-  const assinaturaStatus = status === "trial"
+  const assinaturaStatus = isentoCobranca
+    ? "isenta"
+    : status === "trial"
     ? "trial"
     : status === "ativa"
       ? "ativa"
@@ -159,16 +163,16 @@ export async function updateClinicCommercialAction(formData) {
   const { error } = await supabaseAdmin
     .from("clinicas")
     .update({
-      status,
+      status: statusFinal,
       plano,
       assinatura_status: assinaturaStatus,
       trial_ends_at: trialEndsAt ? new Date(`${trialEndsAt}T23:59:59`).toISOString() : null,
       billing_email: nullableText(formData, "billing_email"),
-      proxima_cobranca_em: proximaCobranca,
+      proxima_cobranca_em: isentoCobranca ? null : proximaCobranca,
       asaas_customer_id: nullableText(formData, "asaas_customer_id"),
       asaas_subscription_id: nullableText(formData, "asaas_subscription_id"),
-      bloqueio_motivo: bloqueioMotivo,
-      bloqueada_em: status === "inadimplente" || status === "cancelada" ? new Date().toISOString() : null,
+      bloqueio_motivo: isentoCobranca ? (bloqueioMotivo || "Isenção comercial/manual") : bloqueioMotivo,
+      bloqueada_em: isentoCobranca ? null : (status === "inadimplente" || status === "cancelada" ? new Date().toISOString() : null),
     })
     .eq("id", id);
 

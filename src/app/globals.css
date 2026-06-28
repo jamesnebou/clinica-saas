@@ -368,6 +368,83 @@ textarea {
   mask-image: linear-gradient(90deg, transparent, #000 10%, #000 90%, transparent);
 }
 
+.site-video-section,
+.site-campaign-section {
+  position: relative;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 18% 10%, color-mix(in srgb, var(--clinic-accent, #10b981) 18%, transparent), transparent 26rem),
+    radial-gradient(circle at 82% 16%, color-mix(in srgb, var(--clinic-primary, #047857) 20%, transparent), transparent 28rem),
+    linear-gradient(135deg, #070605 0%, #14110f 46%, #090807 100%);
+}
+
+.site-video-section::before,
+.site-campaign-section::before {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  content: "";
+  background-image:
+    linear-gradient(115deg, rgba(255, 255, 255, 0.055) 0 1px, transparent 1px 28px),
+    linear-gradient(25deg, rgba(255, 255, 255, 0.035) 0 1px, transparent 1px 24px),
+    repeating-radial-gradient(circle at 24% 34%, rgba(255, 255, 255, 0.055) 0 1px, transparent 1px 8px);
+  opacity: 0.42;
+  mask-image: linear-gradient(90deg, transparent, #000 9%, #000 91%, transparent);
+}
+
+.site-video-section::after,
+.site-campaign-section::after {
+  pointer-events: none;
+  position: absolute;
+  inset: auto 10% 0 10%;
+  height: 1px;
+  content: "";
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--clinic-accent, #10b981) 54%, white), transparent);
+  opacity: 0.55;
+}
+
+.site-dark-glass-card {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 2.25rem;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.105), rgba(255, 255, 255, 0.035) 38%, rgba(255, 255, 255, 0.075)),
+    rgba(15, 13, 11, 0.82);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.06),
+    0 34px 100px rgba(0, 0, 0, 0.34),
+    0 0 70px color-mix(in srgb, var(--clinic-accent, #10b981) 14%, transparent);
+  backdrop-filter: blur(24px) saturate(1.18);
+}
+
+.site-dark-glass-card::before {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  content: "";
+  background:
+    radial-gradient(circle at 16% 0%, rgba(255, 255, 255, 0.16), transparent 18rem),
+    radial-gradient(circle at 92% 18%, color-mix(in srgb, var(--clinic-accent, #10b981) 18%, transparent), transparent 18rem),
+    linear-gradient(120deg, transparent 0 42%, rgba(255, 255, 255, 0.11) 50%, transparent 58% 100%);
+  opacity: 0.72;
+}
+
+.site-video-frame {
+  position: relative;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.025)),
+    rgba(0, 0, 0, 0.48);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    0 24px 74px rgba(0, 0, 0, 0.35),
+    0 0 42px color-mix(in srgb, var(--clinic-primary, #047857) 16%, transparent);
+}
+
 .public-services-track {
   animation: public-services-slide 34s linear infinite;
 }
@@ -496,14 +573,19 @@ textarea {
 
 .public-hover-card,
 .public-service-card {
-  transition: transform 220ms ease, box-shadow 220ms ease, filter 220ms ease;
+  transition:
+    transform 260ms cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 260ms ease,
+    filter 260ms ease;
 }
 
 .public-hover-card:hover,
 .public-service-card:hover {
-  transform: scale(0.975);
-  filter: saturate(1.05);
-  box-shadow: 0 26px 76px color-mix(in srgb, var(--clinic-accent, #10b981) 24%, rgba(23, 19, 15, 0.12));
+  transform: translateY(-3px) scale(1.025);
+  filter: saturate(1.08) brightness(1.015);
+  box-shadow:
+    0 24px 72px color-mix(in srgb, var(--clinic-accent, #10b981) 30%, rgba(23, 19, 15, 0.12)),
+    0 0 38px color-mix(in srgb, var(--clinic-primary, #047857) 18%, transparent);
 }
 
 .public-service-card[data-featured="true"]::before {
@@ -568,24 +650,66 @@ textarea {
 }
 /* Public site scroll reveal controlled by IntersectionObserver. */
 .public-site-shell .public-reveal {
-  opacity: 0;
-  transform: translateY(46px) scale(0.985);
-  transition: opacity 680ms ease, transform 680ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  opacity: 1;
+  transform: none;
+  transition: none;
   animation: none;
 }
 
-.public-site-shell .public-reveal:nth-of-type(even) {
-  transform: translateX(-42px) scale(0.985);
+.public-site-shell .public-card-reveal {
+  opacity: 0;
+  transform: translate3d(0, 24px, 0) scale(0.992);
+  transition:
+    opacity 980ms ease,
+    transform 980ms cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: opacity, transform;
 }
 
-.public-site-shell .public-reveal.is-visible {
+.public-site-shell .public-card-reveal.public-reveal-left {
+  transform: translate3d(-30px, 0, 0) scale(0.992);
+}
+
+.public-site-shell .public-card-reveal.public-reveal-right {
+  transform: translate3d(30px, 0, 0) scale(0.992);
+}
+
+.public-site-shell .public-card-reveal.public-reveal-up {
+  transform: translate3d(0, 28px, 0) scale(0.992);
+}
+
+.public-site-shell .public-card-reveal.is-visible {
   opacity: 1;
   transform: translate3d(0, 0, 0) scale(1);
 }
 
+.public-site-shell .public-card-reveal.is-visible.public-hover-card:hover,
+.public-site-shell .public-card-reveal.is-visible.public-service-card:hover {
+  transform: translate3d(0, -3px, 0) scale(1.025);
+  filter: saturate(1.08) brightness(1.015);
+  box-shadow:
+    0 24px 72px color-mix(in srgb, var(--clinic-accent, #10b981) 30%, rgba(23, 19, 15, 0.12)),
+    0 0 38px color-mix(in srgb, var(--clinic-primary, #047857) 18%, transparent);
+}
+
+.public-site-shell img.public-card-reveal.is-visible:hover {
+  transform: translate3d(0, -3px, 0) scale(1.025);
+  filter: saturate(1.08) brightness(1.015);
+  box-shadow:
+    0 24px 72px color-mix(in srgb, var(--clinic-accent, #10b981) 30%, rgba(23, 19, 15, 0.12)),
+    0 0 38px color-mix(in srgb, var(--clinic-primary, #047857) 18%, transparent);
+}
+
+.public-site-shell .public-card-reveal:nth-child(2) {
+  transition-delay: 90ms;
+}
+
+.public-site-shell .public-card-reveal:nth-child(3) {
+  transition-delay: 160ms;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .public-site-shell .public-reveal,
-  .public-site-shell .public-reveal:nth-of-type(even) {
+  .public-site-shell .public-card-reveal {
     opacity: 1;
     transform: none;
     transition: none;
