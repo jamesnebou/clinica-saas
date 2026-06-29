@@ -13,6 +13,7 @@ import {
   updateClienteAnamneseAction,
   updateClienteFichaAction,
 } from "../../actions";
+import { ConsentimentoForm } from "./consentimento-form";
 
 export const metadata = { title: "Ficha do cliente | Clinica SaaS" };
 
@@ -124,8 +125,6 @@ export default async function ClienteDetalhePage({ params }) {
   const whats = whatsappUrl(cliente.telefone, cliente.nome);
   const proximoRetorno = cliente.retorno_recomendado_em ? new Date(`${cliente.retorno_recomendado_em}T12:00:00`) : null;
   const retornoAtrasado = proximoRetorno ? proximoRetorno < new Date() : false;
-  const termoPadrao = `Declaro que recebi explicacoes sobre o procedimento estetico, seus objetivos, cuidados, riscos comuns, possiveis reacoes, necessidade de retorno e alternativas. Autorizo o tratamento dos meus dados de saude/esteticos pela clinica para fins de atendimento, prontuario, acompanhamento, obrigacoes legais e defesa de direitos. Quando marcado como uso de imagem, autorizo tambem o armazenamento de fotos antes/depois para acompanhamento clinico, observada a visibilidade definida pela clinica.`;
-
   return (
     <main className="px-5 py-8 sm:px-8 lg:px-10">
       <section className="mx-auto max-w-7xl">
@@ -336,26 +335,7 @@ export default async function ClienteDetalhePage({ params }) {
             <section className="rounded-lg border border-[color-mix(in_srgb,var(--clinic-primary)_24%,#e5e5e5)] bg-[color-mix(in_srgb,var(--clinic-accent)_10%,white)] p-5 text-neutral-950">
               <div className="flex items-center gap-2"><ShieldCheck size={20} /><h2 className="text-lg font-semibold">Termos e consentimentos</h2></div>
               <p className="mt-3 text-sm leading-6">Registre aceite formal de procedimento, LGPD, anamnese e uso de imagem. Este registro complementa a ficha e cria historico de versao/data.</p>
-              <form action={createClienteConsentimentoAction} className="mt-4 space-y-3 rounded-lg bg-white/70 p-3">
-                <input type="hidden" name="cliente_id" value={cliente.id} />
-                <SelectField label="Tipo de termo" name="tipo" defaultValue="procedimento">
-                  <option value="procedimento">Procedimento</option>
-                  <option value="imagem">Uso de imagem</option>
-                  <option value="lgpd">LGPD</option>
-                  <option value="anamnese">Anamnese</option>
-                  <option value="outro">Outro</option>
-                </SelectField>
-                <Field label="Titulo" name="titulo" defaultValue="Termo de consentimento para procedimento estetico" required />
-                <Field label="Versao" name="versao" defaultValue="v1" />
-                <TextArea label="Texto do termo" name="texto" defaultValue={termoPadrao} />
-                <Field label="Aceito por" name="aceito_por_nome" defaultValue={cliente.nome || ""} />
-                <label className="flex items-start gap-3 rounded-lg border border-neutral-200 bg-white p-3 text-sm text-neutral-700">
-                  <input className="mt-1" name="aceito" type="checkbox" required />
-                  Confirmo que o cliente leu/foi informado e aceitou este termo.
-                </label>
-                <TextArea label="Observacoes do aceite" name="observacoes" />
-                <SubmitButton>Registrar aceite</SubmitButton>
-              </form>
+              <ConsentimentoForm action={createClienteConsentimentoAction} clienteId={cliente.id} clienteNome={cliente.nome} />
               <div className="mt-4 space-y-3">
                 {consentimentos.length === 0 ? <p className="rounded-lg bg-white/70 px-4 py-3 text-sm text-neutral-600">Nenhum consentimento formal registrado.</p> : consentimentos.map((termo) => (
                   <div key={termo.id} className="rounded-lg border border-neutral-200 bg-white p-3">
