@@ -144,19 +144,19 @@ export default async function DashboardLayout({ children }) {
         <div className="pointer-events-none absolute inset-y-0 right-0 w-px bg-[linear-gradient(180deg,transparent,var(--clinic-accent),transparent)] opacity-55" />
         <div className="pointer-events-none absolute left-0 top-0 h-48 w-full bg-[radial-gradient(circle_at_18%_0%,color-mix(in_srgb,var(--clinic-accent)_15%,transparent),transparent_70%)]" />
         <div className="flex items-center justify-between gap-3 md:block">
-          <div className="flex items-center gap-3 md:block">
+          <div className="flex items-center gap-3 md:flex md:flex-col md:text-center">
             {logoUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={logoUrl} alt={`Logo ${brandName}`} className="relative h-14 max-w-[190px] rounded-lg object-contain object-left md:h-16 md:w-full" />
+              <img src={logoUrl} alt={`Logo ${brandName}`} className="relative h-14 max-w-[190px] rounded-xl object-contain object-center md:h-24 md:w-full md:max-w-[210px]" />
             ) : (
-              <div className="relative inline-flex h-12 w-12 items-center justify-center rounded-lg text-white shadow-[0_16px_34px_color-mix(in_srgb,var(--clinic-primary)_30%,transparent)]" style={{ background: "linear-gradient(135deg, var(--clinic-primary), color-mix(in srgb, var(--clinic-primary) 70%, #111))" }}>
-                <Sparkles size={22} />
+              <div className="relative inline-flex h-12 w-12 items-center justify-center rounded-lg text-white shadow-[0_16px_34px_color-mix(in_srgb,var(--clinic-primary)_30%,transparent)] md:h-20 md:w-20 md:rounded-2xl" style={{ background: "linear-gradient(135deg, var(--clinic-primary), color-mix(in srgb, var(--clinic-primary) 70%, #111))" }}>
+                <Sparkles className="md:h-9 md:w-9" size={22} />
               </div>
             )}
-            <div className="min-w-0 md:mt-4">
+            <div className="min-w-0 md:mt-2 md:w-full">
               <p className="text-sm font-bold uppercase leading-5 tracking-[0.18em]" style={{ color: "var(--clinic-primary)" }}>{brandName}</p>
-              <div className="mt-3 h-1.5 w-24 rounded-full" style={{ background: "linear-gradient(90deg, var(--clinic-primary), var(--clinic-accent))" }} />
               <p className="mt-2 truncate text-xs text-neutral-500" title={user?.email}>{user?.email}</p>
+              <div className="mt-3 h-1.5 w-24 rounded-full md:mx-auto md:w-28" style={{ background: "linear-gradient(90deg, var(--clinic-primary), var(--clinic-accent))" }} />
             </div>
           </div>
           <form action={signOutAction} className="md:hidden">

@@ -22,16 +22,112 @@ function googleEmbedUrl(clinic, site) {
   return `https://www.google.com/maps?q=${encodeURIComponent(address || clinic.nome)}&output=embed`;
 }
 
+function publicMedia(url) {
+  const rawUrl = String(url || "").trim();
+  if (!rawUrl) return { type: "empty" };
+
+  try {
+    const parsed = new URL(rawUrl);
+    const host = parsed.hostname.replace(/^www\./, "").toLowerCase();
+
+    if (host === "youtube.com" || host === "m.youtube.com") {
+      const videoId = parsed.searchParams.get("v") || parsed.pathname.match(/\/(?:embed|shorts|live)\/([^/?#]+)/)?.[1];
+      if (videoId) return { type: "iframe", url: `https://www.youtube.com/embed/${videoId}`, label: "YouTube" };
+    }
+
+    if (host === "youtu.be") {
+      const videoId = parsed.pathname.split("/").filter(Boolean)[0];
+      if (videoId) return { type: "iframe", url: `https://www.youtube.com/embed/${videoId}`, label: "YouTube" };
+    }
+
+    if (host === "vimeo.com" || host === "player.vimeo.com") {
+      const videoId = parsed.pathname.match(/\/(?:video\/)?(\d+)/)?.[1];
+      if (videoId) return { type: "iframe", url: `https://player.vimeo.com/video/${videoId}`, label: "Vimeo" };
+    }
+
+    if (/\.(mp4|webm|ogg)(\?.*)?$/i.test(parsed.pathname)) {
+      return { type: "video", url: rawUrl, label: "Vídeo" };
+    }
+
+    if (/\.(png|jpe?g|webp|gif)(\?.*)?$/i.test(parsed.pathname)) {
+      return { type: "image", url: rawUrl, label: "Imagem" };
+    }
+
+    return { type: "external", url: rawUrl, label: host.includes("instagram") ? "Instagram" : parsed.hostname };
+  } catch {
+    return { type: "external", url: rawUrl, label: "Mídia externa" };
+  }
+}
+
+function PublicMediaFrame({ url, title, fallbackImageUrl }) {
+  const media = publicMedia(url);
+
+  if (media.type === "iframe") {
+    return (
+      <iframe
+        src={media.url}
+        title={title}
+        className="h-full min-h-[320px] w-full border-0"
+        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+        allowFullScreen
+      />
+    );
+  }
+
+  if (media.type === "video") {
+    return <video src={media.url} title={title} className="h-full min-h-[320px] w-full object-cover" controls playsInline />;
+  }
+
+  if (media.type === "image") {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img src={media.url} alt={title} className="h-[420px] w-full object-cover" />
+    );
+  }
+
+  if (media.type === "external") {
+    return (
+      <div className="flex min-h-[320px] flex-col items-center justify-center bg-white/[0.06] px-8 text-center">
+        <p className="text-xs font-black uppercase tracking-[0.32em] text-[var(--clinic-accent)]">Mídia externa</p>
+        <p className="mt-4 max-w-sm text-sm leading-6 text-white/66">
+          {media.label} não permite abrir esse conteúdo dentro da página. Acesse pelo botão abaixo.
+        </p>
+        <a
+          href={media.url}
+          target="_blank"
+          rel="noreferrer"
+          className="mt-6 inline-flex rounded-full bg-[var(--clinic-accent)] px-5 py-3 text-sm font-black text-[#17130f]"
+        >
+          Abrir mídia
+        </a>
+      </div>
+    );
+  }
+
+  if (fallbackImageUrl) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img src={fallbackImageUrl} alt={title} className="h-[420px] w-full object-cover" />
+    );
+  }
+
+  return <div className="flex min-h-[320px] items-center justify-center px-6 text-center text-sm text-white/56">Adicione a URL da mídia nas configurações.</div>;
+}
+
 function fallbackImage(label, dark = false) {
   const bg = dark ? "15120f" : "f5eee8";
   const fg = dark ? "ffffff" : "7a6258";
   return `https://placehold.co/1200x1500/${bg}/${fg}?text=${encodeURIComponent(label)}`;
 }
 
-function renderStrongText(line) {
-  return String(line || "").split(/(\*\*[^*]+\*\*)/g).map((part, index) => {
+function renderFormattedText(line) {
+  return String(line || "").split(/(\*\*[^*]+\*\*|\*[^*]+\*)/g).map((part, index) => {
     if (part.startsWith("**") && part.endsWith("**")) {
-      return <strong key={index} className="font-black text-[#17130f]">{part.slice(2, -2)}</strong>;
+      return <strong key={index} className="font-black">{part.slice(2, -2)}</strong>;
+    }
+
+    if (part.startsWith("*") && part.endsWith("*")) {
+      return <em key={index}>{part.slice(1, -1)}</em>;
     }
 
     return <Fragment key={index}>{part}</Fragment>;
@@ -43,16 +139,31 @@ function RichText({ text, className = "" }) {
 
   return (
     <div className={className}>
-      {blocks.map((block, blockIndex) => (
-        <p key={blockIndex} className={blockIndex ? "mt-5" : ""}>
-          {block.split("\n").map((line, lineIndex) => (
-            <Fragment key={`${blockIndex}-${lineIndex}`}>
-              {lineIndex ? <br /> : null}
-              {renderStrongText(line)}
-            </Fragment>
-          ))}
-        </p>
-      ))}
+      {blocks.map((block, blockIndex) => {
+        const lines = block.split("\n").filter(Boolean);
+        const isList = lines.length > 0 && lines.every((line) => line.trim().startsWith("- "));
+
+        if (isList) {
+          return (
+            <ul key={blockIndex} className={`${blockIndex ? "mt-5" : ""} list-disc space-y-2 pl-5`}>
+              {lines.map((line, lineIndex) => (
+                <li key={lineIndex}>{renderFormattedText(line.trim().replace(/^- /, ""))}</li>
+              ))}
+            </ul>
+          );
+        }
+
+        return (
+          <p key={blockIndex} className={blockIndex ? "mt-5" : ""}>
+            {lines.map((line, lineIndex) => (
+              <Fragment key={`${blockIndex}-${lineIndex}`}>
+                {lineIndex ? <br /> : null}
+                {renderFormattedText(line)}
+              </Fragment>
+            ))}
+          </p>
+        );
+      })}
     </div>
   );
 }
@@ -235,7 +346,7 @@ export default async function PublicClinicPage({ params, searchParams }) {
                 <a href={site.video_cta_url || "#agendar"} className="mt-8 inline-flex rounded-full bg-[var(--clinic-accent)] px-6 py-3 text-sm font-black text-[#17130f]">{site.video_cta_label || "Agendar avaliaÃ§Ã£o"}</a>
               </div>
               <div className="site-video-frame aspect-video overflow-hidden rounded-[1.5rem]">
-                {site.video_url ? <iframe src={site.video_url} title={site.video_titulo || brandName} className="h-full w-full border-0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowFullScreen /> : <div className="flex h-full items-center justify-center px-6 text-center text-sm text-white/56">Adicione a URL do vÃ­deo nas configuraÃ§Ãµes.</div>}
+                <PublicMediaFrame url={site.video_url} title={site.video_titulo || brandName} />
               </div>
             </div>
           </div>
@@ -301,10 +412,7 @@ export default async function PublicClinicPage({ params, searchParams }) {
               <a href={site.campanha_cta_url || "#agendar"} className="mt-8 inline-flex rounded-full bg-[var(--clinic-accent)] px-6 py-3 text-sm font-black text-[#17130f]">{site.campanha_cta_label || "Quero saber mais"}</a>
             </div>
             <div className="site-video-frame overflow-hidden rounded-[1.75rem]">
-              {site.campanha_media_url ? <iframe src={site.campanha_media_url} title={site.campanha_titulo || "Campanha"} className="aspect-video w-full border-0" allowFullScreen /> : (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={site.campanha_image_url || heroImage} alt={site.campanha_titulo || brandName} className="h-[420px] w-full object-cover" />
-              )}
+              <PublicMediaFrame url={site.campanha_media_url} title={site.campanha_titulo || "Campanha"} fallbackImageUrl={site.campanha_image_url || heroImage} />
             </div>
           </div>
         </section>

@@ -85,8 +85,17 @@ export function MobileSidebarMenu({ items, brandName, logoUrl }) {
       {open ? (
         <div className="fixed inset-0 z-50 bg-neutral-950/35 backdrop-blur-sm md:hidden" onClick={() => setOpen(false)}>
           <nav className="premium-panel h-full w-[min(340px,86vw)] rounded-none border-y-0 border-l-0 p-5 shadow-xl" onClick={(event) => event.stopPropagation()}>
-            <div className="mb-5 flex items-center justify-between gap-3">
-              <p className="truncate text-sm font-bold uppercase tracking-[0.16em] text-[var(--clinic-primary)]">{brandName}</p>
+            <div className="mb-5 flex items-start justify-between gap-3">
+              <div className="min-w-0 flex-1 text-center">
+                {logoUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={logoUrl} alt={`Logo ${brandName}`} className="mx-auto h-20 max-w-[180px] rounded-xl object-contain" />
+                ) : (
+                  <div className="mx-auto h-16 w-16 rounded-2xl bg-[var(--clinic-primary)]" />
+                )}
+                <p className="mt-3 truncate text-sm font-bold uppercase tracking-[0.16em] text-[var(--clinic-primary)]">{brandName}</p>
+                <div className="mx-auto mt-3 h-1.5 w-24 rounded-full bg-[linear-gradient(90deg,var(--clinic-primary),var(--clinic-accent))]" />
+              </div>
               <button type="button" onClick={() => setOpen(false)} className="rounded-lg border border-neutral-200 bg-white/70 p-2 text-neutral-700 shadow-sm" aria-label="Fechar menu">
                 <X size={18} />
               </button>

@@ -6,6 +6,7 @@ import { ConfigTabs } from "./config-tabs";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { normalizeSchedule } from "@/lib/clinic/schedule";
 import { ACCESS_SECTION_LABELS, ROLE_ACCESS } from "@/lib/auth/permissions";
+import { BioEditor } from "./bio-editor";
 
 export const metadata = { title: "Configuracoes | Clínica SaaS" };
 export const dynamic = "force-dynamic";
@@ -287,7 +288,7 @@ export default async function ConfiguracoesPage({ searchParams }) {
               <Field label="Google Maps URL" name="site_google_maps_url" defaultValue={site.google_maps_url || ""} placeholder="https://maps.google.com/..." />
               <Field label="Avaliações Google URL" name="site_google_reviews_url" defaultValue={site.google_reviews_url || ""} placeholder="https://g.page/r/..." />
               <div className="lg:col-span-2">
-                <TextArea label="Bio/apresentação da profissional" name="site_bio_profissional" defaultValue={site.bio_profissional || ""} placeholder="Conte a história, especialidade, abordagem e autoridade da profissional. Use **texto** para negrito e quebras de linha livremente." />
+                <BioEditor label="Bio/apresentação da profissional" name="site_bio_profissional" defaultValue={site.bio_profissional || ""} placeholder="Conte a história, especialidade, abordagem e autoridade da profissional." />
               </div>
             </div>
             {domains.length ? (
