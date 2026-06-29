@@ -5,7 +5,7 @@ import { Field, PageHeader, SubmitButton } from "@/components/app-shell/ui";
 import { getClinicBillingState, getClinicPlan, getClinicUsage, getLimitRows, getSystemPlans } from "@/lib/saas/plans";
 import { startSubscriptionAction, updateBillingEmailAction } from "./actions";
 
-export const metadata = { title: "Assinatura | Clinica SaaS" };
+export const metadata = { title: "Assinatura | Clínica SaaS" };
 
 function formatMoney(value) {
   return Number(value || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });

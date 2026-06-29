@@ -5,21 +5,21 @@ import { requireClinicSection } from "@/lib/auth/session";
 import { Card, EmptyClinicState, EmptyState, Field, LimitNotice, Notice, PageHeader, SectionTitle, SelectField, SubmitButton, TextArea } from "@/components/app-shell/ui";
 import { convertCrmOpportunityAction, createCrmOpportunityAction, updateCrmOpportunityAction } from "../actions";
 
-export const metadata = { title: "CRM | Clinica SaaS" };
+export const metadata = { title: "CRM | Clínica SaaS" };
 
 const statusOptions = [
   ["lead", "Lead"],
-  ["avaliacao_marcada", "Avaliacao marcada"],
-  ["em_negociacao", "Em negociacao"],
+  ["avaliacao_marcada", "Avaliação marcada"],
+  ["em_negociacao", "Em negociação"],
   ["convertido", "Convertido"],
   ["perdido", "Perdido"],
 ];
 
 const origemOptions = [
   ["instagram", "Instagram"],
-  ["indicacao", "Indicacao"],
+  ["indicacao", "Indicação"],
   ["google", "Google"],
-  ["trafego_pago", "Trafego pago"],
+  ["trafego_pago", "Tráfego pago"],
   ["whatsapp", "WhatsApp"],
   ["site", "Site"],
   ["outro", "Outro"],
@@ -45,7 +45,7 @@ function whatsappUrl(phone, name) {
   const digits = String(phone || "").replace(/\D/g, "");
   if (!digits) return null;
   const number = digits.startsWith("55") ? digits : `55${digits}`;
-  const message = encodeURIComponent(`Ola, ${name}. Tudo bem? Estou entrando em contato pela clinica para falar sobre seu atendimento.`);
+  const message = encodeURIComponent(`Olá, ${name}. Tudo bem? Estou entrando em contato pela clínica para falar sobre seu atendimento.`);
   return `https://wa.me/${number}?text=${message}`;
 }
 
@@ -85,14 +85,14 @@ export default async function CrmPage({ searchParams }) {
         <PageHeader
           eyebrow="CRM"
           title="Pipeline comercial"
-          description="Acompanhe leads, avaliacoes, negociacoes e conversoes da clinica sem misturar com prontuario."
+          description="Acompanhe leads, avaliações, negociações e conversões da clínica sem misturar com prontuário."
         />
 
         <div className="mt-6 space-y-3">
           {params?.ok === "oportunidade" ? <Notice type="success">Oportunidade criada com sucesso.</Notice> : null}
           {params?.erro === "limite" ? <LimitNotice resource="clientes" message={params?.mensagem} /> : null}
           {error ? (
-            <Notice type="danger" title="CRM ainda nao disponivel">
+            <Notice type="danger" title="CRM ainda não disponível">
               A migration `20260619153000_crm_oportunidades.sql` precisa estar aplicada no Supabase antes de usar esta tela.
             </Notice>
           ) : null}
@@ -130,7 +130,7 @@ export default async function CrmPage({ searchParams }) {
                 {statusOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
               </SelectField>
               <Field label="Valor" name="valor_estimado" type="number" defaultValue="0" />
-              <Field label="Proxima acao" name="proxima_acao" placeholder="Confirmar avaliacao..." />
+              <Field label="Próxima ação" name="proxima_acao" placeholder="Confirmar avaliação..." />
               <SubmitButton>Criar</SubmitButton>
             </form>
           </Card>
@@ -139,7 +139,7 @@ export default async function CrmPage({ searchParams }) {
             <div className="mb-4 flex flex-col gap-3 rounded-lg border border-neutral-200 bg-white p-4 shadow-sm md:flex-row md:items-end md:justify-between">
               <div className="flex items-center gap-2">
                 <KanbanSquare size={20} className="text-[var(--clinic-primary)]" />
-                <h2 className="text-lg font-semibold">Visao por etapa</h2>
+                <h2 className="text-lg font-semibold">Visão por etapa</h2>
               </div>
               <form className="flex flex-col gap-2 sm:flex-row sm:items-end">
                 <SelectField label="Filtrar status" name="status" defaultValue={statusFilter}>
@@ -151,7 +151,7 @@ export default async function CrmPage({ searchParams }) {
             </div>
 
             {oportunidades.length === 0 ? (
-              <EmptyState title="Nenhuma oportunidade no CRM" description="Cadastre leads e negociacoes para visualizar o pipeline comercial por etapa." />
+              <EmptyState title="Nenhuma oportunidade no CRM" description="Cadastre leads e negociações para visualizar o pipeline comercial por etapa." />
             ) : (
               <div className="grid min-w-0 grid-cols-5 gap-3">
                   {grouped.map((group) => (
@@ -215,10 +215,10 @@ export default async function CrmPage({ searchParams }) {
                                   </div>
                                   <div className="grid gap-3 sm:grid-cols-2">
                                     <Field label="Valor estimado" name="valor_estimado" type="number" defaultValue={item.valor_estimado || 0} />
-                                    <Field label="Proxima acao em" name="proxima_acao_em" type="date" defaultValue={item.proxima_acao_em || ""} />
+                                    <Field label="Próxima ação em" name="proxima_acao_em" type="date" defaultValue={item.proxima_acao_em || ""} />
                                   </div>
-                                  <TextArea label="Proxima acao" name="proxima_acao" defaultValue={item.proxima_acao || ""} />
-                                  <TextArea label="Observacoes" name="observacoes" defaultValue={item.observacoes || ""} />
+                                  <TextArea label="Próxima ação" name="proxima_acao" defaultValue={item.proxima_acao || ""} />
+                                  <TextArea label="Observações" name="observacoes" defaultValue={item.observacoes || ""} />
                                   <Field label="Motivo da perda" name="perdido_motivo" defaultValue={item.perdido_motivo || ""} />
                                   <div className="flex flex-wrap gap-2">
                                     <SubmitButton>Salvar</SubmitButton>

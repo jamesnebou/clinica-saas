@@ -214,8 +214,8 @@ export async function createClienteAction(formData) {
 
 export async function updateClienteStatusAction(formData) {
   const { supabase, clinicaId } = await getScopedSupabase();
-  const id = requireValue(text(formData, "id"), "Cliente nao informado.");
-  const status = requireValue(text(formData, "status"), "Status nao informado.");
+  const id = requireValue(text(formData, "id"), "Cliente não informado.");
+  const status = requireValue(text(formData, "status"), "Status não informado.");
 
   const { error } = await supabase.from("clientes").update({ status }).eq("id", id).eq("clinica_id", clinicaId);
   if (error) throw error;
@@ -225,7 +225,7 @@ export async function updateClienteStatusAction(formData) {
 
 export async function deleteClienteAction(formData) {
   const { supabase, clinicaId } = await getScopedSupabase();
-  const id = requireValue(text(formData, "id"), "Cliente nao informado.");
+  const id = requireValue(text(formData, "id"), "Cliente não informado.");
 
   const { error } = await supabase.from("clientes").delete().eq("id", id).eq("clinica_id", clinicaId);
   if (error) throw error;
@@ -338,7 +338,7 @@ export async function updateProcedimentoAction(formData) {
 
 export async function toggleProcedimentoAction(formData) {
   const { supabase, clinicaId } = await getScopedSupabase();
-  const id = requireValue(text(formData, "id"), "Procedimento nao informado.");
+  const id = requireValue(text(formData, "id"), "Procedimento não informado.");
   const ativo = text(formData, "ativo") === "true";
 
   const { error } = await supabase.from("procedimentos").update({ ativo }).eq("id", id).eq("clinica_id", clinicaId);
@@ -348,7 +348,7 @@ export async function toggleProcedimentoAction(formData) {
 
 export async function deleteProcedimentoAction(formData) {
   const { supabase, clinicaId } = await getScopedSupabase();
-  const id = requireValue(text(formData, "id"), "Procedimento nao informado.");
+  const id = requireValue(text(formData, "id"), "Procedimento não informado.");
 
   const { error } = await supabase.from("procedimentos").delete().eq("id", id).eq("clinica_id", clinicaId);
   if (error) throw error;
@@ -529,7 +529,7 @@ export async function deleteAgendamentoAction(formData) {
 
 export async function updateClienteFichaAction(formData) {
   const { supabase, clinicaId, memberships, user } = await getScopedSupabase();
-  const id = requireValue(text(formData, "id"), "Cliente nao informado.");
+  const id = requireValue(text(formData, "id"), "Cliente não informado.");
   requireProntuarioAccess(memberships, clinicaId, `/dashboard/clientes/${id}`);
   const termoAceito = formData.get("termo_consentimento_aceito") === "on";
 
@@ -541,7 +541,7 @@ export async function updateClienteFichaAction(formData) {
     data_nascimento: nullableText(formData, "data_nascimento"),
     endereco: nullableText(formData, "endereco"),
     origem: nullableText(formData, "origem"),
-    status: requireValue(text(formData, "status"), "Status nao informado."),
+    status: requireValue(text(formData, "status"), "Status não informado."),
     observacoes: nullableText(formData, "observacoes"),
     observacoes_clinicas: nullableText(formData, "observacoes_clinicas"),
     alergias: nullableText(formData, "alergias"),
@@ -564,7 +564,7 @@ export async function updateClienteFichaAction(formData) {
 
 export async function updateClienteAnamneseAction(formData) {
   const { supabase, clinicaId, memberships } = await getScopedSupabase();
-  const id = requireValue(text(formData, "id"), "Cliente nao informado.");
+  const id = requireValue(text(formData, "id"), "Cliente não informado.");
   requireProntuarioAccess(memberships, clinicaId, `/dashboard/clientes/${id}`);
 
   const anamnese = {
@@ -591,13 +591,13 @@ export async function updateClienteAnamneseAction(formData) {
 
 export async function createClienteFotoAction(formData) {
   const { supabase, clinicaId, memberships, user } = await getScopedSupabase();
-  const clienteId = requireValue(text(formData, "cliente_id"), "Cliente nao informado.");
+  const clienteId = requireValue(text(formData, "cliente_id"), "Cliente não informado.");
   requireProntuarioAccess(memberships, clinicaId, `/dashboard/clientes/${clienteId}`);
 
   const { error } = await supabase.from("cliente_fotos").insert({
     clinica_id: clinicaId,
     cliente_id: clienteId,
-    tipo: requireValue(text(formData, "tipo"), "Tipo da foto nao informado."),
+    tipo: requireValue(text(formData, "tipo"), "Tipo da foto não informado."),
     titulo: nullableText(formData, "titulo"),
     url: requireValue(text(formData, "url"), "Informe a URL da foto."),
     observacoes: nullableText(formData, "observacoes"),
@@ -614,8 +614,8 @@ export async function createClienteFotoAction(formData) {
 
 export async function deleteClienteFotoAction(formData) {
   const { supabase, clinicaId, memberships } = await getScopedSupabase();
-  const id = requireValue(text(formData, "id"), "Foto nao informada.");
-  const clienteId = requireValue(text(formData, "cliente_id"), "Cliente nao informado.");
+  const id = requireValue(text(formData, "id"), "Foto não informada.");
+  const clienteId = requireValue(text(formData, "cliente_id"), "Cliente não informado.");
   requireProntuarioAccess(memberships, clinicaId, `/dashboard/clientes/${clienteId}`);
 
   const { error } = await supabase.from("cliente_fotos").delete().eq("id", id).eq("clinica_id", clinicaId).eq("cliente_id", clienteId);
@@ -631,7 +631,7 @@ function financeRedirectUrl(formData) {
 
 export async function createClienteFotoUploadAction(formData) {
   const { clinicaId, memberships, user } = await getScopedSupabase();
-  const clienteId = requireValue(text(formData, "cliente_id"), "Cliente nao informado.");
+  const clienteId = requireValue(text(formData, "cliente_id"), "Cliente não informado.");
   requireProntuarioAccess(memberships, clinicaId, `/dashboard/clientes/${clienteId}`);
   const file = formData.get("arquivo");
   const uploaded = await uploadClientPhoto({ clinicaId, clienteId, file });
@@ -639,7 +639,7 @@ export async function createClienteFotoUploadAction(formData) {
   const { error } = await supabaseAdmin.from("cliente_fotos").insert({
     clinica_id: clinicaId,
     cliente_id: clienteId,
-    tipo: requireValue(text(formData, "tipo"), "Tipo da foto nao informado."),
+    tipo: requireValue(text(formData, "tipo"), "Tipo da foto não informado."),
     titulo: nullableText(formData, "titulo"),
     url: null,
     storage_path: uploaded.path,
@@ -660,7 +660,7 @@ export async function createClienteFotoUploadAction(formData) {
 
 export async function createClienteConsentimentoAction(formData) {
   const { supabase, clinicaId, memberships, user } = await getScopedSupabase();
-  const clienteId = requireValue(text(formData, "cliente_id"), "Cliente nao informado.");
+  const clienteId = requireValue(text(formData, "cliente_id"), "Cliente não informado.");
   requireProntuarioAccess(memberships, clinicaId, `/dashboard/clientes/${clienteId}`);
 
   if (formData.get("aceito") !== "on") {
@@ -787,7 +787,7 @@ export async function createPacoteAction(formData) {
 export async function sellClientePacoteAction(formData) {
   const { supabase, clinicaId } = await getScopedSupabase();
   const pacoteId = requireValue(text(formData, "pacote_id"), "Pacote nao informado.");
-  const clienteId = requireValue(text(formData, "cliente_id"), "Cliente nao informado.");
+  const clienteId = requireValue(text(formData, "cliente_id"), "Cliente não informado.");
 
   const { data: pacote, error: pacoteError } = await supabase
     .from("pacotes_clinica")
@@ -966,7 +966,7 @@ export async function createCrmOpportunityAction(formData) {
 
 export async function updateCrmOpportunityAction(formData) {
   const { supabase, clinicaId } = await getScopedSupabase();
-  const id = requireValue(text(formData, "id"), "Oportunidade nao informada.");
+  const id = requireValue(text(formData, "id"), "Oportunidade não informada.");
   const status = text(formData, "status") || "lead";
 
   const { error } = await supabase
@@ -992,7 +992,7 @@ export async function updateCrmOpportunityAction(formData) {
 export async function convertCrmOpportunityAction(formData) {
   const { supabase, clinicaId, activeClinic } = await getScopedSupabase();
   await redirectLimitError({ clinic: activeClinic, resource: "clientes", redirectTo: "/dashboard/crm" });
-  const id = requireValue(text(formData, "id"), "Oportunidade nao informada.");
+  const id = requireValue(text(formData, "id"), "Oportunidade não informada.");
 
   const { data: oportunidade, error: opportunityError } = await supabase
     .from("crm_oportunidades")
@@ -1002,7 +1002,7 @@ export async function convertCrmOpportunityAction(formData) {
     .maybeSingle();
 
   if (opportunityError) throw opportunityError;
-  if (!oportunidade) redirectWithMessage("/dashboard/crm", "crm", "Oportunidade nao encontrada.");
+  if (!oportunidade) redirectWithMessage("/dashboard/crm", "crm", "Oportunidade não encontrada.");
 
   let clienteId = oportunidade.cliente_id;
 

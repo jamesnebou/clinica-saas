@@ -6,12 +6,12 @@ import { getClinicPlan, getClinicUsage } from "@/lib/saas/plans";
 import { inviteClinicUserAction, updateClinicUserAction } from "../actions";
 import { ACCESS_SECTION_LABELS, ROLE_ACCESS } from "@/lib/auth/permissions";
 
-export const metadata = { title: "Usuarios | Clinica SaaS" };
+export const metadata = { title: "Usuários | Clínica SaaS" };
 
 const roles = [
   ["owner", "Owner"],
   ["admin", "Admin"],
-  ["recepcao", "Recepcao"],
+  ["recepcao", "Recepção"],
   ["financeiro", "Financeiro"],
   ["profissional", "Profissional"],
 ];
@@ -46,27 +46,27 @@ export default async function UsuariosPage({ searchParams }) {
   return (
     <main className="px-5 py-8 sm:px-8 lg:px-10">
       <section className="mx-auto max-w-7xl">
-        <PageHeader eyebrow="Acesso" title="Usuarios da clinica" description="Convide pessoas da equipe, defina papeis e controle usuarios ativos dentro do limite do plano." />
+        <PageHeader eyebrow="Acesso" title="Usuários da clínica" description="Convide pessoas da equipe, defina papéis e controle usuários ativos dentro do limite do plano." />
 
         <div className="mt-6 space-y-3">
-          {params?.ok === "convite" ? <Notice type="success">Usuario criado no Auth e vinculado a clinica. Envie manualmente o e-mail e a senha temporaria para ele acessar em `/login-cliente`.</Notice> : null}
-          {params?.ok === "senha" ? <Notice type="success">O usuario ja existia no Auth. A senha temporaria foi atualizada e o vinculo com a clinica foi criado/reativado.</Notice> : null}
-          {params?.ok === "usuario" ? <Notice type="success">Usuario atualizado com sucesso.</Notice> : null}
+          {params?.ok === "convite" ? <Notice type="success">Usuário criado no Auth e vinculado à clínica. Envie manualmente o e-mail e a senha temporária para ele acessar em `/login-cliente`.</Notice> : null}
+          {params?.ok === "senha" ? <Notice type="success">O usuário já existia no Auth. A senha temporária foi atualizada e o vínculo com a clínica foi criado/reativado.</Notice> : null}
+          {params?.ok === "usuario" ? <Notice type="success">Usuário atualizado com sucesso.</Notice> : null}
           {params?.erro === "limite" ? <LimitNotice resource="usuarios" message={params?.mensagem} /> : null}
-          {params?.erro && params?.erro !== "limite" ? <Notice type="warning">{params?.mensagem || "Nao foi possivel concluir esta acao."}</Notice> : null}
+          {params?.erro && params?.erro !== "limite" ? <Notice type="warning">{params?.mensagem || "Não foi possível concluir esta ação."}</Notice> : null}
         </div>
 
         <div className="mt-8 grid gap-6 lg:grid-cols-[420px_1fr]">
           <Card>
-            <SectionTitle icon={UserPlus} title="Convidar usuario" description={`Usuarios ativos: ${usage.usuarios}/${plan.limite_usuarios}. Restam ${remaining} no plano ${plan.nome}. O sistema cria o acesso direto; nao depende de e-mail automatico.`} />
+            <SectionTitle icon={UserPlus} title="Convidar usuário" description={`Usuários ativos: ${usage.usuarios}/${plan.limite_usuarios}. Restam ${remaining} no plano ${plan.nome}. O sistema cria o acesso direto; não depende de e-mail automático.`} />
             <form action={inviteClinicUserAction} className="mt-4 space-y-4">
               <Field label="Nome" name="nome" />
               <Field label="E-mail" name="email" type="email" required />
-              <Field label="Senha temporaria" name="senha_temporaria" type="password" required placeholder="Minimo recomendado: 8 caracteres" />
+              <Field label="Senha temporária" name="senha_temporaria" type="password" required placeholder="Mínimo recomendado: 8 caracteres" />
               <SelectField label="Papel" name="papel" defaultValue="recepcao">
                 {roles.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
               </SelectField>
-              <SubmitButton>Convidar usuario</SubmitButton>
+              <SubmitButton>Convidar usuário</SubmitButton>
             </form>
           </Card>
 
@@ -74,7 +74,7 @@ export default async function UsuariosPage({ searchParams }) {
             <SectionTitle icon={UsersRound} title="Equipe com acesso" />
             <div className="mt-4 space-y-3">
               {usuarios.length === 0 ? (
-                <EmptyState title="Nenhum usuario cadastrado" description="Convide os usuarios que vao operar agenda, financeiro e cadastros da clinica." />
+                <EmptyState title="Nenhum usuário cadastrado" description="Convide os usuários que vão operar agenda, financeiro e cadastros da clínica." />
               ) : usuarios.map((usuario) => (
                 <form key={usuario.id} action={updateClinicUserAction} className="rounded-lg border border-neutral-200 p-4">
                   <input type="hidden" name="id" value={usuario.id} />
@@ -110,8 +110,8 @@ export default async function UsuariosPage({ searchParams }) {
                     </div>
                   </div>
                   <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-                    <p className="inline-flex items-center gap-2 text-xs text-neutral-500"><ShieldCheck size={14} /> {usuario.accepted_at ? "Acesso criado no Auth" : "Vinculo pendente de login/Auth"}</p>
-                    <SubmitButton>Salvar usuario</SubmitButton>
+                    <p className="inline-flex items-center gap-2 text-xs text-neutral-500"><ShieldCheck size={14} /> {usuario.accepted_at ? "Acesso criado no Auth" : "Vínculo pendente de login/Auth"}</p>
+                    <SubmitButton>Salvar usuário</SubmitButton>
                   </div>
                 </form>
               ))}

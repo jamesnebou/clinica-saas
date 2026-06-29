@@ -37,7 +37,7 @@ function assertWorkingHours({ clinic, start, end, slug }) {
   const schedule = clinic?.metadata?.horario_funcionamento || {};
 
   if (!isWithinWorkingPeriods({ schedule, startDate: start, endDate: end })) {
-    publicRedirect(slug, { erro: "agenda", mensagem: "Este horario esta fora do expediente da clinica." });
+    publicRedirect(slug, { erro: "agenda", mensagem: "Este horário esta fora do expediente da clinica." });
   }
 }
 
@@ -56,7 +56,7 @@ async function assertSlotAvailable({ clinicId, profissionalId, startISO, endISO,
 
   if (error) throw error;
   if (data?.length) {
-    publicRedirect(slug, { erro: "agenda", mensagem: "Este horario acabou de ser preenchido. Escolha outro horario." });
+    publicRedirect(slug, { erro: "agenda", mensagem: "Este horário acabou de ser preenchido. Escolha outro horário." });
   }
 }
 
@@ -72,11 +72,11 @@ export async function createPublicBookingAction(formData) {
   const consentimento = formData.get("consentimento_lgpd") === "on";
 
   if (!slug || !procedimentoId || !nome || !dataHora) {
-    publicRedirect(slug || "", { erro: "dados", mensagem: "Preencha os dados obrigatorios para agendar." });
+    publicRedirect(slug || "", { erro: "dados", mensagem: "Preencha os dados obrigatórios para agendar." });
   }
 
   if (!consentimento) {
-    publicRedirect(slug, { erro: "lgpd", mensagem: "Aceite a politica de privacidade para concluir o agendamento." });
+    publicRedirect(slug, { erro: "lgpd", mensagem: "Aceite a política de privacidade para concluir o agendamento." });
   }
 
   const { data: clinic, error: clinicError } = await supabaseAdmin
@@ -87,7 +87,7 @@ export async function createPublicBookingAction(formData) {
     .maybeSingle();
 
   if (clinicError) throw clinicError;
-  if (!clinic) publicRedirect(slug, { erro: "clinica", mensagem: "Clinica indisponivel para agendamento online." });
+  if (!clinic) publicRedirect(slug, { erro: "clínica", mensagem: "Clínica indisponível para agendamento online." });
 
   const { data: integration, error: integrationError } = await supabaseAdmin
     .from("clinica_integracoes")
@@ -100,7 +100,7 @@ export async function createPublicBookingAction(formData) {
 
   const siteConfig = clinic.metadata?.site_publico || {};
   if (siteConfig.publicado === false) {
-    publicRedirect(slug, { erro: "site", mensagem: "O agendamento online desta clinica ainda nao esta publicado." });
+    publicRedirect(slug, { erro: "site", mensagem: "O agendamento online desta clínica ainda nao esta publicado." });
   }
 
   const { data: procedimento, error: procedimentoError } = await supabaseAdmin
@@ -113,7 +113,7 @@ export async function createPublicBookingAction(formData) {
     .maybeSingle();
 
   if (procedimentoError) throw procedimentoError;
-  if (!procedimento) publicRedirect(slug, { erro: "procedimento", mensagem: "Procedimento indisponivel para agendamento online." });
+  if (!procedimento) publicRedirect(slug, { erro: "procedimento", mensagem: "Procedimento indisponível para agendamento online." });
 
   const start = new Date(dataHora);
   if (Number.isNaN(start.getTime()) || start < new Date()) {
@@ -124,7 +124,7 @@ export async function createPublicBookingAction(formData) {
   assertWorkingHours({ clinic, start, end, slug });
 
   if (!profissionalId) {
-    publicRedirect(slug, { erro: "agenda", mensagem: "Escolha um horario disponivel para concluir o agendamento." });
+    publicRedirect(slug, { erro: "agenda", mensagem: "Escolha um horário disponível para concluir o agendamento." });
   }
 
   await assertSlotAvailable({
@@ -174,7 +174,7 @@ export async function createPublicBookingAction(formData) {
   const pagamentoStatus = valorSinal > 0 ? "pendente" : "sem_sinal";
 
   if (valorSinal > 0 && !isAsaasConfigured(clinicIntegration)) {
-    publicRedirect(slug, { erro: "pagamento", mensagem: "Checkout online indisponivel no momento. A clinica precisa configurar o Asaas para receber o sinal pelo site." });
+    publicRedirect(slug, { erro: "pagamento", mensagem: "Checkout online indisponível no momento. A clínica precisa configurar o Asaas para receber o sinal pelo site." });
   }
 
   const { data: agendamento, error: agendaError } = await supabaseAdmin
@@ -190,7 +190,7 @@ export async function createPublicBookingAction(formData) {
       valor: valorTotal,
       pagamento_status: pagamentoStatus === "sem_sinal" ? "pendente" : "parcial",
       valor_pago: 0,
-      observacoes: "Agendamento criado pelo site publico.",
+      observacoes: "Agendamento criado pelo site público.",
     })
     .select("id")
     .single();

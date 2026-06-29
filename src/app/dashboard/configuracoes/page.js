@@ -8,7 +8,7 @@ import { normalizeSchedule } from "@/lib/clinic/schedule";
 import { ACCESS_SECTION_LABELS, ROLE_ACCESS } from "@/lib/auth/permissions";
 import { BioEditor } from "./bio-editor";
 
-export const metadata = { title: "Configuracoes | Clínica SaaS" };
+export const metadata = { title: "Configurações | Clínica SaaS" };
 export const dynamic = "force-dynamic";
 
 const weekDays = [
@@ -53,7 +53,7 @@ function dnsHint(domain) {
   if (value.startsWith("www.")) {
     return "No DNS do cliente, crie um CNAME para www apontando para cname.vercel-dns.com.";
   }
-  return "Para dominio raiz, confira na Vercel o registro solicitado. Normalmente sera um A/ALIAS conforme a verificacao do projeto.";
+  return "Para domínio raiz, confira na Vercel o registro solicitado. Normalmente será um A/ALIAS conforme a verificação do projeto.";
 }
 
 function DomainStatusCard({ domain }) {
@@ -77,7 +77,7 @@ function DomainStatusCard({ domain }) {
         <div className="mt-3 space-y-2">
           {notes.verification.map((item, index) => (
             <p key={`${domain.dominio}-${index}`} className="rounded-md bg-white px-3 py-2 text-xs leading-5 text-neutral-600">
-              Verificacao Vercel: <strong>{item.type || "DNS"}</strong>{" "}
+              Verificação Vercel: <strong>{item.type || "DNS"}</strong>{" "}
               {item.domain ? <span>em <strong>{item.domain}</strong>{" "}</span> : null}
               {item.value ? <span>com valor <strong>{item.value}</strong></span> : null}
             </p>
@@ -103,7 +103,7 @@ function DomainStatusCard({ domain }) {
           formNoValidate
           className="h-9 rounded-lg border border-red-200 bg-red-50 px-3 text-xs font-bold text-red-700 shadow-sm transition hover:bg-red-100"
         >
-          Remover vinculo
+          Remover vínculo
         </button>
       </div>
     </div>
@@ -149,7 +149,7 @@ export default async function ConfiguracoesPage({ searchParams }) {
   return (
     <main className="px-5 py-8 sm:px-8 lg:px-10">
       <section className="mx-auto max-w-7xl">
-        <PageHeader eyebrow="Clínica" title="Configuracoes da clinica" description="Ajuste dados comerciais, identidade visual, expediente, politica de cancelamento e WhatsApp padrao." />
+        <PageHeader eyebrow="Clínica" title="Configurações da clínica" description="Ajuste dados comerciais, identidade visual, expediente, política de cancelamento e WhatsApp padrão." />
 
         {params?.ok === "configuracoes" ? <Notice>Configurações atualizadas com sucesso.</Notice> : null}
         {params?.ok === "whatsapp" ? <Notice>Mensagem de teste enviada pelo WhatsApp.</Notice> : null}
@@ -159,23 +159,23 @@ export default async function ConfiguracoesPage({ searchParams }) {
         <form action={updateClinicSettingsAction} className="mt-8 space-y-6">
           <ConfigTabs>
           <section className="rounded-lg border border-neutral-200 bg-white p-5 shadow-sm">
-            <div className="flex items-center gap-2"><Settings size={20} className="text-[var(--clinic-primary)]" /><h2 className="text-lg font-semibold">Dados da clinica</h2></div>
+            <div className="flex items-center gap-2"><Settings size={20} className="text-[var(--clinic-primary)]" /><h2 className="text-lg font-semibold">Dados da clínica</h2></div>
             <div className="mt-5 grid gap-4 md:grid-cols-2">
-              <Field label="Nome da clinica" name="nome" defaultValue={activeClinic.nome || ""} required />
+              <Field label="Nome da clínica" name="nome" defaultValue={activeClinic.nome || ""} required />
               <Field label="CNPJ/CPF" name="documento" defaultValue={activeClinic.documento || ""} />
               <Field label="Telefone" name="telefone" defaultValue={activeClinic.telefone || ""} />
               <Field label="E-mail" name="email" type="email" defaultValue={activeClinic.email || ""} />
-              <Field label="Endereco" name="endereco" defaultValue={activeClinic.endereco || ""} />
+              <Field label="Endereço" name="endereco" defaultValue={activeClinic.endereco || ""} />
               <div className="grid gap-4 sm:grid-cols-[1fr_120px]">
                 <Field label="Cidade" name="cidade" defaultValue={activeClinic.cidade || ""} />
                 <Field label="UF" name="estado" defaultValue={activeClinic.estado || ""} />
               </div>
             </div>
             <div className="mt-6 rounded-lg border border-[color-mix(in_srgb,var(--clinic-primary)_20%,#e5e5e5)] bg-[color-mix(in_srgb,var(--clinic-accent)_7%,white)] p-4">
-              <h3 className="text-base font-black tracking-tight text-neutral-950">Dados de acesso do usuario logado</h3>
-              <p className="mt-2 text-sm leading-6 text-neutral-600">Altere o nome, e-mail de login ou senha da sua propria conta. Estes dados ficam salvos no Supabase Auth e no vinculo de usuarios da clinica.</p>
+              <h3 className="text-base font-black tracking-tight text-neutral-950">Dados de acesso do usuário logado</h3>
+              <p className="mt-2 text-sm leading-6 text-neutral-600">Altere o nome, e-mail de login ou senha da sua própria conta. Estes dados ficam salvos no Supabase Auth e no vínculo de usuários da clínica.</p>
               <div className="mt-4 grid gap-4 md:grid-cols-2">
-                <Field label="Nome do usuario" name="usuario_nome" defaultValue={membership?.nome || context.user?.user_metadata?.nome || ""} />
+                <Field label="Nome do usuário" name="usuario_nome" defaultValue={membership?.nome || context.user?.user_metadata?.nome || ""} />
                 <Field label="E-mail de login" name="usuario_email" type="email" defaultValue={context.user?.email || membership?.email || ""} />
                 <Field label="Nova senha" name="usuario_senha" type="password" placeholder="Preencha apenas se quiser trocar" />
                 <Field label="Confirmar nova senha" name="usuario_senha_confirmacao" type="password" placeholder="Repita a nova senha" />
@@ -200,7 +200,7 @@ export default async function ConfiguracoesPage({ searchParams }) {
                 <label className="block">
                   <span className="text-sm font-medium text-neutral-700">Logo da clínica</span>
                   <input name="logo_file" type="file" accept="image/jpeg,image/png,image/webp,image/svg+xml" className="mt-2 block w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm file:mr-4 file:rounded-md file:border-0 file:bg-[var(--clinic-primary)] file:px-3 file:py-2 file:text-sm file:font-semibold file:text-white focus:border-[var(--clinic-primary)] focus:outline-none focus:ring-2 focus:ring-[color-mix(in_srgb,var(--clinic-primary)_18%,transparent)]" />
-                  <span className="mt-2 block text-xs leading-5 text-neutral-500">PNG, JPG, WEBP ou SVG. Limite de 30 MB. Ao enviar, a logo atual sera substituida.</span>
+                  <span className="mt-2 block text-xs leading-5 text-neutral-500">PNG, JPG, WEBP ou SVG. Limite de 30 MB. Ao enviar, a logo atual será substituída.</span>
                 </label>
                 <Field label="Cor principal" name="primary_color" defaultValue={meta.primary_color || "#047857"} placeholder="#047857" />
                 <Field label="Cor de destaque" name="accent_color" defaultValue={meta.accent_color || "#10b981"} placeholder="#10b981" />
@@ -218,7 +218,7 @@ export default async function ConfiguracoesPage({ searchParams }) {
                       <p className="mt-1 text-sm font-semibold text-neutral-950">Exemplo do dashboard</p>
                     </div>
                   </div>
-                  {meta.logo_storage_path ? <p className="mt-3 truncate rounded-md bg-white/70 px-3 py-2 text-xs text-neutral-500">Logo Armazenada: {meta.logo_storage_path}</p> : null}
+                  {meta.logo_storage_path ? <p className="mt-3 truncate rounded-md bg-white/70 px-3 py-2 text-xs text-neutral-500">Logo armazenada: {meta.logo_storage_path}</p> : null}
                   <div className="mt-5 grid grid-cols-2 gap-3">
                     <div className="rounded-lg bg-white p-3 shadow-sm"><p className="text-xs text-neutral-500">Clientes</p><strong className="mt-1 block text-xl">128</strong></div>
                     <div className="rounded-lg p-3 text-white shadow-sm" style={{ background: "var(--clinic-primary)" }}><p className="text-xs text-white/75">Hoje</p><strong className="mt-1 block text-xl">R$ 890</strong></div>
@@ -353,7 +353,7 @@ export default async function ConfiguracoesPage({ searchParams }) {
               <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-4">
                 <label className="inline-flex items-center gap-2 text-sm font-bold text-neutral-800"><input type="checkbox" name="site_video_ativo" defaultChecked={Boolean(site.video_ativo)} />Mostrar seção de vídeo institucional</label>
                 <div className="mt-4 grid gap-4 lg:grid-cols-2">
-                  <Field label="Título do vídeo" name="site_video_titulo" defaultValue={site.video_titulo || ""} placeholder="Conhe?a a cl?nica por dentro" />
+                  <Field label="Título do vídeo" name="site_video_titulo" defaultValue={site.video_titulo || ""} placeholder="Conheça a clínica por dentro" />
                   <Field label="Subtítulo do vídeo" name="site_video_subtitulo" defaultValue={site.video_subtitulo || ""} placeholder="Uma mensagem da profissional para novos pacientes" />
                   <Field label="URL do vídeo" name="site_video_url" defaultValue={site.video_url || ""} placeholder="https://www.youtube.com/embed/..." />
                   <Field label="Texto do CTA" name="site_video_cta_label" defaultValue={site.video_cta_label || ""} placeholder="Agendar avaliação" />
@@ -392,31 +392,31 @@ export default async function ConfiguracoesPage({ searchParams }) {
           </section>
 
           <section className="rounded-lg border border-neutral-200 bg-white p-5 shadow-sm">
-            <div className="flex items-center gap-2"><MessageCircle size={20} className="text-[var(--clinic-primary)]" /><h2 className="text-lg font-semibold">Politicas e WhatsApp</h2></div>
+            <div className="flex items-center gap-2"><MessageCircle size={20} className="text-[var(--clinic-primary)]" /><h2 className="text-lg font-semibold">Políticas e WhatsApp</h2></div>
             <div className="mt-5 grid gap-4 lg:grid-cols-2">
-              <TextArea label="Politica de cancelamento" name="politica_cancelamento" defaultValue={meta.politica_cancelamento || ""} placeholder="Ex.: Cancelamentos com menos de 24h podem ser cobrados." />
-              <TextArea label="Mensagem padrao de WhatsApp" name="whatsapp_mensagem_padrao" defaultValue={meta.whatsapp_mensagem_padrao || ""} placeholder="Ola, {cliente}. Passando para confirmar seu horario em {data}." />
+              <TextArea label="Política de cancelamento" name="politica_cancelamento" defaultValue={meta.politica_cancelamento || ""} placeholder="Ex.: Cancelamentos com menos de 24h podem ser cobrados." />
+              <TextArea label="Mensagem padrão de WhatsApp" name="whatsapp_mensagem_padrao" defaultValue={meta.whatsapp_mensagem_padrao || ""} placeholder="Olá, {cliente}. Passando para confirmar seu horário em {data}." />
             </div>
           </section>
 
           <section className="rounded-lg border border-neutral-200 bg-white p-5 shadow-sm">
-            <div className="flex items-center gap-2"><CreditCard size={20} className="text-[var(--clinic-primary)]" /><h2 className="text-lg font-semibold">Integracoes da clinica</h2></div>
-            <p className="mt-2 text-sm text-neutral-600">Estas credenciais pertencem somente a esta clinica. Deixe campos sensiveis em branco para manter o valor ja salvo.</p>
+            <div className="flex items-center gap-2"><CreditCard size={20} className="text-[var(--clinic-primary)]" /><h2 className="text-lg font-semibold">Integrações da clínica</h2></div>
+            <p className="mt-2 text-sm text-neutral-600">Estas credenciais pertencem somente a esta clínica. Deixe campos sensíveis em branco para manter o valor já salvo.</p>
             <div className="mt-5 grid gap-5">
               <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-4">
                 <label className="inline-flex items-center gap-2 text-sm font-bold text-neutral-800">
                   <input type="checkbox" name="asaas_ativo" defaultChecked={Boolean(integration?.asaas_ativo)} />
-                  Ativar checkout Asaas desta clinica
+                  Ativar checkout Asaas desta clínica
                 </label>
                 <div className="mt-4 grid gap-4 lg:grid-cols-2">
                   <Field label="Asaas API URL" name="asaas_base_url" defaultValue={integration?.asaas_base_url || "https://sandbox.asaas.com/api/v3"} />
-                  <Field label="Asaas API Key" name="asaas_api_key" type="password" placeholder={integration?.asaas_api_key ? "Chave salva. Preencha apenas para trocar." : "Cole a API key da clinica"} />
-                  <Field label="Token do webhook Asaas" name="asaas_webhook_token" type="password" placeholder={integration?.asaas_webhook_token ? "Token salvo. Preencha apenas para trocar." : "Token configurado no webhook da clinica"} />
+                  <Field label="Asaas API Key" name="asaas_api_key" type="password" placeholder={integration?.asaas_api_key ? "Chave salva. Preencha apenas para trocar." : "Cole a API key da clínica"} />
+                  <Field label="Token do webhook Asaas" name="asaas_webhook_token" type="password" placeholder={integration?.asaas_webhook_token ? "Token salvo. Preencha apenas para trocar." : "Token configurado no webhook da clínica"} />
                 </div>
               </div>
 
               <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-4">
-                <div className="flex items-center gap-2"><Mail size={18} className="text-[var(--clinic-primary)]" /><strong>Notificacao por e-mail</strong></div>
+                <div className="flex items-center gap-2"><Mail size={18} className="text-[var(--clinic-primary)]" /><strong>Notificação por e-mail</strong></div>
                 <label className="mt-3 inline-flex items-center gap-2 text-sm font-bold text-neutral-800">
                   <input type="checkbox" name="email_ativo" defaultChecked={Boolean(integration?.email_ativo)} />
                   Enviar e-mail para novos agendamentos
@@ -428,7 +428,7 @@ export default async function ConfiguracoesPage({ searchParams }) {
               </div>
 
               <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-4">
-                <div className="flex items-center gap-2"><MessageCircle size={18} className="text-[var(--clinic-primary)]" /><strong>Notificacao por WhatsApp</strong></div>
+                <div className="flex items-center gap-2"><MessageCircle size={18} className="text-[var(--clinic-primary)]" /><strong>Notificação por WhatsApp</strong></div>
                 <label className="mt-3 inline-flex items-center gap-2 text-sm font-bold text-neutral-800">
                   <input type="checkbox" name="whatsapp_ativo" defaultChecked={Boolean(integration?.whatsapp_ativo)} />
                   Enviar WhatsApp para novos agendamentos
@@ -447,7 +447,7 @@ export default async function ConfiguracoesPage({ searchParams }) {
                   >
                     Enviar teste de WhatsApp
                   </button>
-                  <span className="text-xs leading-5 text-neutral-500">Salve as configuracoes antes de testar uma chave nova.</span>
+                  <span className="text-xs leading-5 text-neutral-500">Salve as configurações antes de testar uma chave nova.</span>
                 </div>
               </div>
             </div>
@@ -558,7 +558,7 @@ export default async function ConfiguracoesPage({ searchParams }) {
           </section>
           </ConfigTabs>
           <div className="flex justify-end border-t border-neutral-200 pt-6">
-            <SubmitButton>Salvar configuracoes</SubmitButton>
+            <SubmitButton>Salvar configurações</SubmitButton>
           </div>
         </form>
         {usuarios.map((usuario) => (

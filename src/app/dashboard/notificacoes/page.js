@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { Card, EmptyClinicState, EmptyState, PageHeader } from "@/components/app-shell/ui";
 import { markAllNotificationsViewedAction, markNotificationViewedAction } from "./actions";
 
-export const metadata = { title: "Notificacoes | Clinica SaaS" };
+export const metadata = { title: "Notificações | Clínica SaaS" };
 
 function formatMoney(value) {
   return Number(value || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -80,10 +80,10 @@ export default async function NotificacoesPage() {
   const pendente = pendentes.reduce((acc, item) => acc + Number(item.valor_sinal || 0), 0);
 
   const cards = [
-    { label: "Novas notificacoes", value: naoVisualizadas.length, detail: "nao visualizadas", icon: Bell },
+    { label: "Novas notificações", value: naoVisualizadas.length, detail: "não visualizadas", icon: Bell },
     { label: "Sinais pagos", value: pagos.length, detail: formatMoney(recebido), icon: CheckCircle2 },
     { label: "Pagamentos pendentes", value: pendentes.length, detail: formatMoney(pendente), icon: AlertTriangle },
-    { label: "Sem sinal online", value: semSinal.length, detail: "solicitacoes diretas", icon: CalendarDays },
+    { label: "Sem sinal online", value: semSinal.length, detail: "solicitações diretas", icon: CalendarDays },
   ];
 
   return (
@@ -91,8 +91,8 @@ export default async function NotificacoesPage() {
       <section className="mx-auto max-w-7xl">
         <PageHeader
           eyebrow="Central"
-          title="Notificacoes"
-          description="Acompanhe vendas pelo site, agendamentos recebidos, sinais pagos e pendencias de pagamento."
+          title="Notificações"
+          description="Acompanhe vendas pelo site, agendamentos recebidos, sinais pagos e pendências de pagamento."
           action={visualizacaoDisponivel && naoVisualizadas.length ? (
             <form action={markAllNotificationsViewedAction}>
               <button type="submit" className="h-10 rounded-lg bg-neutral-950 px-4 text-sm font-bold text-white shadow-sm">
@@ -126,7 +126,7 @@ export default async function NotificacoesPage() {
 
           <div className="mt-5 space-y-3">
             {siteBookings.length === 0 ? (
-              <EmptyState title="Nenhuma notificacao recente" description="Quando o site receber agendamentos ou sinais pagos, eles aparecem aqui." />
+              <EmptyState title="Nenhuma notificação recente" description="Quando o site receber agendamentos ou sinais pagos, eles aparecem aqui." />
             ) : siteBookings.map((item) => (
               <article key={item.id} className="rounded-lg border border-neutral-200 p-4">
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">

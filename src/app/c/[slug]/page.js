@@ -185,7 +185,7 @@ export async function generateMetadata({ params }) {
   const { data } = await supabaseAdmin.from("clinicas").select("nome, metadata").eq("slug", slug).maybeSingle();
   const site = data?.metadata?.site_publico || {};
   return {
-    title: `${site.titulo_hero || data?.metadata?.brand_name || data?.nome || "ClÃ­nica"} | Agendamento`,
+    title: `${site.titulo_hero || data?.metadata?.brand_name || data?.nome || "Clí­nica"} | Agendamento`,
     description: site.subtitulo_hero || "ConheÃ§a os procedimentos e agende seu atendimento.",
     icons: site.favicon_url ? { icon: [{ url: site.favicon_url }], shortcut: [{ url: site.favicon_url }], apple: [{ url: site.favicon_url }] } : undefined,
   };
@@ -239,15 +239,15 @@ export default async function PublicClinicPage({ params, searchParams }) {
   const heroImage = site.hero_image_url || site.profissional_image_url || fallbackImage(brandName, true);
   const professionalImage = site.profissional_image_url || site.hero_image_url || fallbackImage(professionalName);
   const clinicPhotos = [site.clinica_foto_1, site.clinica_foto_2, site.clinica_foto_3].filter(Boolean);
-  const gallery = clinicPhotos.length ? clinicPhotos : [heroImage, professionalImage, fallbackImage("ClÃ­nica")];
+  const gallery = clinicPhotos.length ? clinicPhotos : [heroImage, professionalImage, fallbackImage("Clí­nica")];
   const address = [clinic.endereco, clinic.cidade, clinic.estado].filter(Boolean).join(" - ");
   const year = new Date().getFullYear();
 
   const fallbackTestimonials = [
-    { nome: "Mariana S.", procedimento: "Tratamento facial", texto: "Atendimento impecavel, ambiente acolhedor e resultado muito natural. Me senti segura desde a primeira avaliaÃ§Ã£o." },
+    { nome: "Mariana S.", procedimento: "Tratamento facial", texto: "Atendimento impecavel, ambiente acolhedor e resultado muito natural. Me senti segura desde a primeira avaliação." },
     { nome: "Fernanda L.", procedimento: "Harmonizacao", texto: "A equipe explicou tudo com clareza e respeitou meu objetivo. O resultado ficou exatamente como eu queria." },
     { nome: "Juliana M.", procedimento: "Protocolo estetico", texto: "A clinica passa muita confianca. Gostei da organizacao, do cuidado e do acompanhamento depois do procedimento." },
-    { nome: "Ana P.", procedimento: "Skincare", texto: "ExperiÃªncia excelente, pontualidade e orientaÃ§Ãµes precisas. Recomendo para quem busca cuidado serio e sofisticado." },
+    { nome: "Ana P.", procedimento: "Skincare", texto: "Experiência excelente, pontualidade e orientações precisas. Recomendo para quem busca cuidado serio e sofisticado." },
   ];
   const manualTestimonials = Array.isArray(site.depoimentos) && site.depoimentos.length
     ? site.depoimentos.filter((item) => item?.nome || item?.procedimento || item?.texto)
@@ -281,12 +281,12 @@ export default async function PublicClinicPage({ params, searchParams }) {
           </a>
           <nav className="hidden items-center gap-5 text-sm font-semibold text-white/78 lg:flex">
             <a href="#sobre">Sobre</a>
-            <a href="#servicos">ServiÃ§os</a>
+            <a href="#servicos">Serviços</a>
             <a href="#depoimentos">Depoimentos</a>
-            <a href="#localizacao">LocalizaÃ§Ã£o</a>
+            <a href="#localizacao">Localização</a>
           </nav>
           <div className="flex items-center gap-2">
-            <a href="/login-cliente" className="hidden rounded-full border border-white/20 px-4 py-2 text-xs font-bold text-white/60 transition hover:bg-white/10 hover:text-white sm:inline-flex">Ãrea da clÃ­nica</a>
+            <a href="/login-cliente" className="hidden rounded-full border border-white/20 px-4 py-2 text-xs font-bold text-white/60 transition hover:bg-white/10 hover:text-white sm:inline-flex">Área da clínica</a>
             <a href="#agendar" className="rounded-full bg-white px-5 py-2.5 text-sm font-bold text-[#17130f]">Agendar</a>
           </div>
         </div>
@@ -307,7 +307,7 @@ export default async function PublicClinicPage({ params, searchParams }) {
             {site.titulo_hero || `Beleza, cuidado e tecnologia em ${brandName}`}
           </h1>
           <p className="mx-auto mt-6 max-w-3xl text-lg leading-8 text-white/82">
-            {site.subtitulo_hero || "ConheÃ§a a clÃ­nica, veja os procedimentos e reserve seu horÃ¡rio online com seguranÃ§a."}
+            {site.subtitulo_hero || "ConheÃ§a a clínica, veja os procedimentos e reserve seu horÃ¡rio online com seguranÃ§a."}
           </p>
           <div className="mt-8 flex flex-wrap justify-center gap-3">
             <a href="#agendar" className="rounded-full bg-[var(--clinic-accent)] px-7 py-4 text-sm font-bold text-[#17130f] shadow-[0_20px_48px_rgba(0,0,0,0.24)]">Agendar consulta</a>
@@ -342,8 +342,8 @@ export default async function PublicClinicPage({ params, searchParams }) {
           <div className="public-card-reveal public-reveal-up site-dark-glass-card mx-auto max-w-7xl p-6 text-white lg:p-10">
             <div className="grid gap-8 lg:grid-cols-[0.85fr_1.15fr] lg:items-center">
               <div>
-                <SectionHeading eyebrow="VÃ­deo" title={site.video_titulo || "ConheÃ§a a clÃ­nica"} description={site.video_subtitulo || "Veja de perto a estrutura, a abordagem e os cuidados que tornam a experiÃªncia mais segura e personalizada."} tone="dark" />
-                <a href={site.video_cta_url || "#agendar"} className="mt-8 inline-flex rounded-full bg-[var(--clinic-accent)] px-6 py-3 text-sm font-black text-[#17130f]">{site.video_cta_label || "Agendar avaliaÃ§Ã£o"}</a>
+                <SectionHeading eyebrow="Vídeo" title={site.video_titulo || "Conheça a clínica"} description={site.video_subtitulo || "Veja de perto a estrutura, a abordagem e os cuidados que tornam a experiência mais segura e personalizada."} tone="dark" />
+                <a href={site.video_cta_url || "#agendar"} className="mt-8 inline-flex rounded-full bg-[var(--clinic-accent)] px-6 py-3 text-sm font-black text-[#17130f]">{site.video_cta_label || "Agendar avaliação"}</a>
               </div>
               <div className="site-video-frame aspect-video overflow-hidden rounded-[1.5rem]">
                 <PublicMediaFrame url={site.video_url} title={site.video_titulo || brandName} />
@@ -354,13 +354,13 @@ export default async function PublicClinicPage({ params, searchParams }) {
       ) : null}
 
       <section className="public-section-warm mx-auto max-w-7xl px-5 py-24 sm:px-8">
-        <SectionHeading eyebrow="A clÃ­nica" title="Ambiente pensado para acolher, cuidar e transformar" description="O nosso espaÃ§o foi feito para o seu conforto e aconchego, com ambientes pensados para bem-estar, privacidade e seguranÃ§a." center />
+        <SectionHeading eyebrow="A clínica" title="Ambiente pensado para acolher, cuidar e transformar" description="O nosso espaço foi feito para o seu conforto e aconchego, com ambientes pensados para bem-estar, privacidade e seguranÃ§a." center />
         <div className="mt-10 grid gap-4 lg:grid-cols-[1.15fr_0.85fr]">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={gallery[0]} alt="ClÃ­nica" className="public-card-reveal public-reveal-left h-[460px] w-full rounded-[2rem] object-cover shadow-[0_24px_70px_rgba(23,19,15,0.16)]" />
+          <img src={gallery[0]} alt="clínica" className="public-card-reveal public-reveal-left h-[460px] w-full rounded-[2rem] object-cover shadow-[0_24px_70px_rgba(23,19,15,0.16)]" />
           <div className="grid gap-4">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={gallery[1]} alt="EspaÃ§o da clÃ­nica" className="public-card-reveal public-reveal-right h-[222px] w-full rounded-[2rem] object-cover shadow-[0_20px_54px_rgba(23,19,15,0.12)]" />
+            <img src={gallery[1]} alt="EspaÃ§o da clínica" className="public-card-reveal public-reveal-right h-[222px] w-full rounded-[2rem] object-cover shadow-[0_20px_54px_rgba(23,19,15,0.12)]" />
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={gallery[2]} alt="Atendimento" className="public-card-reveal public-reveal-up h-[222px] w-full rounded-[2rem] object-cover shadow-[0_20px_54px_rgba(23,19,15,0.12)]" />
           </div>
@@ -370,7 +370,7 @@ export default async function PublicClinicPage({ params, searchParams }) {
       <PublicServicesSection procedimentos={procedimentos} />
 
       <section id="depoimentos" className="public-section-soft mx-auto max-w-7xl px-5 py-24 sm:px-8">
-        <SectionHeading eyebrow="Depoimentos" title="O que pacientes dizem:" description="A satisfaÃ§Ã£o dos pacientes Ã© o maior reconhecimento." center />
+        <SectionHeading eyebrow="Depoimentos" title="O que pacientes dizem:" description="A satisfação dos pacientes são o maior reconhecimento." center />
         {googleReviewsUrl || googleReviews.rating ? (
           <div className="mt-6 flex flex-wrap justify-center gap-3 text-center">
             {googleReviews.rating ? (
@@ -394,7 +394,7 @@ export default async function PublicClinicPage({ params, searchParams }) {
               <div className="mt-7 flex items-end justify-between gap-4">
                 <div>
                   <strong>{item.nome || "Paciente"}</strong>
-                  <p className="mt-1 text-xs text-neutral-500">{item.procedimento || "Atendimento estÃ©tico"}</p>
+                  <p className="mt-1 text-xs text-neutral-500">{item.procedimento || "Atendimento estático"}</p>
                 </div>
                 <span className="text-amber-400">{"?".repeat(Math.max(1, Math.min(5, Number(item.rating || 5))))}</span>
               </div>
@@ -407,8 +407,8 @@ export default async function PublicClinicPage({ params, searchParams }) {
         <section className="site-campaign-section px-5 py-24 sm:px-8">
           <div className="public-card-reveal public-reveal-up site-dark-glass-card mx-auto grid max-w-7xl gap-8 p-6 text-white lg:grid-cols-[1.05fr_0.95fr] lg:p-10 lg:items-center">
             <div>
-              <SectionHeading eyebrow="Campanha" title={site.campanha_titulo || "Protocolo em campanha"} description={site.campanha_subtitulo || "Uma condiÃ§Ã£o especial para iniciar seu cuidado com orientaÃ©o profissional."} tone="dark" />
-              <RichText text={site.campanha_texto || "Destaque aqui o produto, serviÃ§o ou protocolo que a clÃ­nica deseja vender mais neste momento."} className="mt-6 text-base leading-8 text-white/70" />
+              <SectionHeading eyebrow="Campanha" title={site.campanha_titulo || "Protocolo em campanha"} description={site.campanha_subtitulo || "Uma condição especial para iniciar seu cuidado com orientação profissional."} tone="dark" />
+              <RichText text={site.campanha_texto || "Destaque aqui o produto, serviço ou protocolo que a clínica deseja vender mais neste momento."} className="mt-6 text-base leading-8 text-white/70" />
               <a href={site.campanha_cta_url || "#agendar"} className="mt-8 inline-flex rounded-full bg-[var(--clinic-accent)] px-6 py-3 text-sm font-black text-[#17130f]">{site.campanha_cta_label || "Quero saber mais"}</a>
             </div>
             <div className="site-video-frame overflow-hidden rounded-[1.75rem]">
@@ -420,11 +420,11 @@ export default async function PublicClinicPage({ params, searchParams }) {
 
       <section id="agendar" className="public-booking-section mx-auto grid max-w-7xl gap-8 px-5 py-24 sm:px-8 lg:grid-cols-[0.9fr_1.1fr]">
         <div className="public-card-reveal public-reveal-left public-hover-card rounded-[1.75rem] border border-white/70 bg-white/72 p-7 shadow-[0_20px_54px_rgba(20,18,15,0.09)] backdrop-blur">
-          <SectionHeading eyebrow="Agendamento" title="Reserve seu horÃ¡rio" description="Escolha procedimento, profissional e horÃ¡rio. A disponibilidade Ã© validada com a agenda real da clÃ­nica." />
+          <SectionHeading eyebrow="Agendamento" title="Reserve seu horÃ¡rio" description="Escolha procedimento, profissional e horÃ¡rio. A disponibilidade Ã© validada com a agenda real da clínica." />
           <div className="mt-8 space-y-4 text-sm text-neutral-700">
-            <p className="flex gap-3"><Clock size={18} className="text-[var(--clinic-primary)]" /> Atendimento de {schedule.inicio || "08:00"} Ã s {schedule.fim || "18:00"}, conforme disponibilidade.</p>
-            <p className="flex gap-3"><CreditCard size={18} className="text-[var(--clinic-primary)]" /> Quando houver sinal, vocÃª serÃ¡ direcionado para um checkout seguro.</p>
-            <p className="flex gap-3"><ShieldCheck size={18} className="text-[var(--clinic-primary)]" /> Seus dados entram na agenda e no CRM da clÃ­nica automaticamente.</p>
+            <p className="flex gap-3"><Clock size={18} className="text-[var(--clinic-primary)]" /> Atendimento de {schedule.inicio || "08:00"} às {schedule.fim || "18:00"}, conforme disponibilidade.</p>
+            <p className="flex gap-3"><CreditCard size={18} className="text-[var(--clinic-primary)]" /> Quando houver sinal, você será direcionado para um checkout seguro.</p>
+            <p className="flex gap-3"><ShieldCheck size={18} className="text-[var(--clinic-primary)]" /> Seus dados entram na agenda e no CRM da clínica automaticamente.</p>
             {address ? <p className="flex gap-3"><MapPin size={18} className="text-[var(--clinic-primary)]" /> {address}</p> : null}
           </div>
         </div>
@@ -436,7 +436,7 @@ export default async function PublicClinicPage({ params, searchParams }) {
 
       <section id="localizacao" className="public-section-soft mx-auto grid max-w-7xl gap-8 px-5 py-24 sm:px-8 lg:grid-cols-[0.85fr_1.15fr] lg:items-center">
         <div className="public-card-reveal public-reveal-left public-hover-card rounded-[2rem] border border-white/70 bg-white/72 p-7 shadow-[0_20px_54px_rgba(20,18,15,0.08)] backdrop-blur">
-          <SectionHeading eyebrow="LocalizaÃ§Ã£o" title="Como chegar?" description="Use o mapa para chegar atÃ© a clÃ­nica ou fale com a equipe pelo WhatsApp antes do atendimento." />
+          <SectionHeading eyebrow="Localização" title="Como chegar?" description="Use o mapa para chegar até a clínica ou fale com a equipe pelo WhatsApp antes do atendimento." />
           <div className="mt-8 space-y-4 text-sm leading-7 text-neutral-700">
             {address ? <p className="flex gap-3"><MapPin size={19} className="mt-1 shrink-0 text-[var(--clinic-primary)]" /> <span>{address}</span></p> : null}
             {clinic.telefone ? <p className="flex gap-3"><MessageCircle size={19} className="mt-1 shrink-0 text-[var(--clinic-primary)]" /> <span>{clinic.telefone}</span></p> : null}
@@ -464,17 +464,17 @@ export default async function PublicClinicPage({ params, searchParams }) {
             <p className="mt-1 text-sm text-white/55">{site.eyebrow || "EstÃ©tica premium e atendimento personalizado"}</p>
           </div>
           <div>
-            <h4 className="font-semibold">Links rÃ¡pidos</h4>
+            <h4 className="font-semibold">Links rápidos</h4>
             <div className="mt-5 grid gap-3 text-sm text-white/68">
-              <a href="#topo">InÃ­cio</a>
+              <a href="#topo">Início</a>
               <a href="#sobre">Sobre</a>
-              <a href="#servicos">ServiÃ§os</a>
+              <a href="#servicos">Serviços</a>
               <a href="#depoimentos">Depoimentos</a>
               <a href="#agendar">Agendamento</a>
-              <a href="#localizacao">LocalizaÃ§Ã£o</a>
+              <a href="#localizacao">Localização</a>
               <a href="/termos">Termos de uso</a>
               <a href="/privacidade">Privacidade</a>
-              <a href="/login-cliente">Ãrea da clÃ­nica</a>
+              <a href="/login-cliente">Área da clí­nica</a>
             </div>
           </div>
           <div>

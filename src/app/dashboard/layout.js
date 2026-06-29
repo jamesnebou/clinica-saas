@@ -30,15 +30,15 @@ export async function generateMetadata() {
 }
 
 const navItems = [
-  { href: "/dashboard", label: "Visao geral", icon: "dashboard", section: "dashboard" },
+  { href: "/dashboard", label: "Visão geral", icon: "dashboard", section: "dashboard" },
   { href: "/dashboard/agenda", label: "Agenda", icon: "agenda", section: "agenda" },
-  { href: "/dashboard/notificacoes", label: "Notificacoes", icon: "notificacoes", section: "notificacoes" },
+  { href: "/dashboard/notificacoes", label: "Notificações", icon: "notificacoes", section: "notificacoes" },
   { href: "/dashboard/clientes", label: "Clientes", icon: "clientes", section: "clientes" },
   { href: "/dashboard/crm", label: "CRM", icon: "crm", section: "crm" },
   { href: "/dashboard/profissionais", label: "Profissionais", icon: "profissionais", section: "profissionais" },
   { href: "/dashboard/procedimentos", label: "Procedimentos", icon: "procedimentos", section: "procedimentos" },
-  { href: "/dashboard/usuarios", label: "Usuarios", icon: "usuarios", section: "usuarios" },
-  { href: "/dashboard/configuracoes", label: "Configuracoes", icon: "configuracoes", section: "configuracoes" },
+  { href: "/dashboard/usuarios", label: "Usuários", icon: "usuarios", section: "usuarios" },
+  { href: "/dashboard/configuracoes", label: "Configurações", icon: "configuracoes", section: "configuracoes" },
   { href: "/dashboard/financeiro", label: "Financeiro", icon: "financeiro", section: "financeiro" },
   { href: "/dashboard/assinatura", label: "Assinatura", icon: "assinatura", section: "assinatura" },
 ];

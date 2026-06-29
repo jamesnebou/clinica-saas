@@ -15,7 +15,7 @@ import {
 } from "../../actions";
 import { ConsentimentoForm } from "./consentimento-form";
 
-export const metadata = { title: "Ficha do cliente | Clinica SaaS" };
+export const metadata = { title: "Ficha do cliente | Clínica SaaS" };
 
 function formatDate(value) {
   if (!value) return "-";
@@ -78,8 +78,8 @@ export default async function ClienteDetalhePage({ params }) {
       <main className="px-5 py-8 sm:px-8 lg:px-10">
         <section className="mx-auto max-w-3xl rounded-lg border border-amber-200 bg-amber-50 p-6 text-amber-950">
           <Link href="/dashboard/clientes" className="inline-flex items-center gap-2 text-sm font-semibold"><ArrowLeft size={16} /> Voltar para clientes</Link>
-          <h1 className="mt-6 text-2xl font-semibold">Prontuario restrito</h1>
-          <p className="mt-3 text-sm leading-6">Dados sensiveis, anamnese, consentimentos e fotos antes/depois ficam disponiveis apenas para owner, admin e profissional da clinica.</p>
+          <h1 className="mt-6 text-2xl font-semibold">Prontuário restrito</h1>
+          <p className="mt-3 text-sm leading-6">Dados sensíveis, anamnese, consentimentos e fotos antes/depois ficam disponíveis apenas para owner, admin e profissional da clínica.</p>
         </section>
       </main>
     );
@@ -179,7 +179,7 @@ export default async function ClienteDetalhePage({ params }) {
               <div className="mt-4 grid gap-4 md:grid-cols-2">
                 <Field label="Retorno recomendado" name="retorno_recomendado_em" type="date" defaultValue={cliente.retorno_recomendado_em || ""} />
                 <Field label="Data/hora aceite termo" name="termo_consentimento_aceito_em" type="datetime-local" defaultValue={cliente.termo_consentimento_aceito_em ? cliente.termo_consentimento_aceito_em.slice(0, 16) : ""} />
-                <Field label="Versao do termo" name="termo_consentimento_versao" defaultValue={cliente.termo_consentimento_versao || "v1"} />
+                <Field label="Versão do termo" name="termo_consentimento_versao" defaultValue={cliente.termo_consentimento_versao || "v1"} />
               </div>
               <div className="mt-4 space-y-4">
                 <label className="flex items-start gap-3 rounded-lg bg-neutral-50 p-3 text-sm text-neutral-700">
@@ -242,8 +242,8 @@ export default async function ClienteDetalhePage({ params }) {
                   <option value="documento">Documento</option>
                 </SelectField>
                 <SelectField label="Visibilidade" name="visibilidade" defaultValue="restrito">
-                  <option value="restrito">Restrito ao prontuario</option>
-                  <option value="interno">Uso interno da clinica</option>
+                  <option value="restrito">Restrito ao prontuário</option>
+                  <option value="interno">Uso interno da clínica</option>
                   <option value="marketing">Marketing autorizado</option>
                 </SelectField>
                 <SelectField label="Termo vinculado" name="consentimento_id" defaultValue="">
@@ -275,8 +275,8 @@ export default async function ClienteDetalhePage({ params }) {
                     <option value="documento">Documento</option>
                   </SelectField>
                   <SelectField label="Visibilidade" name="visibilidade" defaultValue="restrito">
-                    <option value="restrito">Restrito ao prontuario</option>
-                    <option value="interno">Uso interno da clinica</option>
+                    <option value="restrito">Restrito ao prontuário</option>
+                    <option value="interno">Uso interno da clínica</option>
                     <option value="marketing">Marketing autorizado</option>
                   </SelectField>
                   <SelectField label="Termo vinculado" name="consentimento_id" defaultValue="">
@@ -306,7 +306,7 @@ export default async function ClienteDetalhePage({ params }) {
                       <div>
                         <p className="text-sm font-semibold">{foto.titulo || foto.tipo}</p>
                         <p className="text-xs text-neutral-500">{foto.tipo} - {formatDate(foto.data_foto)}</p>
-                        <p className="mt-1 text-xs text-neutral-500">Visibilidade: {foto.visibilidade || "restrito"} - Imagem autorizada: {foto.autorizacao_uso_imagem ? "sim" : "nao"}</p>
+                        <p className="mt-1 text-xs text-neutral-500">Visibilidade: {foto.visibilidade || "restrito"} - Imagem autorizada: {foto.autorizacao_uso_imagem ? "sim" : "não"}</p>
                       </div>
                       <form action={deleteClienteFotoAction}>
                         <input type="hidden" name="id" value={foto.id} />
@@ -334,7 +334,7 @@ export default async function ClienteDetalhePage({ params }) {
 
             <section className="rounded-lg border border-[color-mix(in_srgb,var(--clinic-primary)_24%,#e5e5e5)] bg-[color-mix(in_srgb,var(--clinic-accent)_10%,white)] p-5 text-neutral-950">
               <div className="flex items-center gap-2"><ShieldCheck size={20} /><h2 className="text-lg font-semibold">Termos e consentimentos</h2></div>
-              <p className="mt-3 text-sm leading-6">Registre aceite formal de procedimento, LGPD, anamnese e uso de imagem. Este registro complementa a ficha e cria historico de versao/data.</p>
+              <p className="mt-3 text-sm leading-6">Registre aceite formal de procedimento, LGPD, anamnese e uso de imagem. Este registro complementa a ficha e cria histórico de versão/data.</p>
               <ConsentimentoForm action={createClienteConsentimentoAction} clienteId={cliente.id} clienteNome={cliente.nome} />
               <div className="mt-4 space-y-3">
                 {consentimentos.length === 0 ? <p className="rounded-lg bg-white/70 px-4 py-3 text-sm text-neutral-600">Nenhum consentimento formal registrado.</p> : consentimentos.map((termo) => (
