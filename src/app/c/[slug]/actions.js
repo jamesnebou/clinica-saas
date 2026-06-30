@@ -25,6 +25,11 @@ function publicRedirect(slug, params) {
   redirect(`/c/${slug}${query ? `?${query}` : ""}#agendar`);
 }
 
+function publicLeadRedirect(slug, params) {
+  const query = new URLSearchParams(params).toString();
+  redirect(`/c/${slug}${query ? `?${query}` : ""}#form`);
+}
+
 function calculateDeposit(procedimento) {
   const price = Number(procedimento?.preco || 0);
   const fixed = Number(procedimento?.sinal_valor || 0);
@@ -272,4 +277,50 @@ export async function createPublicBookingAction(formData) {
   }
 
   publicRedirect(slug, { ok: "agendamento", mensagem: "Agendamento solicitado com sucesso." });
+}
+
+export async function createPublicLeadAction(formData) {
+  const slug = text(formData, "slug");
+  const nome = text(formData, "nome");
+  const telefone = nullableText(formData, "telefone");
+  const email = nullableText(formData, "email");
+  const mensagem = nullableText(formData, "mensagem");
+
+  if (!slug || !nome || !telefone) {
+    publicLeadRedirect(slug || "", { lead_erro: "dados", mensagem: "Informe nome completo e telefone para enviar sua solicitação." });
+  }
+
+  const { data: clinic, error: clinicError } = await supabaseAdmin
+    .from("clinicas")
+    .select("id, nome, slug, status, metadata")
+    .eq("slug", slug)
+    .in("status", ["trial", "ativa"])
+    .maybeSingle();
+
+  if (clinicError) throw clinicError;
+  if (!clinic) publicLeadRedirect(slug, { lead_erro: "clinica", mensagem: "Clínica indisponível para receber solicitações agora." });
+
+  const siteConfig = clinic.metadata?.site_publico || {};
+  if (siteConfig.publicado === false) {
+    publicLeadRedirect(slug, { lead_erro: "site", mensagem: "O site desta clínica ainda não está publicado." });
+  }
+
+  const { error } = await supabaseAdmin.from("crm_oportunidades").insert({
+    clinica_id: clinic.id,
+    nome,
+    telefone,
+    email,
+    origem: "site",
+    status: "lead",
+    proxima_acao: "Responder solicitação enviada pelo site.",
+    observacoes: mensagem || "Lead solicitou mais informações pelo site público.",
+  });
+
+  if (error) {
+    publicLeadRedirect(slug, { lead_erro: "crm", mensagem: "Não foi possível enviar sua solicitação agora. Tente novamente." });
+  }
+
+  revalidatePath("/dashboard/crm");
+  revalidatePath(`/c/${slug}`);
+  publicLeadRedirect(slug, { lead: "ok" });
 }

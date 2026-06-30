@@ -314,6 +314,21 @@ textarea {
   z-index: 1;
 }
 
+.public-site-header {
+  isolation: isolate;
+  contain: paint;
+  overflow: hidden;
+  transform: translate3d(0, 0, 0);
+  box-shadow: none;
+  backface-visibility: hidden;
+}
+
+.public-site-header::before,
+.public-site-header::after {
+  display: none;
+  content: none;
+}
+
 .public-site-shell :where(h1, h2, h3, h4) {
   font-weight: 900;
 }

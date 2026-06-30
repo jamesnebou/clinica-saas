@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { getGooglePlaceReviews } from "@/lib/google/places";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { PublicBookingForm } from "./booking-form";
+import { PublicLeadForm } from "./lead-form";
 import { PublicScrollEffects } from "./scroll-effects";
 import { PublicServicesSection } from "./services-section";
 
@@ -235,19 +236,19 @@ export default async function PublicClinicPage({ params, searchParams }) {
   const whatsapp = String(clinic.telefone || "").replace(/\D/g, "");
   const schedule = meta.horario_funcionamento || {};
   const professionalName = site.nome_profissional || profissionais[0]?.nome || brandName;
-  const professionalBio = site.bio_profissional || profissionais[0]?.observacoes || "Atendimento cuidadoso, escuta ativa e plano de tratamento alinhado ao seu objetivo estÃ©tico.";
+  const professionalBio = site.bio_profissional || profissionais[0]?.observacoes || "Atendimento cuidadoso, escuta ativa e plano de tratamento alinhado ao seu objetivo estético.";
   const heroImage = site.hero_image_url || site.profissional_image_url || fallbackImage(brandName, true);
   const professionalImage = site.profissional_image_url || site.hero_image_url || fallbackImage(professionalName);
   const clinicPhotos = [site.clinica_foto_1, site.clinica_foto_2, site.clinica_foto_3].filter(Boolean);
-  const gallery = clinicPhotos.length ? clinicPhotos : [heroImage, professionalImage, fallbackImage("Clí­nica")];
+  const gallery = clinicPhotos.length ? clinicPhotos : [heroImage, professionalImage, fallbackImage("Clínica")];
   const address = [clinic.endereco, clinic.cidade, clinic.estado].filter(Boolean).join(" - ");
   const year = new Date().getFullYear();
 
   const fallbackTestimonials = [
-    { nome: "Mariana S.", procedimento: "Tratamento facial", texto: "Atendimento impecavel, ambiente acolhedor e resultado muito natural. Me senti segura desde a primeira avaliação." },
-    { nome: "Fernanda L.", procedimento: "Harmonizacao", texto: "A equipe explicou tudo com clareza e respeitou meu objetivo. O resultado ficou exatamente como eu queria." },
-    { nome: "Juliana M.", procedimento: "Protocolo estetico", texto: "A clinica passa muita confianca. Gostei da organizacao, do cuidado e do acompanhamento depois do procedimento." },
-    { nome: "Ana P.", procedimento: "Skincare", texto: "Experiência excelente, pontualidade e orientações precisas. Recomendo para quem busca cuidado serio e sofisticado." },
+    { nome: "Mariana S.", procedimento: "Tratamento facial", texto: "Atendimento impecável, ambiente acolhedor e resultado muito natural. Me senti segura desde a primeira avaliação." },
+    { nome: "Fernanda L.", procedimento: "Harmonização", texto: "A equipe explicou tudo com clareza e respeitou meu objetivo. O resultado ficou exatamente como eu queria." },
+    { nome: "Juliana M.", procedimento: "Protocolo estético", texto: "A clínica passa muita confiança. Gostei da organização, do cuidado e do acompanhamento depois do procedimento." },
+    { nome: "Ana P.", procedimento: "Skincare", texto: "Experiência excelente, pontualidade e orientações precisas. Recomendo para quem busca cuidado sério e sofisticado." },
   ];
   const manualTestimonials = Array.isArray(site.depoimentos) && site.depoimentos.length
     ? site.depoimentos.filter((item) => item?.nome || item?.procedimento || item?.texto)
@@ -268,7 +269,7 @@ export default async function PublicClinicPage({ params, searchParams }) {
       }}
     >
       <PublicScrollEffects />
-      <header className="fixed inset-x-0 top-0 z-50 border-b border-white/20 bg-[#17130f]/45 px-5 py-4 text-white backdrop-blur-xl sm:px-8">
+      <header className="public-site-header fixed inset-x-0 top-0 z-[80] border-b border-white/20 bg-[#17130f]/45 px-5 py-4 text-white backdrop-blur-xl sm:px-8">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-5">
           <a href="#topo" className="flex min-w-0 items-center gap-3">
             {logoUrl ? (
@@ -302,16 +303,16 @@ export default async function PublicClinicPage({ params, searchParams }) {
             // eslint-disable-next-line @next/next/no-img-element
             <img src={logoUrl} alt={`Logo ${brandName}`} className="mx-auto mb-8 h-28 w-28 rounded-full object-contain shadow-[0_24px_60px_rgba(0,0,0,0.24)]" />
           ) : null}
-          <p className="text-xs font-bold uppercase tracking-[0.34em] text-white/70">{site.eyebrow || "EstÃ©tica premium e atendimento personalizado"}</p>
+          <p className="text-xs font-bold uppercase tracking-[0.34em] text-white/70">{site.eyebrow || "Estética premium e atendimento personalizado"}</p>
           <h1 className="mx-auto mt-5 max-w-5xl text-5xl font-semibold leading-[1.03] tracking-tight sm:text-7xl">
             {site.titulo_hero || `Beleza, cuidado e tecnologia em ${brandName}`}
           </h1>
           <p className="mx-auto mt-6 max-w-3xl text-lg leading-8 text-white/82">
-            {site.subtitulo_hero || "ConheÃ§a a clínica, veja os procedimentos e reserve seu horÃ¡rio online com seguranÃ§a."}
+            {site.subtitulo_hero || "Conheça a clínica, veja os procedimentos e reserve seu horário online com segurança."}
           </p>
           <div className="mt-8 flex flex-wrap justify-center gap-3">
             <a href="#agendar" className="rounded-full bg-[var(--clinic-accent)] px-7 py-4 text-sm font-bold text-[#17130f] shadow-[0_20px_48px_rgba(0,0,0,0.24)]">Agendar consulta</a>
-            <a href="#servicos" className="rounded-full border border-white/40 bg-white/10 px-7 py-4 text-sm font-bold text-white backdrop-blur">ConheÃ§a os serviÃ§os</a>
+            <a href="#servicos" className="rounded-full border border-white/40 bg-white/10 px-7 py-4 text-sm font-bold text-white backdrop-blur">Conheça os serviços</a>
           </div>
         </div>
         <div className="absolute bottom-8 left-1/2 h-10 w-6 -translate-x-1/2 rounded-full border border-white/55">
@@ -328,7 +329,7 @@ export default async function PublicClinicPage({ params, searchParams }) {
           <SectionHeading eyebrow="Sobre" title={professionalName} />
           <RichText text={professionalBio} className="mt-6 text-base leading-8 text-neutral-700" />
           <div className="mt-8 flex flex-wrap gap-3">
-            {[site.credencial_1 || "Protocolos personalizados", site.credencial_2 || "Ambiente reservado", site.credencial_3 || "Acompanhamento pos-procedimento"].map((item) => (
+            {[site.credencial_1 || "Protocolos personalizados", site.credencial_2 || "Ambiente reservado", site.credencial_3 || "Acompanhamento pós-procedimento"].map((item) => (
               <span key={item} className="inline-flex items-center gap-2 rounded-full border border-neutral-200 bg-white/60 px-4 py-2 text-sm font-semibold text-neutral-700 shadow-sm backdrop-blur">
                 <CheckCircle2 size={16} className="text-[var(--clinic-primary)]" /> {item}
               </span>
@@ -354,13 +355,13 @@ export default async function PublicClinicPage({ params, searchParams }) {
       ) : null}
 
       <section className="public-section-warm mx-auto max-w-7xl px-5 py-24 sm:px-8">
-        <SectionHeading eyebrow="A clínica" title="Ambiente pensado para acolher, cuidar e transformar" description="O nosso espaço foi feito para o seu conforto e aconchego, com ambientes pensados para bem-estar, privacidade e seguranÃ§a." center />
+        <SectionHeading eyebrow="A clínica" title="Ambiente pensado para acolher, cuidar e transformar" description="O nosso espaço foi feito para o seu conforto e aconchego, com ambientes pensados para bem-estar, privacidade e segurança." center />
         <div className="mt-10 grid gap-4 lg:grid-cols-[1.15fr_0.85fr]">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={gallery[0]} alt="clínica" className="public-card-reveal public-reveal-left h-[460px] w-full rounded-[2rem] object-cover shadow-[0_24px_70px_rgba(23,19,15,0.16)]" />
           <div className="grid gap-4">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={gallery[1]} alt="EspaÃ§o da clínica" className="public-card-reveal public-reveal-right h-[222px] w-full rounded-[2rem] object-cover shadow-[0_20px_54px_rgba(23,19,15,0.12)]" />
+            <img src={gallery[1]} alt="Espaço da clínica" className="public-card-reveal public-reveal-right h-[222px] w-full rounded-[2rem] object-cover shadow-[0_20px_54px_rgba(23,19,15,0.12)]" />
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={gallery[2]} alt="Atendimento" className="public-card-reveal public-reveal-up h-[222px] w-full rounded-[2rem] object-cover shadow-[0_20px_54px_rgba(23,19,15,0.12)]" />
           </div>
@@ -376,12 +377,12 @@ export default async function PublicClinicPage({ params, searchParams }) {
             {googleReviews.rating ? (
               <span className="inline-flex items-center gap-2 rounded-full border border-neutral-200 bg-white/70 px-5 py-3 text-sm font-bold text-neutral-800 shadow-sm backdrop-blur">
                 <Star size={17} className="fill-amber-400 text-amber-400" /> {Number(googleReviews.rating).toFixed(1)} no Google
-                {googleReviews.userRatingCount ? <span className="font-semibold text-neutral-500">({googleReviews.userRatingCount} avaliaÃ§Ãµes)</span> : null}
+                {googleReviews.userRatingCount ? <span className="font-semibold text-neutral-500">({googleReviews.userRatingCount} avaliações)</span> : null}
               </span>
             ) : null}
             {googleReviewsUrl ? (
               <a href={googleReviewsUrl} target="_blank" className="inline-flex items-center gap-2 rounded-full border border-neutral-200 bg-white/70 px-5 py-3 text-sm font-bold text-neutral-800 shadow-sm backdrop-blur">
-                <Star size={17} className="fill-amber-400 text-amber-400" /> Ver avaliaÃ§Ãµes no Google
+                <Star size={17} className="fill-amber-400 text-amber-400" /> Ver avaliações no Google
               </a>
             ) : null}
           </div>
@@ -390,13 +391,13 @@ export default async function PublicClinicPage({ params, searchParams }) {
           {testimonials.map((item, index) => (
             <article key={`${item.nome || "depoimento"}-${index}`} className={`public-card-reveal ${index % 2 === 0 ? "public-reveal-left" : "public-reveal-right"} public-hover-card rounded-[1.75rem] border border-neutral-200 bg-white/70 p-7 shadow-[0_18px_44px_rgba(23,19,15,0.07)] backdrop-blur`}>
               <Quote size={34} className="text-[var(--clinic-primary)] opacity-35" />
-              <p className="mt-5 text-sm leading-7 text-neutral-700">{item.texto || "ExperiÃªncia excelente, atendimento cuidadoso e resultado alinhado ao que eu buscava."}</p>
+              <p className="mt-5 text-sm leading-7 text-neutral-700">{item.texto || "Experiência excelente, atendimento cuidadoso e resultado alinhado ao que eu buscava."}</p>
               <div className="mt-7 flex items-end justify-between gap-4">
                 <div>
                   <strong>{item.nome || "Paciente"}</strong>
-                  <p className="mt-1 text-xs text-neutral-500">{item.procedimento || "Atendimento estático"}</p>
+                  <p className="mt-1 text-xs text-neutral-500">{item.procedimento || "Atendimento estético"}</p>
                 </div>
-                <span className="text-amber-400">{"?".repeat(Math.max(1, Math.min(5, Number(item.rating || 5))))}</span>
+                <span className="text-amber-400">{"★".repeat(Math.max(1, Math.min(5, Number(item.rating || 5))))}</span>
               </div>
             </article>
           ))}
@@ -420,7 +421,7 @@ export default async function PublicClinicPage({ params, searchParams }) {
 
       <section id="agendar" className="public-booking-section mx-auto grid max-w-7xl gap-8 px-5 py-24 sm:px-8 lg:grid-cols-[0.9fr_1.1fr]">
         <div className="public-card-reveal public-reveal-left public-hover-card rounded-[1.75rem] border border-white/70 bg-white/72 p-7 shadow-[0_20px_54px_rgba(20,18,15,0.09)] backdrop-blur">
-          <SectionHeading eyebrow="Agendamento" title="Reserve seu horÃ¡rio" description="Escolha procedimento, profissional e horÃ¡rio. A disponibilidade Ã© validada com a agenda real da clínica." />
+          <SectionHeading eyebrow="Agendamento" title="Reserve seu horário" description="Escolha procedimento, profissional e horário. A disponibilidade é validada com a agenda real da clínica." />
           <div className="mt-8 space-y-4 text-sm text-neutral-700">
             <p className="flex gap-3"><Clock size={18} className="text-[var(--clinic-primary)]" /> Atendimento de {schedule.inicio || "08:00"} às {schedule.fim || "18:00"}, conforme disponibilidade.</p>
             <p className="flex gap-3"><CreditCard size={18} className="text-[var(--clinic-primary)]" /> Quando houver sinal, você será direcionado para um checkout seguro.</p>
@@ -461,7 +462,7 @@ export default async function PublicClinicPage({ params, searchParams }) {
             ) : null}
             <h3 className="mt-5 text-xl font-semibold">{brandName}</h3>
             <p className="mt-3 max-w-sm text-sm leading-7 text-white/65">{professionalName}</p>
-            <p className="mt-1 text-sm text-white/55">{site.eyebrow || "EstÃ©tica premium e atendimento personalizado"}</p>
+            <p className="mt-1 text-sm text-white/55">{site.eyebrow || "Estética premium e atendimento personalizado"}</p>
           </div>
           <div>
             <h4 className="font-semibold">Links rápidos</h4>
@@ -474,7 +475,7 @@ export default async function PublicClinicPage({ params, searchParams }) {
               <a href="#localizacao">Localização</a>
               <a href="/termos">Termos de uso</a>
               <a href="/privacidade">Privacidade</a>
-              <a href="/login-cliente">Área da clí­nica</a>
+              <a href="/login-cliente">Área da clínica</a>
             </div>
           </div>
           <div>
@@ -490,7 +491,7 @@ export default async function PublicClinicPage({ params, searchParams }) {
           </div>
         </div>
         <div className="mx-auto mt-12 max-w-7xl border-t border-white/10 pt-8 text-center text-xs text-white/50">
-          Â© {year} {brandName}. Todos os direitos reservados.
+          © {year} {brandName}. Todos os direitos reservados.
         </div>
       </footer>
 
@@ -499,6 +500,8 @@ export default async function PublicClinicPage({ params, searchParams }) {
           <MessageCircle size={27} />
         </a>
       ) : null}
+
+      <PublicLeadForm slug={clinic.slug} query={query} />
     </main>
   );
 }
