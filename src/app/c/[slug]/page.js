@@ -1,5 +1,5 @@
 ﻿import { Fragment } from "react";
-import { Camera, CheckCircle2, Clock, CreditCard, MapPin, MessageCircle, Quote, ShieldCheck, Sparkles, Star } from "lucide-react";
+import { CheckCircle2, Clock, CreditCard, MapPin, Menu, MessageCircle, Quote, ShieldCheck, Sparkles, Star } from "lucide-react";
 import { notFound } from "next/navigation";
 import { getGooglePlaceReviews } from "@/lib/google/places";
 import { supabaseAdmin } from "@/lib/supabase/admin";
@@ -119,6 +119,16 @@ function fallbackImage(label, dark = false) {
   const bg = dark ? "15120f" : "f5eee8";
   const fg = dark ? "ffffff" : "7a6258";
   return `https://placehold.co/1200x1500/${bg}/${fg}?text=${encodeURIComponent(label)}`;
+}
+
+function InstagramMark({ size = 18 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect x="3" y="3" width="18" height="18" rx="5" stroke="currentColor" strokeWidth="2" />
+      <circle cx="12" cy="12" r="4" stroke="currentColor" strokeWidth="2" />
+      <circle cx="17.5" cy="6.5" r="1.3" fill="currentColor" />
+    </svg>
+  );
 }
 
 function renderFormattedText(line) {
@@ -299,6 +309,20 @@ export default async function PublicClinicPage({ params, searchParams }) {
           </nav>
           <div className="flex items-center gap-2">
             <a href="/login-cliente" className="hidden rounded-full border border-white/20 px-4 py-2 text-xs font-bold text-white/60 transition hover:bg-white/10 hover:text-white sm:inline-flex">Área da clínica</a>
+            <details className="group relative lg:hidden">
+              <summary className="flex h-11 w-11 cursor-pointer list-none items-center justify-center rounded-full border border-white/16 bg-white/8 text-white transition hover:bg-white/12 [&::-webkit-details-marker]:hidden">
+                <Menu size={19} />
+                <span className="sr-only">Abrir menu</span>
+              </summary>
+              <div className="absolute right-0 top-13 z-[90] w-56 overflow-hidden rounded-2xl border border-white/12 bg-[#17130f]/95 p-2 text-sm font-bold text-white shadow-[0_24px_70px_rgba(0,0,0,0.34)]">
+                <a href="#sobre" className="block rounded-xl px-4 py-3 hover:bg-white/8">Sobre</a>
+                <a href="#servicos" className="block rounded-xl px-4 py-3 hover:bg-white/8">Serviços</a>
+                <a href="#depoimentos" className="block rounded-xl px-4 py-3 hover:bg-white/8">Depoimentos</a>
+                <a href="#localizacao" className="block rounded-xl px-4 py-3 hover:bg-white/8">Localização</a>
+                <a href="popup" className="block rounded-xl px-4 py-3 hover:bg-white/8">Quero saber mais</a>
+                <a href="/login-cliente" className="mt-1 block rounded-xl border border-white/12 bg-white/8 px-4 py-3 text-white/85">Área da clínica</a>
+              </div>
+            </details>
             <a href="#agendar" className="rounded-full bg-white px-5 py-2.5 text-sm font-bold text-[#17130f]">Agendar</a>
           </div>
         </div>
@@ -495,7 +519,7 @@ export default async function PublicClinicPage({ params, searchParams }) {
               {address ? <p className="flex gap-3"><MapPin size={18} className="mt-0.5 shrink-0" /> {address}</p> : null}
               {clinic.telefone ? <p className="flex gap-3"><MessageCircle size={18} className="mt-0.5 shrink-0" /> {clinic.telefone}</p> : null}
               <div className="flex gap-3 pt-2">
-                {site.instagram_url ? <a href={site.instagram_url} target="_blank" className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10"><Camera size={18} /></a> : null}
+                {site.instagram_url ? <a href={site.instagram_url} target="_blank" aria-label="Instagram" title="Instagram" className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 transition hover:bg-white/16"><InstagramMark size={18} /></a> : null}
                 {whatsapp ? <a href={`https://wa.me/55${whatsapp}`} target="_blank" className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10"><MessageCircle size={18} /></a> : null}
               </div>
             </div>
