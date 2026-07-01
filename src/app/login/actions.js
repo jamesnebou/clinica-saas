@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { ensureDemoAccountAndReset, isDemoLoginEmail, isDemoPassword, resetDemoClinicData } from "@/lib/demo/demo-account";
 import { isInternalAdminEmail } from "@/lib/saas/plans";
 
 function safeNext(value, fallback) {
@@ -20,11 +21,20 @@ export async function signInAction(_prevState, formData) {
     return { ok: false, message: "Informe e-mail e senha." };
   }
 
+  if (isDemoLoginEmail(email) && isDemoPassword(password)) {
+    try {
+      await ensureDemoAccountAndReset();
+    } catch (error) {
+      console.error("Erro ao preparar conta demo:", error);
+      return { ok: false, message: "Não foi possível preparar a demonstração agora. Tente novamente em alguns instantes." };
+    }
+  }
+
   const supabase = await createClient();
   const { error } = await supabase.auth.signInWithPassword({ email, password });
 
   if (error) {
-    return { ok: false, message: "E-mail ou senha invalidos." };
+    return { ok: false, message: "E-mail ou senha inválidos." };
   }
 
   if (mode === "admin" && !isInternalAdminEmail(email)) {
@@ -37,6 +47,19 @@ export async function signInAction(_prevState, formData) {
 
 export async function signOutAction(formData) {
   const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
   await supabase.auth.signOut();
+
+  if (isDemoLoginEmail(user?.email)) {
+    try {
+      await resetDemoClinicData();
+    } catch (error) {
+      console.error("Erro ao restaurar conta demo no logout:", error);
+    }
+  }
+
   redirect(safeNext(formData?.get?.("next"), "/login-cliente"));
 }

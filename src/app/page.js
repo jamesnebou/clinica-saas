@@ -16,7 +16,6 @@ import {
   ShieldCheck,
   UsersRound,
   WalletCards,
-  Zap,
 } from "lucide-react";
 
 const modules = [
@@ -149,9 +148,9 @@ export default function Home() {
               NexaWi Clínicas reúne agenda, CRM, prontuário, financeiro, site premium e checkout de sinal em uma operação simples para clínicas de estética.
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-              <a href="#demo" className="inline-flex h-13 items-center justify-center gap-2 rounded-full bg-[#071e1a] px-6 text-sm font-black text-white shadow-[0_22px_56px_rgba(7,30,26,0.26)]">
-                Solicitar demonstração <ArrowRight size={17} />
-              </a>
+              <Link href="/demo" className="inline-flex h-13 items-center justify-center gap-2 rounded-full bg-[#071e1a] px-6 text-sm font-black text-white shadow-[0_22px_56px_rgba(7,30,26,0.26)]">
+                Testar demo livre <ArrowRight size={17} />
+              </Link>
               <a href="#produto" className="inline-flex h-13 items-center justify-center rounded-full border border-black/10 bg-white/70 px-6 text-sm font-black text-neutral-800 shadow-sm backdrop-blur">
                 Ver como funciona
               </a>
@@ -267,17 +266,30 @@ export default function Home() {
             ))}
           </div>
         </div>
-        <div className="rounded-[2rem] border border-neutral-200 bg-white p-4 shadow-[0_30px_90px_rgba(20,18,15,0.13)]">
-          <div className="overflow-hidden rounded-[1.5rem] bg-[#17130f] text-white">
-            <div className="flex items-center justify-between border-b border-white/10 px-5 py-4">
-              <span className="font-black">studioingrid.com.br</span>
-              <span className="rounded-full bg-pink-300 px-3 py-1 text-xs font-black text-[#17130f]">Online</span>
-            </div>
-            <div className="grid min-h-[420px] place-items-center bg-[radial-gradient(circle_at_50%_20%,rgba(244,114,182,0.22),transparent_22rem),linear-gradient(145deg,#17130f,#0b0908)] p-8 text-center">
-              <Zap size={48} className="mx-auto text-[#ed7009]" />
-              <h3 className="mt-6 text-4xl font-black">Beleza, cuidado e tecnologia</h3>
-              <p className="mx-auto mt-4 max-w-sm text-sm leading-7 text-white/68">Página da clínica com identidade visual, procedimentos e agendamento conectado.</p>
-              <span className="mt-7 rounded-full bg-pink-300 px-6 py-3 text-sm font-black text-[#17130f]">Agendar consulta</span>
+        <div className="relative">
+          <div className="absolute -inset-6 rounded-[2.5rem] bg-[radial-gradient(circle_at_70%_20%,rgba(237,112,9,0.22),transparent_18rem)] blur-2xl" />
+          <div className="relative">
+            <Image
+              src="/mockup-notebook.png"
+              alt="Site da clínica dentro de um notebook"
+              width={1400}
+              height={900}
+              className="pointer-events-none relative z-20 h-auto w-full drop-shadow-[0_34px_70px_rgba(20,18,15,0.22)]"
+            />
+            <div className="absolute left-[13%] top-[20%] z-10 h-[50%] w-[74%] overflow-hidden rounded-[0.65rem] bg-[#ffffff]">
+              <div className="h-full w-full overflow-auto">
+                <iframe
+                  src="/c/studio-ingrid-silva"
+                  title="Site público demonstrativo da clínica"
+                  className="origin-top-left border-0"
+                  style={{
+                    width: "1280px",
+                    height: "920px",
+                    transform: "scale(0.33)",
+                  }}
+                  loading="lazy"
+                />
+              </div>
             </div>
           </div>
         </div>
@@ -330,8 +342,8 @@ export default function Home() {
               Use a demo para mostrar agenda, cliente, prontuário, CRM, financeiro, assinatura e site público da clínica em um roteiro comercial claro.
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-              <Link href="/login-cliente" className="inline-flex h-13 items-center justify-center gap-2 rounded-full bg-white px-6 text-sm font-black text-[#071e1a]">
-                Acessar demonstração <ArrowRight size={17} />
+              <Link href="/demo" className="inline-flex h-13 items-center justify-center gap-2 rounded-full bg-white px-6 text-sm font-black text-[#071e1a]">
+                Testar demo livre <ArrowRight size={17} />
               </Link>
               <a href="https://wa.me/5577999911911" target="_blank" className="inline-flex h-13 items-center justify-center gap-2 rounded-full border border-white/16 px-6 text-sm font-black text-white">
                 Falar com a NexaWi <MessageCircle size={17} />
