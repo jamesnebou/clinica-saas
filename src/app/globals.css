@@ -321,6 +321,7 @@ textarea {
 
 .public-site-header {
   position: relative;
+  z-index: 9998;
   isolation: isolate;
   overflow: visible;
   transform: translate3d(0, 0, 0);

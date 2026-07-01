@@ -314,7 +314,7 @@ export default async function PublicClinicPage({ params, searchParams }) {
                 <Menu size={19} />
                 <span className="sr-only">Abrir menu</span>
               </summary>
-              <div className="absolute right-0 top-full z-[9999] mt-3 w-60 overflow-hidden rounded-2xl border border-white/12 bg-[#17130f]/98 p-2 text-sm font-bold text-white shadow-[0_24px_70px_rgba(0,0,0,0.44)]">
+              <div className="fixed left-4 right-4 top-[5.75rem] z-[99999] overflow-hidden rounded-2xl border border-white/12 bg-[#17130f]/98 p-2 text-sm font-bold text-white shadow-[0_24px_70px_rgba(0,0,0,0.44)]">
                 <a href="#sobre" className="block rounded-xl px-4 py-3 hover:bg-white/8">Sobre</a>
                 <a href="#servicos" className="block rounded-xl px-4 py-3 hover:bg-white/8">Serviços</a>
                 <a href="#depoimentos" className="block rounded-xl px-4 py-3 hover:bg-white/8">Depoimentos</a>
