@@ -309,12 +309,12 @@ export default async function PublicClinicPage({ params, searchParams }) {
           </nav>
           <div className="flex items-center gap-2">
             <a href="/login-cliente" className="hidden rounded-full border border-white/20 px-4 py-2 text-xs font-bold text-white/60 transition hover:bg-white/10 hover:text-white sm:inline-flex">Área da clínica</a>
-            <details className="group relative lg:hidden">
+            <details className="public-mobile-menu group lg:hidden">
               <summary className="flex h-11 w-11 cursor-pointer list-none items-center justify-center rounded-full border border-white/16 bg-white/8 text-white transition hover:bg-white/12 [&::-webkit-details-marker]:hidden">
                 <Menu size={19} />
                 <span className="sr-only">Abrir menu</span>
               </summary>
-              <div className="fixed left-4 right-4 top-[5.75rem] z-[99999] overflow-hidden rounded-2xl border border-white/12 bg-[#17130f]/98 p-2 text-sm font-bold text-white shadow-[0_24px_70px_rgba(0,0,0,0.44)]">
+              <div className="public-mobile-menu-panel overflow-hidden rounded-2xl border border-white/12 bg-[#17130f]/98 p-2 text-sm font-bold text-white shadow-[0_24px_70px_rgba(0,0,0,0.44)]">
                 <a href="#sobre" className="block rounded-xl px-4 py-3 hover:bg-white/8">Sobre</a>
                 <a href="#servicos" className="block rounded-xl px-4 py-3 hover:bg-white/8">Serviços</a>
                 <a href="#depoimentos" className="block rounded-xl px-4 py-3 hover:bg-white/8">Depoimentos</a>
