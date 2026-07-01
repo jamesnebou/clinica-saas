@@ -342,7 +342,7 @@ textarea {
 
 .public-floating-menu {
   position: fixed;
-  top: max(1.15rem, calc(env(safe-area-inset-top) + 0.95rem));
+  top: max(1.4rem, calc(env(safe-area-inset-top) + 1.2rem));
   right: 1rem;
   z-index: 2147483000;
   pointer-events: auto;
@@ -378,7 +378,7 @@ textarea {
 
 .public-floating-menu-panel {
   position: fixed;
-  top: max(5.75rem, calc(env(safe-area-inset-top) + 5.5rem));
+  top: max(6.1rem, calc(env(safe-area-inset-top) + 5rem));
   left: 1rem;
   right: 1rem;
   z-index: 2147482999;
