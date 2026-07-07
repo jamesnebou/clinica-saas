@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireInternalAdmin } from "@/lib/auth/session";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import { uploadMarketingHomeImage } from "@/lib/supabase/storage";
+import { MARKETING_HOME_CONFIG_KEY, normalizeMarketingHomeConfig } from "@/lib/marketing/home-config";
 
 function text(formData, key) {
   return String(formData.get(key) || "").trim();
@@ -85,9 +87,9 @@ async function upsertAuthUserWithPassword({ email, password, nome }) {
 export async function createClinicWithOwnerAction(formData) {
   await requireInternalAdmin();
 
-  const nome = requireValue(text(formData, "nome"), "Informe o nome da clinica.");
+  const nome = requireValue(text(formData, "nome"), "Informe o nome da clínica.");
   const ownerEmail = normalizeEmail(requireValue(text(formData, "owner_email"), "Informe o e-mail do owner."));
-  const ownerPassword = requireValue(text(formData, "owner_password"), "Informe uma senha temporaria para o owner.");
+  const ownerPassword = requireValue(text(formData, "owner_password"), "Informe uma senha temporária para o owner.");
   const ownerName = nullableText(formData, "owner_nome") || ownerEmail;
   const slug = slugify(text(formData, "slug") || nome) || `clinica-${Date.now()}`;
 
@@ -134,14 +136,17 @@ export async function createClinicWithOwnerAction(formData) {
   if (membershipError) throw membershipError;
 
   revalidatePath("/admin");
-  redirect("/admin?ok=clinica");
+  revalidatePath("/dashboard-admin");
+  revalidatePath("/dashboard-admin/clinicas");
+  revalidatePath("/dashboard-admin/nova-alerta");
+  redirect("/dashboard-admin/clinicas?ok=clinica");
 }
 
 export async function updateClinicCommercialAction(formData) {
   await requireInternalAdmin();
-  const id = requireValue(text(formData, "clinica_id"), "Clinica nao informada.");
-  const status = requireValue(text(formData, "status"), "Status nao informado.");
-  const plano = requireValue(text(formData, "plano"), "Plano nao informado.");
+  const id = requireValue(text(formData, "clinica_id"), "Clínica não informada.");
+  const status = requireValue(text(formData, "status"), "Status não informado.");
+  const plano = requireValue(text(formData, "plano"), "Plano não informado.");
   const trialEndsAt = nullableText(formData, "trial_ends_at");
   const proximaCobranca = nullableText(formData, "proxima_cobranca_em");
   const bloqueioMotivo = nullableText(formData, "bloqueio_motivo");
@@ -178,6 +183,9 @@ export async function updateClinicCommercialAction(formData) {
 
   if (error) throw error;
   revalidatePath("/admin");
+  revalidatePath("/dashboard-admin");
+  revalidatePath("/dashboard-admin/clinicas");
+  revalidatePath("/dashboard-admin/alertas");
   revalidatePath("/dashboard");
 }
 
@@ -201,4 +209,108 @@ export async function upsertSystemPlanAction(formData) {
   const { error } = await supabaseAdmin.from("planos_sistema").upsert(payload, { onConflict: "slug" });
   if (error) throw error;
   revalidatePath("/admin");
+  revalidatePath("/dashboard-admin");
+  revalidatePath("/dashboard-admin/planos");
+}
+
+export async function updateInternalAdminCredentialsAction(formData) {
+  const user = await requireInternalAdmin();
+  const email = normalizeEmail(text(formData, "new_email"));
+  const password = text(formData, "password");
+  const passwordConfirm = text(formData, "password_confirm");
+  const payload = {};
+
+  if (email && email !== normalizeEmail(user.email)) {
+    payload.email = email;
+    payload.email_confirm = true;
+  }
+
+  if (password) {
+    if (password.length < 8) {
+      throw new Error("A senha precisa ter pelo menos 8 caracteres.");
+    }
+
+    if (password !== passwordConfirm) {
+      throw new Error("A confirmação da senha não confere.");
+    }
+
+    payload.password = password;
+  }
+
+  if (!Object.keys(payload).length) {
+    throw new Error("Informe um novo e-mail ou uma nova senha.");
+  }
+
+  const { error } = await supabaseAdmin.auth.admin.updateUserById(user.id, payload);
+  if (error) throw error;
+
+  const { error: roleError } = await supabaseAdmin.auth.admin.updateUserById(user.id, {
+    app_metadata: {
+      ...(user.app_metadata || {}),
+      internal_admin: true,
+      role: user.app_metadata?.role || "internal_admin",
+    },
+  });
+  if (roleError) throw roleError;
+
+  revalidatePath("/admin/configuracoes");
+  revalidatePath("/dashboard-admin/configuracoes");
+  redirect("/dashboard-admin/configuracoes?ok=credenciais");
+}
+
+
+
+
+function textareaList(value) {
+  return String(value || "")
+    .split(/\r?\n/)
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .slice(0, 6);
+}
+
+function metricFromForm(formData, index) {
+  return {
+    label: text(formData, "hero_metric_" + index + "_label"),
+    value: text(formData, "hero_metric_" + index + "_value"),
+  };
+}
+
+export async function updateMarketingHomeHeroAction(formData) {
+  await requireInternalAdmin();
+
+  const uploadedPreviewImage = await uploadMarketingHomeImage({ file: formData.get("hero_preview_image_file") });
+
+  const payload = normalizeMarketingHomeConfig({
+    hero: {
+      eyebrow: text(formData, "hero_eyebrow"),
+      title: text(formData, "hero_title"),
+      subtitle: text(formData, "hero_subtitle"),
+      primaryCtaLabel: text(formData, "hero_primary_cta_label"),
+      secondaryCtaLabel: text(formData, "hero_secondary_cta_label"),
+      previewEyebrow: text(formData, "hero_preview_eyebrow"),
+      previewTitle: text(formData, "hero_preview_title"),
+      previewStatus: text(formData, "hero_preview_status"),
+      previewImageUrl: uploadedPreviewImage?.publicUrl || text(formData, "hero_preview_image_url"),
+      previewImageAlt: text(formData, "hero_preview_image_alt"),
+      metrics: [metricFromForm(formData, 1), metricFromForm(formData, 2), metricFromForm(formData, 3)],
+      topics: textareaList(formData.get("hero_topics")),
+    },
+  });
+
+  const { error } = await supabaseAdmin.from("app_configuracoes").upsert(
+    {
+      chave: MARKETING_HOME_CONFIG_KEY,
+      valor: payload,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "chave" }
+  );
+
+  if (error) throw error;
+
+  revalidatePath("/");
+  revalidatePath("/admin/configuracoes");
+  revalidatePath("/dashboard-admin/configuracoes");
+  redirect("/dashboard-admin/configuracoes?ok=home");
 }

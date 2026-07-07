@@ -1,0 +1,67 @@
+"use client";
+
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import {
+  AlertTriangle,
+  BarChart3,
+  Building2,
+  CreditCard,
+  LineChart,
+  MousePointerClick,
+  Settings,
+  UserCheck,
+} from "lucide-react";
+
+const adminNavItems = [
+  { href: "/dashboard-admin", label: "Visão geral", icon: LineChart },
+  { href: "/dashboard-admin/metricas", label: "Métricas", icon: BarChart3 },
+  { href: "/dashboard-admin/funil", label: "Funil comercial", icon: MousePointerClick },
+  { href: "/dashboard-admin/clinicas", label: "Clínicas", icon: Building2 },
+  { href: "/dashboard-admin/alertas", label: "Alertas", icon: AlertTriangle },
+  { href: "/dashboard-admin/nova-alerta", label: "Nova clínica", icon: UserCheck },
+  { href: "/dashboard-admin/planos", label: "Planos", icon: CreditCard },
+  { href: "/dashboard-admin/configuracoes", label: "Configurações", icon: Settings },
+];
+
+function isActivePath(pathname, href) {
+  if (href === "/dashboard-admin") return pathname === href;
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
+
+export function AdminSidebarNav() {
+  const pathname = usePathname();
+
+  return (
+    <nav className="flex-1 space-y-1 px-4 py-5">
+      {adminNavItems.map((item) => {
+        const Icon = item.icon;
+        const active = isActivePath(pathname, item.href);
+
+        return (
+          <Link
+            key={item.href}
+            href={item.href}
+            aria-current={active ? "page" : undefined}
+            className={[
+              "group relative flex items-center gap-3 overflow-hidden rounded-2xl px-4 py-3 text-sm font-bold transition",
+              active ? "bg-white/[0.09] text-white shadow-[0_18px_45px_rgba(237,112,9,0.18)]" : "text-white/70 hover:bg-white/10 hover:text-white",
+            ].join(" ")}
+          >
+            {active ? (
+              <>
+                <span className="absolute inset-y-2 left-0 w-1 rounded-r-full bg-[#ed7009] shadow-[0_0_22px_rgba(237,112,9,0.85)]" />
+                <span className="absolute inset-0 bg-[radial-gradient(circle_at_12%_50%,rgba(237,112,9,0.25),transparent_13rem)]" />
+                <span className="absolute inset-x-4 bottom-0 h-px bg-gradient-to-r from-transparent via-[#ed7009]/70 to-transparent" />
+              </>
+            ) : null}
+            <span className={`relative flex h-8 w-8 items-center justify-center rounded-xl transition ${active ? "bg-[#ed7009] text-white shadow-[0_0_26px_rgba(237,112,9,0.55)]" : "bg-white/[0.06] text-orange-300 group-hover:bg-white/[0.10]"}`}>
+              <Icon size={17} />
+            </span>
+            <span className="relative">{item.label}</span>
+          </Link>
+        );
+      })}
+    </nav>
+  );
+}

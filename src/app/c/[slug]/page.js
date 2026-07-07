@@ -203,7 +203,7 @@ export async function generateMetadata({ params }) {
   const site = data?.metadata?.site_publico || {};
   return {
     title: `${site.titulo_hero || data?.metadata?.brand_name || data?.nome || "Clí­nica"} | Agendamento`,
-    description: site.subtitulo_hero || "ConheÃ§a os procedimentos e agende seu atendimento.",
+    description: site.subtitulo_hero || "Conheça os procedimentos e agende seu atendimento.",
     icons: site.favicon_url ? { icon: [{ url: site.favicon_url }], shortcut: [{ url: site.favicon_url }], apple: [{ url: site.favicon_url }] } : undefined,
   };
 }

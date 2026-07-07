@@ -159,6 +159,13 @@ textarea {
   color: #111110;
 }
 
+.premium-shell .text-white h1,
+.premium-shell .text-white h2,
+.premium-shell .text-white h3,
+.premium-shell .text-white strong {
+  color: #ffffff;
+}
+
 .premium-shell p,
 .premium-shell span {
   text-wrap: pretty;

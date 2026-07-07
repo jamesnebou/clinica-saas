@@ -3,6 +3,14 @@ import { createClient } from "@/lib/supabase/server";
 import { isInternalAdminEmail } from "@/lib/saas/plans";
 import { canAccessSection, getCurrentMembership } from "@/lib/auth/permissions";
 
+export function isInternalAdminUser(user) {
+  return (
+    isInternalAdminEmail(user?.email) ||
+    user?.app_metadata?.internal_admin === true ||
+    user?.app_metadata?.role === "internal_admin"
+  );
+}
+
 export async function getCurrentUser() {
   const supabase = await createClient();
   const { data, error } = await supabase.auth.getUser();
@@ -46,7 +54,7 @@ export async function getUserClinics() {
   const memberships = data || [];
   const activeClinic = memberships[0]?.clinicas || null;
 
-  return { user, memberships, activeClinic, isInternalAdmin: isInternalAdminEmail(user.email) };
+  return { user, memberships, activeClinic, isInternalAdmin: isInternalAdminUser(user) };
 }
 
 export async function requireClinic() {
@@ -73,9 +81,9 @@ export async function requireClinicSection(section) {
 }
 
 export async function requireInternalAdmin() {
-  const user = await requireUser("/login?next=/admin");
+  const user = await requireUser("/login?next=/dashboard-admin");
 
-  if (!isInternalAdminEmail(user.email)) {
+  if (!isInternalAdminUser(user)) {
     const supabase = await createClient();
     await supabase.auth.signOut();
     redirect("/login?erro=admin");

@@ -8,6 +8,7 @@ const MAX_CLIENT_PHOTO_BYTES = 10 * 1024 * 1024;
 const MAX_CLINIC_LOGO_BYTES = 30 * 1024 * 1024;
 const MAX_CLINIC_SITE_IMAGE_BYTES = 50 * 1024 * 1024;
 const MAX_PROCEDURE_IMAGE_BYTES = 10 * 1024 * 1024;
+const MAX_MARKETING_HOME_IMAGE_BYTES = 20 * 1024 * 1024;
 
 function sanitizeFileName(name = "foto") {
   return String(name || "foto")
@@ -107,6 +108,43 @@ export async function uploadClinicSiteImage({ clinicaId, file, slot }) {
   const extension = file.name?.includes(".") ? file.name.split(".").pop() : "jpg";
   const filename = `${Date.now()}-${sanitizeFileName(file.name || `${safeSlot}.${extension}`)}`;
   const path = `${clinicaId}/${safeSlot}/${filename}`;
+  const buffer = Buffer.from(await file.arrayBuffer());
+
+  const { error } = await supabaseAdmin.storage
+    .from(CLINIC_SITE_IMAGES_BUCKET)
+    .upload(path, buffer, {
+      contentType: file.type || "image/jpeg",
+      upsert: true,
+    });
+
+  if (error) throw error;
+
+  const { data } = supabaseAdmin.storage.from(CLINIC_SITE_IMAGES_BUCKET).getPublicUrl(path);
+
+  return {
+    path,
+    publicUrl: data?.publicUrl || "",
+    mimeType: file.type || null,
+    size: file.size || null,
+  };
+}
+
+export async function uploadMarketingHomeImage({ file }) {
+  if (!file || typeof file.arrayBuffer !== "function" || file.size <= 0) {
+    return null;
+  }
+
+  if (!["image/jpeg", "image/png"].includes(file.type)) {
+    throw new Error("Envie a imagem da home em PNG ou JPEG.");
+  }
+
+  if (file.size > MAX_MARKETING_HOME_IMAGE_BYTES) {
+    throw new Error("A imagem da home precisa ter no máximo 20 MB.");
+  }
+
+  const extension = file.name?.includes(".") ? file.name.split(".").pop() : "jpg";
+  const filename = Date.now() + "-" + sanitizeFileName(file.name || "home." + extension);
+  const path = "marketing/home/" + filename;
   const buffer = Buffer.from(await file.arrayBuffer());
 
   const { error } = await supabaseAdmin.storage

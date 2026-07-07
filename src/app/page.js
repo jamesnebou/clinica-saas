@@ -18,6 +18,7 @@ import {
   UsersRound,
   WalletCards,
 } from "lucide-react";
+import { getMarketingHomeConfig } from "@/lib/marketing/home-config";
 
 const modules = [
   {
@@ -60,12 +61,6 @@ const workflow = [
   "A clínica acompanha financeiro, prontuário e retorno",
 ];
 
-const outcomes = [
-  "Menos planilhas para recepção",
-  "Mais controle sobre retornos",
-  "Sinal online no mesmo fluxo",
-  "Prontuário pronto para evolução",
-];
 
 const plans = [
   {
@@ -145,22 +140,15 @@ const faqs = [
 
 function LogoMark() {
   return (
-    <Image
-      src="/nexawi-clinicas.png"
-      alt="NexaWi Clínicas"
-      width={180}
-      height={48}
-      priority
-      className="h-10 w-auto object-contain"
-    />
+    <Image src="/nexawi-clinicas.png" alt="NexaWi Clínicas" width={180} height={48} priority className="h-10 w-auto object-contain" />
   );
 }
 
 function SectionTitle({ eyebrow, title, description, align = "left" }) {
   return (
     <div className={align === "center" ? "mx-auto max-w-3xl text-center" : "max-w-3xl"}>
-      <p className="text-xs font-black uppercase tracking-[0.32em] text-[#ed7009]">{eyebrow}</p>
-      <h2 className="mt-3 text-3xl font-black leading-tight text-[#081512] sm:text-5xl">{title}</h2>
+      <p className="text-xs font-black uppercase text-[#ed7009]">{eyebrow}</p>
+      <h2 className="mt-3 text-3xl font-black leading-tight text-[#1c1c1c] sm:text-5xl">{title}</h2>
       {description ? <p className="mt-4 text-base leading-8 text-neutral-600">{description}</p> : null}
     </div>
   );
@@ -171,15 +159,17 @@ export const metadata = {
   description: "Sistema SaaS para clínicas de estética com agenda, site de vendas, CRM, prontuário, financeiro e checkout online.",
 };
 
-export default function Home() {
+export default async function Home() {
+  const { hero } = await getMarketingHomeConfig();
+
   return (
     <main className="min-h-screen overflow-hidden bg-[#f4f2ed] text-[#09110f]">
-      <header className="sticky top-0 z-50 border-b border-black/10 bg-[#f4f2ed]/88 backdrop-blur-xl">
+      <header className="sticky top-0 z-50 border-b border-white/10 bg-[#1c1c1c]/95 text-white shadow-[0_18px_60px_rgba(28,28,28,0.22)] backdrop-blur-xl">
         <div className="mx-auto flex h-[72px] max-w-7xl items-center justify-between px-5 sm:px-8 lg:px-10">
           <Link href="/" className="flex items-center gap-3">
             <LogoMark />
           </Link>
-          <nav className="hidden items-center gap-7 text-sm font-bold text-neutral-600 lg:flex">
+          <nav className="hidden items-center gap-7 text-sm font-bold text-white/72 lg:flex">
             <a href="#produto">Produto</a>
             <a href="#site">Site da clínica</a>
             <a href="#planos">Planos</a>
@@ -188,10 +178,10 @@ export default function Home() {
             <a href="#demo">Demonstração</a>
           </nav>
           <div className="flex items-center gap-2">
-            <Link href="/login-cliente" className="hidden rounded-full border border-black/10 bg-white/60 px-4 py-2.5 text-sm font-bold text-neutral-700 shadow-sm sm:inline-flex">
+            <Link href="/login-cliente" className="hidden rounded-full border border-white/15 bg-white/8 px-4 py-2.5 text-sm font-bold text-white/78 shadow-sm transition hover:bg-white/14 hover:text-white sm:inline-flex">
               Entrar
             </Link>
-            <a href="#demo" className="inline-flex items-center gap-2 rounded-full bg-[#071e1a] px-5 py-3 text-sm font-black text-white shadow-[0_18px_42px_rgba(7,30,26,0.24)]">
+            <a href="#demo" className="inline-flex items-center gap-2 rounded-full bg-[#1c1c1c] px-5 py-3 text-sm font-black text-white shadow-[0_18px_42px_rgba(28,28,28,0.24)]">
               Quero vender mais <ArrowRight size={16} />
             </a>
           </div>
@@ -200,27 +190,27 @@ export default function Home() {
 
       <section className="relative">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_8%_8%,rgba(237,112,9,0.22),transparent_30rem),radial-gradient(circle_at_92%_0%,rgba(219,39,119,0.14),transparent_28rem)]" />
-        <div className="relative mx-auto grid min-h-[calc(100vh-72px)] max-w-7xl gap-10 px-5 py-12 sm:px-8 lg:grid-cols-[0.93fr_1.07fr] lg:px-10 lg:py-16">
+        <div className="relative mx-auto grid min-h-[calc(100vh-72px)] max-w-7xl items-center gap-10 px-5 py-14 sm:px-8 lg:grid-cols-[0.9fr_1.1fr] lg:px-10 lg:py-20">
           <div className="flex flex-col justify-center">
-            <div className="inline-flex w-fit items-center gap-2 rounded-full border border-[#ed7009]/20 bg-white/70 px-4 py-2 text-xs font-black uppercase text-[#ed7009] shadow-sm backdrop-blur">
-              <BadgeCheck size={15} /> Gestão, vendas e atendimento para estética
+            <div className="inline-flex max-w-full flex-wrap items-center gap-2 rounded-full border border-[#ed7009]/20 bg-white/76 px-4 py-2 text-xs font-black uppercase leading-5 text-[#ed7009] shadow-sm backdrop-blur">
+              <BadgeCheck size={15} /> {hero.eyebrow}
             </div>
-            <h1 className="mt-7 max-w-4xl text-5xl font-black leading-[0.98] text-[#07110f] sm:text-6xl lg:text-7xl">
-              A clínica organizada para vender antes, atender melhor e voltar a faturar depois.
+            <h1 className="mt-7 max-w-3xl text-4xl font-black leading-[1.03] text-[#1c1c1c] sm:text-5xl lg:text-6xl">
+              {hero.title}
             </h1>
             <p className="mt-6 max-w-2xl text-lg leading-8 text-neutral-600">
-              NexaWi Clínicas reúne agenda, CRM, prontuário, financeiro, site premium e checkout de sinal em uma operação simples para clínicas de estética.
+              {hero.subtitle}
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-              <Link href="/demo" className="inline-flex h-13 items-center justify-center gap-2 rounded-full bg-[#071e1a] px-6 text-sm font-black text-white shadow-[0_22px_56px_rgba(7,30,26,0.26)]">
-                Testar demo livre <ArrowRight size={17} />
-              </Link>
+              <a href="#demo" className="inline-flex h-13 items-center justify-center gap-2 rounded-full bg-[#1c1c1c] px-6 text-sm font-black text-white shadow-[0_22px_56px_rgba(28,28,28,0.26)]">
+                {hero.primaryCtaLabel} <ArrowRight size={17} />
+              </a>
               <a href="#produto" className="inline-flex h-13 items-center justify-center rounded-full border border-black/10 bg-white/70 px-6 text-sm font-black text-neutral-800 shadow-sm backdrop-blur">
-                Ver como funciona
+                {hero.secondaryCtaLabel}
               </a>
             </div>
             <div className="mt-9 grid gap-3 text-sm font-semibold text-neutral-700 sm:grid-cols-2">
-              {outcomes.map((item) => (
+              {hero.topics.map((item) => (
                 <div key={item} className="flex items-start gap-2">
                   <CheckCircle2 size={18} className="mt-0.5 shrink-0 text-[#ed7009]" />
                   <span>{item}</span>
@@ -229,33 +219,17 @@ export default function Home() {
             </div>
           </div>
 
-          <div className="flex items-center">
-            <div className="relative w-full">
+          <div className="flex items-center lg:justify-end">
+            <div className="relative w-full max-w-[650px]">
               <div className="absolute -inset-6 rounded-[2.5rem] bg-[radial-gradient(circle_at_80%_20%,rgba(237,112,9,0.25),transparent_18rem),radial-gradient(circle_at_10%_90%,rgba(244,114,182,0.20),transparent_18rem)] blur-2xl" />
-              <div className="relative overflow-hidden rounded-[2rem] border border-white/70 bg-white/72 p-3 shadow-[0_32px_100px_rgba(20,18,15,0.16)] backdrop-blur">
-                <div className="rounded-[1.5rem] bg-[#071e1a] p-4 text-white">
-                  <div className="flex items-center justify-between gap-4 border-b border-white/10 pb-4">
-                    <div>
-                      <p className="text-xs font-bold text-orange-200">Painel operacional</p>
-                      <h2 className="text-xl font-black">Clínica Bella Skin</h2>
-                    </div>
-                    <span className="rounded-full bg-[#ed7009] px-3 py-1 text-xs font-black text-white">Ativa</span>
-                  </div>
-                  <div className="grid gap-3 py-4 sm:grid-cols-3">
-                    {[
-                      ["Confirmados", "18"],
-                      ["Receita prevista", "R$ 4.680"],
-                      ["Leads novos", "12"],
-                    ].map(([label, value]) => (
-                      <div key={label} className="rounded-2xl bg-white/8 p-4">
-                        <p className="text-xs text-white/54">{label}</p>
-                        <p className="mt-2 text-2xl font-black">{value}</p>
-                      </div>
-                    ))}
-                  </div>
-                  <Image src="/clinic-dashboard-preview.png" alt="Prévia do dashboard NexaWi Clínicas" width={1200} height={900} priority className="h-auto w-full rounded-[1.15rem] border border-white/10" />
-                </div>
-              </div>
+              <Image
+                src={hero.previewImageUrl}
+                alt={hero.previewImageAlt}
+                width={1400}
+                height={1000}
+                priority
+                className="relative z-10 h-auto max-h-[560px] w-full object-contain object-center drop-shadow-[0_34px_70px_rgba(28,28,28,0.22)]"
+              />
             </div>
           </div>
         </div>
@@ -273,7 +247,7 @@ export default function Home() {
             {modules.map((module) => {
               const Icon = module.icon;
               return (
-                <article key={module.title} className="group rounded-[1.5rem] border border-neutral-200 bg-[#fbfaf7] p-6 shadow-sm transition hover:-translate-y-1 hover:shadow-[0_24px_70px_rgba(7,30,26,0.12)]">
+                <article key={module.title} className="group rounded-[1.5rem] border border-neutral-200 bg-[#fbfaf7] p-6 shadow-sm transition hover:-translate-y-1 hover:shadow-[0_24px_70px_rgba(28,28,28,0.12)]">
                   <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-orange-50 text-[#ed7009]">
                     <Icon size={23} />
                   </div>
@@ -286,11 +260,11 @@ export default function Home() {
         </div>
       </section>
 
-      <section className="relative bg-[#081512] px-5 py-20 text-white sm:px-8 lg:px-10">
+      <section className="relative bg-[#1c1c1c] px-5 py-20 text-white sm:px-8 lg:px-10">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_18%_20%,rgba(237,112,9,0.22),transparent_26rem),radial-gradient(circle_at_82%_18%,rgba(244,114,182,0.11),transparent_22rem)]" />
         <div className="relative mx-auto grid max-w-7xl gap-10 lg:grid-cols-[0.9fr_1.1fr] lg:items-center">
           <div>
-            <p className="text-xs font-black uppercase tracking-[0.32em] text-orange-300">Fluxo comercial</p>
+            <p className="text-xs font-black uppercase text-orange-300">Fluxo comercial</p>
             <h2 className="mt-3 text-4xl font-black leading-tight sm:text-5xl">Da primeira visita no site ao retorno recomendado.</h2>
             <p className="mt-5 text-base leading-8 text-white/68">
               O objetivo não é só cadastrar dados. É transformar interesse em agendamento, agendamento em pagamento, atendimento em histórico e histórico em retorno.
@@ -340,13 +314,17 @@ export default function Home() {
               height={900}
               className="pointer-events-none relative z-20 h-auto w-full drop-shadow-[0_34px_70px_rgba(20,18,15,0.22)]"
             />
-            <div className="absolute left-[13%] top-[20%] z-10 h-[50%] w-[74%] overflow-hidden rounded-[0.65rem] bg-white">
+            <div className="absolute left-[13%] top-[20%] z-10 h-[50%] w-[74%] overflow-hidden rounded-[0.65rem] bg-[#17130f]">
               <div className="h-full w-full overflow-auto">
                 <iframe
-                  src="/c/studio-ingrid-silva"
+                  src="/c/studio-ingrid-silva#servicos"
                   title="Site público demonstrativo da clínica"
                   className="origin-top-left border-0"
-                  style={{ width: "1280px", height: "920px", transform: "scale(0.33)" }}
+                  style={{
+                    width: "1280px",
+                    height: "920px",
+                    transform: "scale(0.33)",
+                  }}
                   loading="lazy"
                 />
               </div>
@@ -377,31 +355,20 @@ export default function Home() {
       </section>
 
       <section id="planos" className="mx-auto max-w-7xl px-5 py-20 sm:px-8 lg:px-10">
-        <SectionTitle
-          eyebrow="Planos"
-          title="Planos simples para começar, vender e escalar."
-          description="A clínica entra com uma estrutura pronta e você controla limites, trial, inadimplência e cobrança."
-          align="center"
-        />
+        <SectionTitle eyebrow="Planos" title="Planos simples para começar, vender e escalar." description="A clínica entra com uma estrutura pronta e você controla limites, trial, inadimplência e cobrança." align="center" />
         <div className="mt-12 grid gap-5 lg:grid-cols-3">
           {plans.map((plan) => (
-            <article
-              key={plan.name}
-              className={`rounded-[1.75rem] border p-6 shadow-sm ${plan.highlight ? "border-[#ed7009]/60 bg-[#071e1a] text-white shadow-[0_30px_90px_rgba(237,112,9,0.20)]" : "border-neutral-200 bg-white"}`}
-            >
+            <article key={plan.name} className={`rounded-[1.75rem] border p-6 shadow-sm ${plan.highlight ? "border-[#ed7009]/60 bg-[#1c1c1c] text-white shadow-[0_30px_90px_rgba(237,112,9,0.20)]" : "border-neutral-200 bg-white"}`}>
               <div className="flex items-center justify-between gap-4">
                 <h3 className="text-2xl font-black">{plan.name}</h3>
-                <span className={`rounded-full px-3 py-1 text-xs font-black ${plan.highlight ? "bg-[#ed7009] text-white" : "bg-orange-50 text-[#ed7009]"}`}>
+                <span className={"rounded-full px-3 py-1 text-xs font-black " + (plan.highlight ? "bg-[#ed7009] text-white" : "bg-orange-50 text-[#ed7009]")}>
                   {plan.badge}
                 </span>
               </div>
-              <p className={`mt-3 text-sm leading-7 ${plan.highlight ? "text-white/68" : "text-neutral-600"}`}>{plan.description}</p>
-              <p className="mt-7 text-4xl font-black">
-                {plan.price}
-                <span className={`text-sm font-bold ${plan.highlight ? "text-white/58" : "text-neutral-500"}`}>/mês</span>
-              </p>
-              <p className={`mt-5 rounded-2xl p-4 text-sm leading-6 ${plan.highlight ? "bg-white/8 text-white/74" : "bg-neutral-50 text-neutral-600"}`}>{plan.limits}</p>
-              <div className={`mt-4 rounded-2xl border p-4 text-sm leading-6 ${plan.highlight ? "border-white/10 bg-white/[0.04] text-white/80" : "border-orange-100 bg-orange-50/60 text-neutral-700"}`}>
+              <p className={"mt-3 text-sm leading-7 " + (plan.highlight ? "text-white/68" : "text-neutral-600")}>{plan.description}</p>
+              <p className="mt-7 text-4xl font-black">{plan.price}<span className={"text-sm font-bold " + (plan.highlight ? "text-white/58" : "text-neutral-500")}>/mês</span></p>
+              <p className={"mt-5 rounded-2xl p-4 text-sm leading-6 " + (plan.highlight ? "bg-white/8 text-white/74" : "bg-neutral-50 text-neutral-600")}>{plan.limits}</p>
+              <div className={"mt-4 rounded-2xl border p-4 text-sm leading-6 " + (plan.highlight ? "border-white/10 bg-white/[0.04] text-white/80" : "border-orange-100 bg-orange-50/60 text-neutral-700")}>
                 <Sparkles size={17} className="mb-2 text-[#ed7009]" />
                 {plan.differentiator}
               </div>
@@ -418,23 +385,25 @@ export default function Home() {
             description="O comparativo deixa claro o que muda de um plano para outro e ajuda a vender o upgrade com mais facilidade."
             align="center"
           />
-          <div className="mt-12 overflow-hidden rounded-[1.75rem] border border-neutral-200 bg-white shadow-[0_24px_80px_rgba(20,18,15,0.08)]">
-            <div className="grid grid-cols-[1.35fr_repeat(3,1fr)] bg-[#071e1a] text-sm font-black text-white">
-              <div className="p-4">Recurso</div>
-              {plans.map((plan) => (
-                <div key={plan.name} className={`p-4 ${plan.highlight ? "bg-[#ed7009]" : ""}`}>
-                  {plan.name}
+          <div className="mt-12 overflow-x-auto rounded-[1.75rem] border border-neutral-200 bg-white shadow-[0_24px_80px_rgba(20,18,15,0.08)]">
+            <div className="min-w-[760px]">
+              <div className="grid grid-cols-[1.35fr_repeat(3,1fr)] bg-[#1c1c1c] text-sm font-black text-white">
+                <div className="p-4">Recurso</div>
+                {plans.map((plan) => (
+                  <div key={plan.name} className={"p-4 " + (plan.highlight ? "bg-[#ed7009]" : "")}>
+                    {plan.name}
+                  </div>
+                ))}
+              </div>
+              {comparisonRows.map(([feature, starter, growth, premium], index) => (
+                <div key={feature} className={"grid grid-cols-[1.35fr_repeat(3,1fr)] border-t border-neutral-100 text-sm " + (index % 2 === 0 ? "bg-[#fbfaf7]" : "bg-white")}>
+                  <div className="p-4 font-bold text-neutral-800">{feature}</div>
+                  <div className="p-4 text-neutral-600">{starter}</div>
+                  <div className="p-4 font-bold text-[#ed7009]">{growth}</div>
+                  <div className="p-4 text-neutral-600">{premium}</div>
                 </div>
               ))}
             </div>
-            {comparisonRows.map(([feature, starter, growth, premium], index) => (
-              <div key={feature} className={`grid grid-cols-[1.35fr_repeat(3,1fr)] border-t border-neutral-100 text-sm ${index % 2 === 0 ? "bg-[#fbfaf7]" : "bg-white"}`}>
-                <div className="p-4 font-bold text-neutral-800">{feature}</div>
-                <div className="p-4 text-neutral-600">{starter}</div>
-                <div className="p-4 font-bold text-[#ed7009]">{growth}</div>
-                <div className="p-4 text-neutral-600">{premium}</div>
-              </div>
-            ))}
           </div>
           <p className="mt-5 text-center text-sm leading-7 text-neutral-500">
             Os limites podem ser ajustados comercialmente para redes, franquias ou operações com necessidade específica.
@@ -451,7 +420,7 @@ export default function Home() {
         />
         <div className="mt-10 grid gap-4">
           {faqs.map((item) => (
-            <details key={item.question} className="group rounded-[1.35rem] border border-neutral-200 bg-white p-5 shadow-sm open:shadow-[0_24px_70px_rgba(7,30,26,0.10)]">
+            <details key={item.question} className="group rounded-[1.35rem] border border-neutral-200 bg-white p-5 shadow-sm open:shadow-[0_24px_70px_rgba(28,28,28,0.10)]">
               <summary className="flex cursor-pointer list-none items-center justify-between gap-4 text-base font-black text-neutral-950">
                 {item.question}
                 <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-orange-50 text-[#ed7009] transition group-open:rotate-90">
@@ -465,16 +434,16 @@ export default function Home() {
       </section>
 
       <section id="demo" className="px-5 pb-20 sm:px-8 lg:px-10">
-        <div className="mx-auto grid max-w-7xl gap-8 rounded-[2rem] bg-[#071e1a] p-7 text-white shadow-[0_34px_100px_rgba(7,30,26,0.24)] lg:grid-cols-[1fr_0.85fr] lg:p-10">
+        <div className="mx-auto grid max-w-7xl gap-8 rounded-[2rem] bg-[#1c1c1c] p-7 text-white shadow-[0_34px_100px_rgba(28,28,28,0.24)] lg:grid-cols-[1fr_0.85fr] lg:p-10">
           <div>
-            <p className="text-xs font-black uppercase tracking-[0.32em] text-orange-300">Demonstração</p>
+            <p className="text-xs font-black uppercase text-orange-300">Demonstração</p>
             <h2 className="mt-3 text-4xl font-black leading-tight sm:text-5xl">Pronto para vender para clínicas com uma apresentação profissional.</h2>
             <p className="mt-5 max-w-2xl text-base leading-8 text-white/68">
               Use a demo para mostrar agenda, cliente, prontuário, CRM, financeiro, assinatura e site público da clínica em um roteiro comercial claro.
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-              <Link href="/demo" className="inline-flex h-13 items-center justify-center gap-2 rounded-full bg-white px-6 text-sm font-black text-[#071e1a]">
-                Testar demo livre <ArrowRight size={17} />
+              <Link href="/login-cliente" className="inline-flex h-13 items-center justify-center gap-2 rounded-full bg-white px-6 text-sm font-black text-[#1c1c1c]">
+                Acessar demonstração <ArrowRight size={17} />
               </Link>
               <a href="https://wa.me/5577999911911" target="_blank" className="inline-flex h-13 items-center justify-center gap-2 rounded-full border border-white/16 px-6 text-sm font-black text-white">
                 Falar com a NexaWi <MessageCircle size={17} />
@@ -496,10 +465,12 @@ export default function Home() {
         </div>
       </section>
 
-      <footer className="border-t border-black/10 bg-white px-5 py-8 text-sm text-neutral-500 sm:px-8 lg:px-10">
+      <footer className="border-t border-white/10 bg-[#1c1c1c] px-5 py-8 text-sm text-white/58 shadow-[0_-24px_70px_rgba(28,28,28,0.14)] sm:px-8 lg:px-10">
         <div className="mx-auto flex max-w-7xl flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <LogoMark />
-          <div className="flex flex-wrap gap-4">
+          <div className="flex items-center gap-3">
+            <LogoMark />
+          </div>
+          <div className="flex flex-wrap gap-4 font-semibold">
             <Link href="/privacidade">Privacidade</Link>
             <Link href="/termos">Termos</Link>
             <Link href="/login-cliente">Entrar</Link>
@@ -509,3 +480,4 @@ export default function Home() {
     </main>
   );
 }
+
