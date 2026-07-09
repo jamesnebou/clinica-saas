@@ -46,7 +46,7 @@ export async function signInAction(_prevState, formData) {
   const email = normalizeEmail(formData.get("email"));
   const password = String(formData.get("password") || "");
   const mode = String(formData.get("mode") || "cliente");
-  const next = safeNext(formData.get("next"), mode === "admin" ? "/admin" : "/dashboard");
+  const next = safeNext(formData.get("next"), mode === "admin" ? "/dashboard-admin" : "/dashboard");
 
   if (!email || !password) {
     return { ok: false, message: "Informe e-mail e senha." };

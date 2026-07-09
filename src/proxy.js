@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|api|dashboard|admin|login|login-cliente|onboarding|privacidade|termos).*)"],
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|api|auth|dashboard|admin|login|login-cliente|onboarding|privacidade|termos).*)"],
 };
 
 function isPlatformHost(host) {

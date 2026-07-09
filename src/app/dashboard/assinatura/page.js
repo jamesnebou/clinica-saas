@@ -1,11 +1,11 @@
 import { AlertTriangle, CheckCircle2, CreditCard, ReceiptText, ShieldCheck } from "lucide-react";
-import { requireClinicSection } from "@/lib/auth/session";
-import { supabaseAdmin } from "@/lib/supabase/admin";
 import { Field, PageHeader, SubmitButton } from "@/components/app-shell/ui";
+import { requireClinicSection } from "@/lib/auth/session";
 import { getClinicBillingState, getClinicPlan, getClinicUsage, getLimitRows, getSystemPlans } from "@/lib/saas/plans";
+import { supabaseAdmin } from "@/lib/supabase/admin";
 import { startSubscriptionAction, updateBillingEmailAction } from "./actions";
 
-export const metadata = { title: "Assinatura | ClÃ­nica SaaS" };
+export const metadata = { title: "Assinatura | Clínica SaaS" };
 
 function formatMoney(value) {
   return Number(value || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -54,7 +54,7 @@ async function getBillingRows(clinicaId) {
     .limit(6);
 
   if (error) {
-    console.error("Erro ao carregar cobranÃ§as Asaas:", error);
+    console.error("Erro ao carregar cobranças Asaas:", error);
     return [];
   }
 
@@ -86,20 +86,20 @@ export default async function AssinaturaPage({ searchParams }) {
       <section className="mx-auto max-w-7xl min-w-0">
         <PageHeader
           eyebrow="Assinatura"
-          title="Plano, limites e cobranÃ§a"
-          description="Acompanhe o status comercial da clÃ­nica, consumo do plano e ativaÃ§Ã£o de assinatura."
+          title="Plano, limites e cobrança"
+          description="Acompanhe o status comercial da clínica, consumo do plano e ativação de assinatura."
         />
 
-        {params?.ok === "assinatura" ? <Notice type="success">Assinatura enviada ao Asaas e plano ativado no sistema. O webhook manterÃ¡ a cobranÃ§a sincronizada.</Notice> : null}
-        {params?.ok === "email" ? <Notice type="success">E-mail de cobranÃ§a atualizado.</Notice> : null}
-        {params?.erro === "asaas" ? <Notice>O Asaas ainda nÃ£o estÃ¡ configurado. Defina `ASAAS_API_KEY` e `ASAAS_BASE_URL` na Vercel para ativar planos automaticamente.</Notice> : null}
-        {params?.erro === "asaas_api" ? <Notice>{params?.mensagem || "NÃ£o foi possÃ­vel criar a assinatura no Asaas agora. Confira a chave, ambiente e dados da clÃ­nica."}</Notice> : null}
-        {params?.erro === "permissao" ? <Notice>{params?.mensagem || "Seu usuÃ¡rio nÃ£o tem permissÃ£o para alterar a assinatura da clÃ­nica."}</Notice> : null}
-        {params?.erro === "upgrade" || params?.erro === "clinica" || params?.erro === "email" ? <Notice>{params?.mensagem || "NÃ£o foi possÃ­vel processar esta alteraÃ§Ã£o agora."}</Notice> : null}
-        {params?.erro === "plano" ? <Notice>Plano nÃ£o encontrado ou inativo. Revise os planos no painel interno.</Notice> : null}
+        {params?.ok === "assinatura" ? <Notice type="success">Assinatura enviada ao Asaas e plano ativado no sistema. O webhook manterá a cobrança sincronizada.</Notice> : null}
+        {params?.ok === "email" ? <Notice type="success">E-mail de cobrança atualizado.</Notice> : null}
+        {params?.erro === "asaas" ? <Notice>O Asaas ainda não está configurado. Defina `ASAAS_API_KEY` e `ASAAS_BASE_URL` na Vercel para ativar planos automaticamente.</Notice> : null}
+        {params?.erro === "asaas_api" ? <Notice>{params?.mensagem || "Não foi possível criar a assinatura no Asaas agora. Confira a chave, ambiente e dados da clínica."}</Notice> : null}
+        {params?.erro === "permissao" ? <Notice>{params?.mensagem || "Seu usuário não tem permissão para alterar a assinatura da clínica."}</Notice> : null}
+        {params?.erro === "upgrade" || params?.erro === "clinica" || params?.erro === "email" ? <Notice>{params?.mensagem || "Não foi possível processar esta alteração agora."}</Notice> : null}
+        {params?.erro === "plano" ? <Notice>Plano não encontrado ou inativo. Revise os planos no painel interno.</Notice> : null}
         {openCharge ? (
           <Notice>
-            Existe uma cobranÃ§a de {formatMoney(openCharge.valor)} com vencimento em {formatDate(openCharge.vencimento)} aguardando pagamento. Se ela vencer, o sistema pode ser marcado como inadimplente e novas operaÃ§Ãµes podem ser bloqueadas automaticamente.
+            Existe uma cobrança de {formatMoney(openCharge.valor)} com vencimento em {formatDate(openCharge.vencimento)} aguardando pagamento. Se ela vencer, o sistema pode ser marcado como inadimplente e novas operações podem ser bloqueadas automaticamente.
           </Notice>
         ) : null}
 
@@ -110,13 +110,13 @@ export default async function AssinaturaPage({ searchParams }) {
                 <div className="min-w-0">
                   <div className="flex min-w-0 items-center gap-2 text-[var(--clinic-primary)]"><ShieldCheck size={20} /><p className="text-sm font-bold uppercase tracking-[0.18em]">Status atual</p></div>
                   <h2 className="mt-3 text-3xl font-semibold">{currentPlan.nome}</h2>
-                  <p className="mt-2 text-sm text-neutral-600">{formatMoney(currentPlan.preco_mensal)}/mÃªs - status {assinaturaStatus === "isenta" ? "isenta" : activeClinic.status}</p>
+                  <p className="mt-2 text-sm text-neutral-600">{formatMoney(currentPlan.preco_mensal)}/mês - status {assinaturaStatus === "isenta" ? "isenta" : activeClinic.status}</p>
                   <p className="mt-4 rounded-lg bg-neutral-50 px-4 py-3 text-sm leading-6 text-neutral-700">{billingState.message}</p>
                 </div>
                 <div className="min-w-0 rounded-lg border border-neutral-200 bg-neutral-50 p-4 text-sm text-neutral-600 lg:min-w-[280px]">
-                  <p className="grid gap-1 sm:flex sm:justify-between sm:gap-4"><span>E-mail cobranÃ§a</span><strong className="break-all text-neutral-900">{activeClinic.billing_email || activeClinic.email || "-"}</strong></p>
-                  <p className="mt-3 grid gap-1 sm:flex sm:justify-between sm:gap-4"><span>PrÃ³xima cobranÃ§a</span><strong className="text-neutral-900">{assinaturaStatus === "isenta" ? "Isenta" : formatDate(nextBillingDate)}</strong></p>
-                  <p className="mt-3 grid gap-1 sm:flex sm:justify-between sm:gap-4"><span>Trial atÃ©</span><strong className="text-neutral-900">{formatDate(activeClinic.trial_ends_at)}</strong></p>
+                  <p className="grid gap-1 sm:flex sm:justify-between sm:gap-4"><span>E-mail cobrança</span><strong className="break-all text-neutral-900">{activeClinic.billing_email || activeClinic.email || "-"}</strong></p>
+                  <p className="mt-3 grid gap-1 sm:flex sm:justify-between sm:gap-4"><span>Próxima cobrança</span><strong className="text-neutral-900">{assinaturaStatus === "isenta" ? "Isenta" : formatDate(nextBillingDate)}</strong></p>
+                  <p className="mt-3 grid gap-1 sm:flex sm:justify-between sm:gap-4"><span>Trial até</span><strong className="text-neutral-900">{formatDate(activeClinic.trial_ends_at)}</strong></p>
                 </div>
               </div>
             </article>
@@ -137,10 +137,10 @@ export default async function AssinaturaPage({ searchParams }) {
             </article>
 
             <article className="min-w-0 overflow-hidden rounded-lg border border-neutral-200 bg-white p-5 shadow-sm">
-              <div className="flex items-center gap-2"><ReceiptText size={20} className="text-[var(--clinic-primary)]" /><h2 className="text-lg font-semibold">CobranÃ§as recentes</h2></div>
+              <div className="flex items-center gap-2"><ReceiptText size={20} className="text-[var(--clinic-primary)]" /><h2 className="text-lg font-semibold">Cobranças recentes</h2></div>
               <div className="mt-4 space-y-3">
                 {cobrancas.length === 0 ? (
-                  <p className="rounded-lg bg-neutral-50 px-4 py-3 text-sm text-neutral-600">Nenhuma cobranÃ§a sincronizada ainda. ApÃ³s ativar pelo Asaas, os eventos do webhook aparecerÃ£o aqui.</p>
+                  <p className="rounded-lg bg-neutral-50 px-4 py-3 text-sm text-neutral-600">Nenhuma cobrança sincronizada ainda. Após ativar pelo Asaas, os eventos do webhook aparecerão aqui.</p>
                 ) : cobrancas.map((item) => (
                   <div key={item.id} className="rounded-lg border border-neutral-200 p-4 text-sm">
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between"><div><p className="font-semibold">{formatMoney(item.valor)} - {item.status}</p><p className="mt-1 text-neutral-500">Vencimento: {formatDate(item.vencimento)} - Pago em: {formatDate(item.pago_em)}</p></div>{item.invoice_url ? <a href={item.invoice_url} target="_blank" className="font-semibold text-[var(--clinic-primary)]">Abrir fatura</a> : null}</div>
@@ -152,7 +152,7 @@ export default async function AssinaturaPage({ searchParams }) {
 
           <aside className="min-w-0 space-y-6">
             <form action={updateBillingEmailAction} className="min-w-0 overflow-hidden rounded-lg border border-neutral-200 bg-white p-5 shadow-sm">
-              <h2 className="text-lg font-semibold">E-mail de cobranÃ§a</h2>
+              <h2 className="text-lg font-semibold">E-mail de cobrança</h2>
               <div className="mt-4 space-y-4">
                 <Field label="E-mail" name="billing_email" type="email" defaultValue={activeClinic.billing_email || activeClinic.email || ""} required />
                 <SubmitButton>Atualizar e-mail</SubmitButton>
@@ -169,22 +169,22 @@ export default async function AssinaturaPage({ searchParams }) {
                     <div className="flex min-w-0 items-start justify-between gap-3">
                       <div className="min-w-0">
                         <h3 className="font-semibold">{plan.nome}</h3>
-                        <p className="mt-1 text-sm text-neutral-500">{formatMoney(plan.preco_mensal)}/mÃªs</p>
-                        <p className="mt-2 break-words text-xs leading-5 text-neutral-600">{plan.limite_usuarios} usuÃ¡rios - {plan.limite_profissionais} profissionais - {plan.limite_clientes} clientes - {plan.limite_agendamentos_mes} agendamentos/mÃªs</p>
+                        <p className="mt-1 text-sm text-neutral-500">{formatMoney(plan.preco_mensal)}/mês</p>
+                        <p className="mt-2 break-words text-xs leading-5 text-neutral-600">{plan.limite_usuarios} usuários - {plan.limite_profissionais} profissionais - {plan.limite_clientes} clientes - {plan.limite_agendamentos_mes} agendamentos/mês</p>
                       </div>
                       {plan.slug === currentPlan.slug ? <span className="rounded-full bg-white px-2 py-1 text-xs font-bold text-[var(--clinic-primary)]">Atual</span> : null}
                     </div>
                     <div className="mt-4">
-                      <SelectField label="Forma de cobranÃ§a" name="billing_type" defaultValue={activeClinic.metadata?.asaas_billing_type || "UNDEFINED"}>
-                        <option value="UNDEFINED">Forma de pagamento: Pix, boleto ou cartÃ£o</option>
+                      <SelectField label="Forma de cobrança" name="billing_type" defaultValue={activeClinic.metadata?.asaas_billing_type || "UNDEFINED"}>
+                        <option value="UNDEFINED">Forma de pagamento: Pix, boleto ou cartão</option>
                         <option value="PIX">Pix</option>
                         <option value="BOLETO">Boleto</option>
-                        <option value="CREDIT_CARD">CartÃ£o de crÃ©dito</option>
+                        <option value="CREDIT_CARD">Cartão de crédito</option>
                       </SelectField>
                       <p className="mt-2 text-xs leading-5 text-neutral-500">Escolha a melhor forma para o seu pagamento.</p>
                     </div>
                     <button className="mt-4 h-10 w-full rounded-lg bg-neutral-950 px-4 text-sm font-semibold text-white transition hover:bg-neutral-800" type="submit">
-                      {plan.slug === currentPlan.slug && activeClinic.status === "ativa" ? "Reativar cobranÃ§a" : "Ativar plano"}
+                      {plan.slug === currentPlan.slug && activeClinic.status === "ativa" ? "Reativar cobrança" : "Ativar plano"}
                     </button>
                   </form>
                 ))}

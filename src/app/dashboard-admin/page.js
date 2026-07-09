@@ -6,8 +6,8 @@ function ProgressBar({ label, value, max, helper }) {
   const percent = max > 0 ? Math.min(100, Math.round((value / max) * 100)) : 0;
 
   return (
-    <div className="rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm">
-      <div className="flex items-center justify-between gap-3">
+    <div className="min-w-0 rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm">
+      <div className="flex min-w-0 items-center justify-between gap-3">
         <p className="text-sm font-black text-neutral-800">{label}</p>
         <span className="text-sm font-black text-[#ed7009]">{percent}%</span>
       </div>
@@ -24,28 +24,28 @@ export default async function DashboardAdminOverviewPage() {
   const stats = getOverviewStats({ clinics, plans, analytics });
 
   return (
-    <div className="space-y-6">
+    <div className="min-w-0 space-y-6 overflow-x-hidden">
       <PageHero
         eyebrow="Visão geral"
         title="Centro de comando do SaaS"
         description="Resumo executivo para acompanhar receita, clínicas, leads, funil comercial e riscos operacionais."
       />
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <KpiCard label="Clínicas totais" value={clinics.length} helper={`${stats.totalAtivas} ativas ou em trial`} icon={metricCards.clinics} />
         <KpiCard label="MRR cobrável" value={formatMoney(stats.mrrCobravel)} helper={`${formatMoney(stats.mrrPotencial)} de MRR potencial`} icon={metricCards.mrr} tone="dark" />
         <KpiCard label="Leads do site" value={stats.siteLeads} helper={`${stats.sitePaidSignals} sinais pagos nos últimos 30 dias`} icon={metricCards.site} />
         <KpiCard label="Inadimplentes" value={stats.inadimplentes} helper={`${stats.openCharges.length} cobranças abertas`} icon={metricCards.debt} />
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <KpiCard label="Faturamento previsto" value={formatMoney(stats.monthExpected)} helper="Agendamentos faturáveis do mês." icon={metricCards.plan} />
         <KpiCard label="Recebido no mês" value={formatMoney(stats.monthReceived)} helper="Pagamentos registrados nos agendamentos." icon={metricCards.revenue} />
         <KpiCard label="CRM ativo" value={stats.crmLeads} helper={`${stats.crmConverted} oportunidades convertidas`} icon={metricCards.crm} />
         <KpiCard label="Usuários com acesso" value={stats.usersWithAccess} helper={`${stats.usersPendingAccess} usuários pendentes`} icon={metricCards.access} />
       </div>
 
-      <section className="grid gap-4 lg:grid-cols-3">
+      <section className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-3">
         <ProgressBar label="Conversão CRM" value={stats.crmConverted} max={Math.max(stats.crmLeads, 1)} helper={`${stats.crmConverted} convertidos de ${stats.crmLeads} oportunidades.`} />
         <ProgressBar label="Pagamento de sinais" value={stats.sitePaidSignals} max={Math.max(stats.siteLeads, 1)} helper={`${stats.sitePaidSignals} sinais pagos de ${stats.siteLeads} leads do site.`} />
         <ProgressBar label="Recebido x previsto" value={stats.monthReceived} max={Math.max(stats.monthExpected, 1)} helper={`${formatMoney(stats.monthReceived)} recebidos de ${formatMoney(stats.monthExpected)} previstos.`} />
