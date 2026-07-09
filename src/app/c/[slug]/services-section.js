@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 function money(value) {
@@ -29,7 +29,17 @@ function fallbackImage(label, dark = false) {
 
 export function PublicServicesSection({ procedimentos = [] }) {
   const [selected, setSelected] = useState(null);
-  const servicesLoop = [...procedimentos, ...procedimentos];
+  const viewportRef = useRef(null);
+  const trackRef = useRef(null);
+  const animationRef = useRef(null);
+  const pointerRef = useRef({ active: false, captured: false, pointerId: null, startX: 0, startScrollLeft: 0 });
+  const draggedRef = useRef(false);
+  const hoverRef = useRef(false);
+  const repeatCount = procedimentos.length <= 2 ? 12 : procedimentos.length <= 4 ? 9 : 6;
+  const servicesLoop = useMemo(
+    () => Array.from({ length: repeatCount }).flatMap(() => procedimentos),
+    [procedimentos, repeatCount]
+  );
   const canUsePortal = typeof document !== "undefined";
 
   useEffect(() => {
@@ -48,6 +58,129 @@ export function PublicServicesSection({ procedimentos = [] }) {
     };
   }, [selected]);
 
+  useEffect(() => {
+    const viewport = viewportRef.current;
+    const track = trackRef.current;
+    if (!viewport || !track || procedimentos.length === 0) return;
+
+    const segmentWidth = () => track.scrollWidth / repeatCount;
+    const startOffset = () => segmentWidth() * Math.floor(repeatCount / 2);
+
+    const normalizeScroll = () => {
+      const segment = segmentWidth();
+      if (!segment) return;
+
+      const min = segment * 2;
+      const max = segment * (repeatCount - 2);
+
+      if (viewport.scrollLeft < min) {
+        viewport.scrollLeft += segment;
+      } else if (viewport.scrollLeft > max) {
+        viewport.scrollLeft -= segment;
+      }
+    };
+
+    const setInitialPosition = () => {
+      viewport.scrollLeft = startOffset();
+    };
+
+    setInitialPosition();
+
+
+    let lastTime = performance.now();
+    const speed = 58;
+
+    const animate = (time) => {
+      const delta = Math.min(64, time - lastTime);
+      lastTime = time;
+
+      if (!pointerRef.current.active && !hoverRef.current && !selected) {
+        viewport.scrollLeft += (speed * delta) / 1000;
+        normalizeScroll();
+      }
+
+      animationRef.current = requestAnimationFrame(animate);
+    };
+
+    animationRef.current = requestAnimationFrame(animate);
+    window.addEventListener("resize", setInitialPosition);
+
+    return () => {
+      if (animationRef.current) cancelAnimationFrame(animationRef.current);
+      window.removeEventListener("resize", setInitialPosition);
+    };
+  }, [procedimentos, repeatCount, selected]);
+
+  function handlePointerDown(event) {
+    const viewport = viewportRef.current;
+    if (!viewport) return;
+
+    pointerRef.current = {
+      active: true,
+      captured: false,
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startScrollLeft: viewport.scrollLeft,
+    };
+    draggedRef.current = false;
+  }
+
+  function handlePointerMove(event) {
+    const viewport = viewportRef.current;
+    const pointer = pointerRef.current;
+    if (!viewport || !pointer.active) return;
+
+    const distance = event.clientX - pointer.startX;
+    if (Math.abs(distance) <= 6 && !draggedRef.current) return;
+
+    draggedRef.current = true;
+    if (!pointer.captured) {
+      viewport.setPointerCapture?.(event.pointerId);
+      pointerRef.current.captured = true;
+    }
+    viewport.scrollLeft = pointer.startScrollLeft - distance;
+  }
+
+  function normalizeViewportPosition() {
+    const viewport = viewportRef.current;
+    const track = trackRef.current;
+    if (!viewport || !track) return;
+
+    const segment = track.scrollWidth / repeatCount;
+    if (!segment) return;
+
+    const min = segment * 2;
+    const max = segment * (repeatCount - 2);
+
+    if (viewport.scrollLeft < min) viewport.scrollLeft += segment;
+    if (viewport.scrollLeft > max) viewport.scrollLeft -= segment;
+  }
+
+  function handlePointerUp(event) {
+    const wasCaptured = pointerRef.current.captured;
+    pointerRef.current.active = false;
+    pointerRef.current.captured = false;
+    pointerRef.current.pointerId = null;
+    if (wasCaptured) viewportRef.current?.releasePointerCapture?.(event.pointerId);
+    requestAnimationFrame(normalizeViewportPosition);
+
+    window.setTimeout(() => {
+      draggedRef.current = false;
+    }, 120);
+  }
+
+  function handleBookingClick(event) {
+    event.preventDefault();
+    setSelected(null);
+
+    window.setTimeout(() => {
+      const bookingSection = document.getElementById("agendar");
+      if (!bookingSection) return;
+      bookingSection.scrollIntoView({ behavior: "smooth", block: "start" });
+      window.history.replaceState(null, "", "#agendar");
+    }, 80);
+  }
+
   return (
     <section id="servicos" className="public-services-section relative overflow-hidden py-24 text-white">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_22%_0%,color-mix(in_srgb,var(--clinic-accent)_22%,transparent),transparent_32rem),radial-gradient(circle_at_85%_18%,color-mix(in_srgb,var(--clinic-primary)_24%,transparent),transparent_30rem)]" />
@@ -59,14 +192,31 @@ export function PublicServicesSection({ procedimentos = [] }) {
         </div>
       </div>
 
-      <div className="relative z-10 mt-6 overflow-x-hidden py-23">
-        <div className="public-services-track flex w-max gap-5 px-16 sm:px-24">
+      <div
+        ref={viewportRef}
+        className="public-services-viewport relative z-10 mt-6 overflow-x-auto py-23"
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerUp}
+        onMouseEnter={() => { hoverRef.current = true; }}
+        onMouseLeave={(event) => {
+          hoverRef.current = false;
+          if (pointerRef.current.active) handlePointerUp(event);
+        }}
+        onFocusCapture={() => { hoverRef.current = true; }}
+        onBlurCapture={() => { hoverRef.current = false; }}
+      >
+        <div ref={trackRef} className="public-services-track flex w-max gap-5 px-16 sm:px-24">
           {servicesLoop.map((item, index) => (
             <button
               key={`${item.id}-${index}`}
               type="button"
               data-featured={item.destaque_site ? "true" : "false"}
-              onClick={() => setSelected(item)}
+              onClick={() => {
+                if (draggedRef.current) return;
+                setSelected(item);
+              }}
               className="public-card-reveal public-reveal-up public-service-card public-service-card-dark w-[330px] shrink-0 rounded-[1.75rem] border border-white/10 bg-white/[0.075] p-6 text-left text-white backdrop-blur-2xl md:w-[390px]"
             >
               {item.destaque_site ? <span className="public-service-reflection" aria-hidden="true" /> : null}
@@ -125,7 +275,7 @@ export function PublicServicesSection({ procedimentos = [] }) {
                 </div>
                 <div className="mt-6 flex flex-wrap items-center justify-between gap-4 border-t border-white/10 pt-5">
                   <strong className="text-2xl">{money(selected.preco)}</strong>
-                  <a href="#agendar" onClick={() => setSelected(null)} className="rounded-full bg-[var(--clinic-accent)] px-5 py-3 text-sm font-black text-[#17130f]">Agendar este procedimento</a>
+                  <a href="#agendar" onClick={handleBookingClick} className="public-modal-booking-cta relative z-20 inline-flex items-center justify-center rounded-full border border-white/15 bg-[var(--clinic-accent)] px-6 py-3 text-sm font-black text-white shadow-[0_18px_42px_color-mix(in_srgb,var(--clinic-accent)_38%,transparent)] transition duration-300">Agendar este procedimento</a>
                 </div>
               </div>
             </div>
