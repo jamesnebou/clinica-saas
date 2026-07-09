@@ -80,8 +80,8 @@ export default async function CrmPage({ searchParams }) {
   const proximasAcoes = oportunidades.filter((item) => item.proxima_acao_em && !["convertido", "perdido"].includes(item.status)).length;
 
   return (
-    <main className="px-5 py-8 sm:px-8 lg:px-10">
-      <section className="mx-auto max-w-7xl">
+    <main className="min-w-0 overflow-x-hidden px-5 py-8 sm:px-8 lg:px-10">
+      <section className="mx-auto max-w-7xl min-w-0">
         <PageHeader
           eyebrow="CRM"
           title="Pipeline comercial"
@@ -153,7 +153,8 @@ export default async function CrmPage({ searchParams }) {
             {oportunidades.length === 0 ? (
               <EmptyState title="Nenhuma oportunidade no CRM" description="Cadastre leads e negociações para visualizar o pipeline comercial por etapa." />
             ) : (
-              <div className="grid min-w-0 grid-cols-5 gap-3">
+              <div className="-mx-5 overflow-x-auto px-5 pb-3 sm:mx-0 sm:px-0">
+                <div className="grid min-w-[1120px] grid-cols-5 gap-3">
                   {grouped.map((group) => (
                     <section key={group.status} className="min-w-0 rounded-lg border border-neutral-200 bg-white p-3 shadow-sm">
                       <div className="flex items-center justify-between gap-3">
@@ -234,6 +235,7 @@ export default async function CrmPage({ searchParams }) {
                       </div>
                     </section>
                   ))}
+                </div>
               </div>
             )}
           </section>

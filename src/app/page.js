@@ -385,9 +385,9 @@ export default async function Home() {
             description="O comparativo deixa claro o que muda de um plano para outro e ajuda a vender o upgrade com mais facilidade."
             align="center"
           />
-          <div className="mt-12 overflow-x-auto rounded-[1.75rem] border border-neutral-200 bg-white shadow-[0_24px_80px_rgba(20,18,15,0.08)]">
-            <div className="min-w-[760px]">
-              <div className="grid grid-cols-[1.35fr_repeat(3,1fr)] bg-[#1c1c1c] text-sm font-black text-white">
+          <div className="mt-12 -mx-5 overflow-x-auto px-5 pb-3 sm:mx-0 sm:px-0">
+            <div className="min-w-[860px] overflow-hidden rounded-[1.75rem] border border-neutral-200 bg-white shadow-[0_24px_80px_rgba(20,18,15,0.08)]">
+              <div className="grid grid-cols-[1.45fr_repeat(3,1fr)] bg-[#1c1c1c] text-sm font-black text-white">
                 <div className="p-4">Recurso</div>
                 {plans.map((plan) => (
                   <div key={plan.name} className={"p-4 " + (plan.highlight ? "bg-[#ed7009]" : "")}>
@@ -396,11 +396,11 @@ export default async function Home() {
                 ))}
               </div>
               {comparisonRows.map(([feature, starter, growth, premium], index) => (
-                <div key={feature} className={"grid grid-cols-[1.35fr_repeat(3,1fr)] border-t border-neutral-100 text-sm " + (index % 2 === 0 ? "bg-[#fbfaf7]" : "bg-white")}>
+                <div key={feature} className={"grid grid-cols-[1.45fr_repeat(3,1fr)] border-t border-neutral-100 text-sm " + (index % 2 === 0 ? "bg-[#fbfaf7]" : "bg-white")}>
                   <div className="p-4 font-bold text-neutral-800">{feature}</div>
-                  <div className="p-4 text-neutral-600">{starter}</div>
-                  <div className="p-4 font-bold text-[#ed7009]">{growth}</div>
-                  <div className="p-4 text-neutral-600">{premium}</div>
+                  <div className="p-4 whitespace-nowrap text-neutral-600">{starter}</div>
+                  <div className="p-4 whitespace-nowrap font-bold text-[#ed7009]">{growth}</div>
+                  <div className="p-4 whitespace-nowrap text-neutral-600">{premium}</div>
                 </div>
               ))}
             </div>

@@ -84,13 +84,13 @@ export default async function FinanceiroPage({ searchParams }) {
   ];
 
   return (
-    <main className="px-5 py-8 sm:px-8 lg:px-10">
-      <section className="mx-auto max-w-7xl">
+    <main className="min-w-0 overflow-x-hidden px-5 py-8 sm:px-8 lg:px-10">
+      <section className="mx-auto max-w-7xl min-w-0">
         <PageHeader eyebrow="Financeiro" title="Financeiro da clínica" description="Controle básico de pagamentos, faturamento, comissões e pacotes." />
 
-        <form className="mt-6 flex max-w-xs items-end gap-3 rounded-lg border border-neutral-200 bg-white p-4 shadow-sm" action="/dashboard/financeiro">
+        <form className="mt-6 grid w-full gap-3 rounded-lg border border-neutral-200 bg-white p-4 shadow-sm sm:max-w-md sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end" action="/dashboard/financeiro">
           <Field label="Mês" name="month" type="month" defaultValue={safeMonth} />
-          <button className="h-11 rounded-lg bg-neutral-950 px-4 text-sm font-semibold text-white" type="submit">Filtrar</button>
+          <button className="h-11 w-full rounded-lg bg-neutral-950 px-4 text-sm font-semibold text-white sm:w-auto" type="submit">Filtrar</button>
         </form>
 
         <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">

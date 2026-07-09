@@ -2,8 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { LockKeyhole, ShieldCheck, Sparkles } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
-import { getCurrentUser } from "@/lib/auth/session";
-import { isInternalAdminEmail } from "@/lib/saas/plans";
+import { getCurrentUser, isInternalAdminUser } from "@/lib/auth/session";
 import LoginForm from "./login-form";
 
 export const metadata = {
@@ -14,11 +13,11 @@ export default async function LoginPage({ searchParams }) {
   const params = await searchParams;
   const user = await getCurrentUser();
 
-  if (user && isInternalAdminEmail(user.email)) {
+  if (user && isInternalAdminUser(user)) {
     redirect("/admin");
   }
 
-  if (user && !isInternalAdminEmail(user.email)) {
+  if (user && !isInternalAdminUser(user)) {
     const supabase = await createClient();
     await supabase.auth.signOut();
   }
@@ -31,7 +30,7 @@ export default async function LoginPage({ searchParams }) {
           <p className="text-xs font-bold uppercase tracking-[0.22em] text-emerald-300">Admin interno</p>
           <h1 className="mt-4 text-5xl font-semibold tracking-tight">Gestão comercial do SaaS.</h1>
           <p className="mt-5 text-sm leading-7 text-neutral-300">Entrada exclusiva para operar planos, status de clínicas, cobrança e suporte administrativo.</p>
-          <div className="mt-8 rounded-lg border border-white/10 bg-white/5 p-4"><ShieldCheck className="text-emerald-300" size={22} /><p className="mt-3 text-sm leading-6 text-neutral-300">Somente e-mails listados em INTERNAL_ADMIN_EMAILS conseguem acessar.</p></div>
+          <div className="mt-8 rounded-lg border border-white/10 bg-white/5 p-4"><ShieldCheck className="text-emerald-300" size={22} /><p className="mt-3 text-sm leading-6 text-neutral-300">Admins liberados no Supabase Auth acessam o painel. INTERNAL_ADMIN_EMAILS fica apenas como fallback inicial.</p></div>
         </div>
         <Link href="/login-cliente" className="text-sm font-semibold text-neutral-300 hover:text-white">Entrar como clínica cliente</Link>
       </section>
