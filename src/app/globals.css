@@ -575,6 +575,35 @@ textarea {
     0 0 42px color-mix(in srgb, var(--clinic-primary, #047857) 16%, transparent);
 }
 
+.public-store-viewport {
+  cursor: grab;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  touch-action: pan-y;
+  user-select: none;
+  -ms-overflow-style: none;
+  -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 2.5rem, #000 calc(100% - 2.5rem), transparent 100%);
+  mask-image: linear-gradient(90deg, transparent 0, #000 2.5rem, #000 calc(100% - 2.5rem), transparent 100%);
+}
+
+.public-store-viewport::-webkit-scrollbar {
+  display: none;
+}
+
+.public-store-viewport:active {
+  cursor: grabbing;
+}
+
+.public-store-track {
+  transform: translateZ(0);
+  will-change: scroll-position;
+}
+
+.store-showcase-card {
+  width: 17.5rem;
+  max-width: calc(100vw - 3rem);
+}
+
 .public-services-viewport {
   cursor: grab;
   overscroll-behavior-x: contain;

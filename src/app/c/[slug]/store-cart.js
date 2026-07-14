@@ -2,12 +2,16 @@
 
 /* eslint-disable @next/next/no-img-element */
 
-import { Minus, Plus, ShoppingBag, Trash2, X } from "lucide-react";
+import { Minus, Plus, Search, ShoppingBag, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 function money(value) {
   return Number(value || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
+function normalizeSearch(value) {
+  return String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
 }
 
 function storageKey(slug) {
@@ -23,12 +27,67 @@ function getSessionToken(slug) {
   return value;
 }
 
-export function PublicStorefront({ slug, products, recoveryToken = "" }) {
+function StoreProductCard({ product, onAdd, moving = false, index = 0 }) {
+  const available = Number(product.estoque_disponivel || 0);
+  const cardClassName = [
+    moving ? "store-showcase-card shrink-0" : "public-card-reveal public-reveal-up h-full",
+    "public-hover-card flex flex-col overflow-hidden rounded-[1.75rem] border border-neutral-200 bg-white/70 shadow-[0_18px_44px_rgba(23,19,15,0.07)] backdrop-blur",
+  ].join(" ");
+
+  return (
+    <article className={cardClassName} data-store-index={index} style={moving ? { width: "17.5rem" } : undefined}>
+      {product.imagem_url ? (
+        <img src={product.imagem_url} alt={product.nome} className="aspect-[4/3] w-full object-cover" />
+      ) : (
+        <div className="flex aspect-[4/3] items-center justify-center bg-[radial-gradient(circle,color-mix(in_srgb,var(--clinic-accent)_28%,transparent),transparent_68%)]"><ShoppingBag size={42} className="text-[var(--clinic-primary)]" /></div>
+      )}
+      <div className="flex h-[310px] flex-col p-5">
+        <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[var(--clinic-primary)]">{product.categoria || "Cuidados"}</p>
+        <h3 className="mt-3 h-14 overflow-hidden text-lg font-semibold text-[#181510]" style={{ display: "-webkit-box", WebkitBoxOrient: "vertical", WebkitLineClamp: 2 }}>{product.nome}</h3>
+        <p className="mt-3 h-12 overflow-hidden text-sm leading-6 text-neutral-600" style={{ display: "-webkit-box", WebkitBoxOrient: "vertical", WebkitLineClamp: 2 }}>{product.descricao || "Cuidado selecionado pela clínica para complementar sua rotina."}</p>
+        <div className="mt-auto border-t border-neutral-200 pt-4">
+          <div className="flex items-end justify-between gap-3">
+            <div><strong className="text-xl text-[var(--clinic-primary)]">{money(product.preco)}</strong><p className="mt-1 text-[10px] font-bold uppercase tracking-[0.14em] text-neutral-500">{available} em estoque</p></div>
+            <button type="button" onClick={() => onAdd(product)} disabled={!available} aria-label={"Adicionar " + product.nome + " ao carrinho"} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--clinic-primary)] text-white transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-40"><Plus size={18} /></button>
+          </div>
+          <button type="button" onClick={() => onAdd(product)} disabled={!available} className="mt-4 w-full rounded-full border border-[var(--clinic-primary)] px-4 py-2.5 text-xs font-black uppercase tracking-[0.12em] text-[var(--clinic-primary)] transition hover:bg-[var(--clinic-primary)] hover:text-white disabled:cursor-not-allowed disabled:opacity-40">{available ? "Adicionar ao carrinho" : "Esgotado"}</button>
+        </div>
+      </div>
+    </article>
+  );
+}
+
+export function PublicStorefront({ slug, products, recoveryToken = "", mode = "showcase" }) {
   const [items, setItems] = useState([]);
   const [open, setOpen] = useState(false);
   const [hydrated, setHydrated] = useState(false);
   const [sessionToken, setSessionToken] = useState("");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState("todas");
   const recoveryAttempted = useRef(false);
+
+  const showcaseViewportRef = useRef(null);
+  const showcaseTrackRef = useRef(null);
+  const showcaseAnimationRef = useRef(null);
+  const showcaseHoverRef = useRef(false);
+  const showcaseDraggedRef = useRef(false);
+  const showcasePointerRef = useRef({ active: false, captured: false, startX: 0, startScrollLeft: 0 });
+  const showcaseProducts = useMemo(() => products.slice(0, 12), [products]);
+  const showcaseRepeatCount = 5;
+  const showcaseLoop = useMemo(
+    () => Array.from({ length: showcaseRepeatCount }).flatMap(() => showcaseProducts),
+    [showcaseProducts]
+  );
+  const categories = useMemo(() => Array.from(new Set(products.map((product) => String(product.categoria || "Cuidados").trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b, "pt-BR")), [products]);
+  const filteredProducts = useMemo(() => {
+    const query = normalizeSearch(searchTerm);
+    return products.filter((product) => {
+      const productCategory = String(product.categoria || "Cuidados").trim();
+      const matchesCategory = selectedCategory === "todas" || productCategory === selectedCategory;
+      const searchable = normalizeSearch([product.nome, product.categoria, product.descricao].filter(Boolean).join(" "));
+      return matchesCategory && (!query || searchable.includes(query));
+    });
+  }, [products, searchTerm, selectedCategory]);
   const productsById = useMemo(() => new Map(products.map((product) => [product.id, product])), [products]);
 
   useEffect(() => {
@@ -95,6 +154,48 @@ export function PublicStorefront({ slug, products, recoveryToken = "" }) {
     return () => window.clearTimeout(timeout);
   }, [hydrated, items, productsById, sessionToken, slug]);
 
+
+  useEffect(() => {
+    if (mode === "full" || showcaseProducts.length === 0) return undefined;
+    const viewport = showcaseViewportRef.current;
+    const track = showcaseTrackRef.current;
+    if (!viewport || !track) return undefined;
+
+    const segmentWidth = () => track.scrollWidth / showcaseRepeatCount;
+    const setInitialPosition = () => {
+      const segment = segmentWidth();
+      if (segment) viewport.scrollLeft = segment * 2;
+    };
+    const normalizePosition = () => {
+      const segment = segmentWidth();
+      if (!segment) return;
+      if (viewport.scrollLeft < segment) viewport.scrollLeft += segment * 2;
+      if (viewport.scrollLeft > segment * 3) viewport.scrollLeft -= segment * 2;
+    };
+
+    const initialFrame = window.requestAnimationFrame(setInitialPosition);
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    let lastTime = performance.now();
+
+    const animate = (time) => {
+      const delta = Math.min(64, time - lastTime);
+      lastTime = time;
+      if (!reducedMotion && !showcasePointerRef.current.active && !showcaseHoverRef.current) {
+        viewport.scrollLeft += (46 * delta) / 1000;
+        normalizePosition();
+      }
+      showcaseAnimationRef.current = window.requestAnimationFrame(animate);
+    };
+
+    showcaseAnimationRef.current = window.requestAnimationFrame(animate);
+    window.addEventListener("resize", setInitialPosition);
+    return () => {
+      window.cancelAnimationFrame(initialFrame);
+      if (showcaseAnimationRef.current) window.cancelAnimationFrame(showcaseAnimationRef.current);
+      window.removeEventListener("resize", setInitialPosition);
+    };
+  }, [mode, showcaseProducts]);
+
   const totalQuantity = items.reduce((sum, item) => sum + Number(item.quantidade || 0), 0);
   const subtotal = items.reduce((sum, item) => sum + Number(item.preco || 0) * Number(item.quantidade || 0), 0);
 
@@ -120,6 +221,43 @@ export function PublicStorefront({ slug, products, recoveryToken = "" }) {
 
   function remove(id) {
     setItems((current) => current.filter((item) => item.id !== id));
+  }
+
+
+  function handleShowcasePointerDown(event) {
+    if (mode === "full") return;
+    const viewport = showcaseViewportRef.current;
+    if (!viewport) return;
+    showcasePointerRef.current = { active: true, captured: false, startX: event.clientX, startScrollLeft: viewport.scrollLeft };
+    showcaseDraggedRef.current = false;
+  }
+
+  function handleShowcasePointerMove(event) {
+    const viewport = showcaseViewportRef.current;
+    const pointer = showcasePointerRef.current;
+    if (!viewport || !pointer.active) return;
+    const distance = event.clientX - pointer.startX;
+    if (Math.abs(distance) <= 6 && !showcaseDraggedRef.current) return;
+    showcaseDraggedRef.current = true;
+    if (!pointer.captured) {
+      viewport.setPointerCapture?.(event.pointerId);
+      showcasePointerRef.current.captured = true;
+    }
+    viewport.scrollLeft = pointer.startScrollLeft - distance;
+  }
+
+  function handleShowcasePointerUp(event) {
+    const viewport = showcaseViewportRef.current;
+    const wasCaptured = showcasePointerRef.current.captured;
+    showcasePointerRef.current.active = false;
+    showcasePointerRef.current.captured = false;
+    if (wasCaptured) viewport?.releasePointerCapture?.(event.pointerId);
+    window.setTimeout(() => { showcaseDraggedRef.current = false; }, 120);
+  }
+
+  function addFromShowcase(product) {
+    if (showcaseDraggedRef.current) return;
+    add(product);
   }
 
   const cartLayer = hydrated ? createPortal(
@@ -192,35 +330,78 @@ export function PublicStorefront({ slug, products, recoveryToken = "" }) {
 
   return (
     <>
-      <section id="loja" className="public-section-warm mx-auto max-w-7xl px-5 py-24 sm:px-8">
+      <section id="loja" className={mode === "full" ? "mx-auto min-h-[calc(100vh-5rem)] max-w-7xl px-5 py-16 sm:px-8 sm:py-20" : "public-section-warm mx-auto max-w-7xl px-5 py-24 sm:px-8"}>
         <div className="text-center">
           <p className="text-xs font-black uppercase tracking-[0.28em] text-[var(--clinic-primary)]">Lojinha</p>
-          <h2 className="mx-auto mt-4 max-w-3xl text-4xl font-semibold tracking-tight text-[#181510] sm:text-5xl">Cuidados para levar com você</h2>
-          <p className="mx-auto mt-5 max-w-2xl text-sm leading-7 text-neutral-600">Escolha seus produtos, compre com segurança e retire na clínica ou receba conforme a disponibilidade.</p>
+          <h1 className="mx-auto mt-4 max-w-3xl text-4xl font-semibold tracking-tight text-[#181510] sm:text-5xl">{mode === "full" ? "Loja completa" : "Cuidados para levar com você"}</h1>
+          <p className="mx-auto mt-5 max-w-2xl text-sm leading-7 text-neutral-600">{mode === "full" ? "Encontre todos os produtos disponíveis e escolha seus cuidados com tranquilidade." : "Escolha seus produtos, compre com segurança e retire na clínica ou receba conforme a disponibilidade."}</p>
         </div>
-        <div className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {products.map((product, index) => (
-            <article key={product.id} className={`public-card-reveal ${index % 2 === 0 ? "public-reveal-left" : "public-reveal-right"} public-hover-card flex flex-col overflow-hidden rounded-[1.75rem] border border-neutral-200 bg-white/70 shadow-[0_18px_44px_rgba(23,19,15,0.07)] backdrop-blur`}>
-              {product.imagem_url ? (
-                <img src={product.imagem_url} alt={product.nome} className="aspect-[4/3] w-full object-cover" />
-              ) : (
-                <div className="flex aspect-[4/3] items-center justify-center bg-[radial-gradient(circle,color-mix(in_srgb,var(--clinic-accent)_28%,transparent),transparent_68%)]"><ShoppingBag size={42} className="text-[var(--clinic-primary)]" /></div>
-              )}
-              <div className="flex flex-1 flex-col p-5">
-                <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[var(--clinic-primary)]">{product.categoria || "Cuidados"}</p>
-                <h3 className="mt-3 text-lg font-semibold text-[#181510]">{product.nome}</h3>
-                {product.descricao ? <p className="mt-3 flex-1 text-sm leading-6 text-neutral-600">{product.descricao}</p> : <div className="flex-1" />}
-                <div className="mt-5 border-t border-neutral-200 pt-4">
-                  <div className="flex items-end justify-between gap-3">
-                    <div><strong className="text-xl text-[var(--clinic-primary)]">{money(product.preco)}</strong><p className="mt-1 text-[10px] font-bold uppercase tracking-[0.14em] text-neutral-500">{product.estoque_disponivel} em estoque</p></div>
-                    <button type="button" onClick={() => add(product)} disabled={!product.estoque_disponivel} aria-label={`Adicionar ${product.nome} ao carrinho`} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--clinic-primary)] text-white transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-40"><Plus size={18} /></button>
-                  </div>
-                  <button type="button" onClick={() => add(product)} disabled={!product.estoque_disponivel} className="mt-4 w-full rounded-full border border-[var(--clinic-primary)] px-4 py-2.5 text-xs font-black uppercase tracking-[0.12em] text-[var(--clinic-primary)] transition hover:bg-[var(--clinic-primary)] hover:text-white disabled:cursor-not-allowed disabled:opacity-40">{product.estoque_disponivel ? "Adicionar ao carrinho" : "Esgotado"}</button>
-                </div>
+
+        {products.length ? mode === "full" ? (
+          <>
+            <div className="mx-auto mt-9 grid max-w-5xl gap-3 rounded-[1.5rem] border border-white/60 bg-white/55 p-3 shadow-[0_18px_55px_rgba(23,19,15,0.08)] backdrop-blur-xl md:grid-cols-[1fr_240px]">
+              <label className="relative block">
+                <Search size={18} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-neutral-400" />
+                <input
+                  type="search"
+                  value={searchTerm}
+                  onChange={(event) => setSearchTerm(event.target.value)}
+                  placeholder="Buscar produto, categoria ou descrição"
+                  className="h-12 w-full rounded-xl border border-neutral-200 bg-white/85 pl-11 pr-4 text-sm text-neutral-900 outline-none transition focus:border-[var(--clinic-primary)] focus:ring-2 focus:ring-[color-mix(in_srgb,var(--clinic-primary)_18%,transparent)]"
+                />
+              </label>
+              <select
+                value={selectedCategory}
+                onChange={(event) => setSelectedCategory(event.target.value)}
+                aria-label="Filtrar por categoria"
+                className="h-12 w-full rounded-xl border border-neutral-200 bg-white/85 px-4 text-sm font-semibold text-neutral-800 outline-none transition focus:border-[var(--clinic-primary)]"
+              >
+                <option value="todas">Todas as categorias</option>
+                {categories.map((category) => <option key={category} value={category}>{category}</option>)}
+              </select>
+            </div>
+            <div className="mt-5 flex flex-wrap items-center justify-between gap-3 text-sm text-neutral-600">
+              <p><strong className="text-neutral-900">{filteredProducts.length}</strong> {filteredProducts.length === 1 ? "produto encontrado" : "produtos encontrados"}</p>
+              {searchTerm || selectedCategory !== "todas" ? <button type="button" onClick={() => { setSearchTerm(""); setSelectedCategory("todas"); }} className="font-black text-[var(--clinic-primary)]">Limpar filtros</button> : null}
+            </div>
+            {filteredProducts.length ? (
+              <div className="mt-6 grid items-stretch gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                {filteredProducts.map((product, index) => <StoreProductCard key={product.id} product={product} index={index} onAdd={add} />)}
               </div>
-            </article>
-          ))}
-        </div>
+            ) : (
+              <div className="mt-6 rounded-[1.75rem] border border-dashed border-neutral-300 bg-white/45 px-6 py-16 text-center">
+                <Search className="mx-auto text-neutral-300" size={38} />
+                <p className="mt-4 text-sm font-bold text-neutral-700">Nenhum produto corresponde aos filtros.</p>
+                <button type="button" onClick={() => { setSearchTerm(""); setSelectedCategory("todas"); }} className="mt-4 text-sm font-black text-[var(--clinic-primary)]">Mostrar todos os produtos</button>
+              </div>
+            )}
+          </>
+        ) : (
+          <>
+            <div
+              ref={showcaseViewportRef}
+              className="public-store-viewport relative mt-10 overflow-x-auto py-6"
+              onPointerDown={handleShowcasePointerDown}
+              onPointerMove={handleShowcasePointerMove}
+              onPointerUp={handleShowcasePointerUp}
+              onPointerCancel={handleShowcasePointerUp}
+              onMouseEnter={() => { showcaseHoverRef.current = true; }}
+              onMouseLeave={(event) => {
+                showcaseHoverRef.current = false;
+                if (showcasePointerRef.current.active) handleShowcasePointerUp(event);
+              }}
+            >
+              <div ref={showcaseTrackRef} className="public-store-track flex w-max items-stretch gap-5">
+                {showcaseLoop.map((product, index) => <StoreProductCard key={product.id + "-" + index} product={product} index={index} moving onAdd={addFromShowcase} />)}
+              </div>
+            </div>
+            <div className="mt-7 text-center">
+              <a href={"/c/" + slug + "/loja"} className="inline-flex items-center justify-center rounded-full border border-[var(--clinic-primary)] bg-white/55 px-7 py-3 text-sm font-black text-[var(--clinic-primary)] shadow-sm backdrop-blur transition hover:-translate-y-0.5 hover:bg-[var(--clinic-primary)] hover:text-white">Ver loja completa</a>
+            </div>
+          </>
+        ) : (
+          <div className="mt-10 rounded-[1.75rem] border border-dashed border-neutral-300 bg-white/45 px-6 py-16 text-center text-sm text-neutral-600">Nenhum produto está disponível no momento.</div>
+        )}
       </section>
       {cartLayer}
     </>
