@@ -1,4 +1,4 @@
-﻿-- Initial schema for Clinica SaaS MVP.
+-- Initial schema for Clinica SaaS MVP.
 -- Apply this migration in the Supabase SQL editor or via Supabase CLI.
 
 create schema if not exists app_private;

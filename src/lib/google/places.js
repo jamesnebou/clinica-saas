@@ -36,8 +36,6 @@ export async function getGooglePlaceReviews({ placeId, limit = 4 } = {}) {
     });
 
     if (!response.ok) {
-      const body = await response.text().catch(() => "");
-      console.error("Erro ao buscar avaliacoes Google Places:", response.status, body.slice(0, 240));
       return { reviews: [], rating: null, userRatingCount: null, googleMapsUri: null };
     }
 
@@ -52,8 +50,7 @@ export async function getGooglePlaceReviews({ placeId, limit = 4 } = {}) {
       userRatingCount: place.userRatingCount || null,
       googleMapsUri: place.googleMapsUri || null,
     };
-  } catch (error) {
-    console.error("Erro ao conectar no Google Places:", error);
+  } catch {
     return { reviews: [], rating: null, userRatingCount: null, googleMapsUri: null };
   }
 }

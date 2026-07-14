@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import { decryptClinicSecrets } from "@/lib/security/clinic-secrets";
 
 export const runtime = "nodejs";
 
@@ -11,20 +12,18 @@ function getWebhookToken(request) {
   return request.headers.get("asaas-access-token") || request.headers.get("x-webhook-token") || "";
 }
 
-async function isAllowedWebhookToken(token) {
+async function isAllowedWebhookToken(request, token) {
   const expectedToken = process.env.ASAAS_WEBHOOK_TOKEN;
   if (expectedToken && token === expectedToken) return true;
-  if (!token) return !expectedToken;
-
-  const { data, error } = await supabaseAdmin
-    .from("clinica_integracoes")
-    .select("clinica_id")
-    .eq("asaas_webhook_token", token)
-    .eq("asaas_ativo", true)
-    .limit(1);
-
+  if (!token) return false;
+  const clinicId = request.nextUrl.searchParams.get("clinica");
+  let query = supabaseAdmin.from("clinica_integracoes")
+    .select("clinica_id, asaas_segredos_criptografados, asaas_webhook_token")
+    .eq("asaas_ativo", true);
+  if (clinicId) query = query.eq("clinica_id", clinicId);
+  const { data, error } = await query;
   if (error) throw error;
-  return Boolean(data?.length);
+  return (data || []).some((item) => (decryptClinicSecrets(item.asaas_segredos_criptografados).webhookToken || item.asaas_webhook_token) === token);
 }
 
 function normalizePaymentStatus(status) {
@@ -137,6 +136,39 @@ async function updatePublicBookingPayment({ payment, payload, event, paymentStat
   return true;
 }
 
+async function updateStoreOrderPayment({ payment, payload, paymentStatus, paidAt }) {
+  const paymentId = payment?.id || "";
+  const externalReference = String(payment?.externalReference || "");
+  const externalOrderId = externalReference.startsWith("loja:") ? externalReference.slice(5) : "";
+  if (!paymentId && !externalOrderId) return false;
+  let order = null;
+  if (paymentId) {
+    const { data, error } = await supabaseAdmin.from("pedidos_clinica").select("id, clinica_id, cliente_id, total, pagamento_status, status").eq("asaas_payment_id", paymentId).limit(1);
+    if (error) throw error; order = data?.[0] || null;
+  }
+  if (!order && externalOrderId) {
+    const { data, error } = await supabaseAdmin.from("pedidos_clinica").select("id, clinica_id, cliente_id, total, pagamento_status, status").eq("id", externalOrderId).limit(1);
+    if (error) throw error; order = data?.[0] || null;
+  }
+  if (!order?.id) return false;
+  const invoiceUrl = payment?.invoiceUrl || payment?.bankSlipUrl || null;
+  const { error: orderPayloadError } = await supabaseAdmin.from("pedidos_clinica").update({ asaas_payment_id: paymentId || null, invoice_url: invoiceUrl, payload_pagamento: payload }).eq("id", order.id).eq("clinica_id", order.clinica_id);
+  if (orderPayloadError) throw orderPayloadError;
+  if (paymentStatus === "pago") {
+    const { error } = await supabaseAdmin.rpc("confirmar_pagamento_pedido_loja", { p_pedido_id: order.id, p_asaas_payment_id: paymentId || null, p_payload: payload, p_pago_em: paidAt ? new Date(paidAt).toISOString() : new Date().toISOString() }); if (error) throw error;
+  } else if (paymentStatus === "estornado" && order.pagamento_status === "pago") {
+    const { error } = await supabaseAdmin.rpc("estornar_pedido_loja", { p_pedido_id: order.id, p_motivo: "Estorno confirmado pelo webhook Asaas." }); if (error) throw error;
+  } else if (["cancelado", "vencido"].includes(paymentStatus) && order.pagamento_status !== "pago") {
+    const { error } = await supabaseAdmin.rpc("cancelar_pedido_loja", { p_pedido_id: order.id, p_motivo: `Pagamento ${paymentStatus} no Asaas.` }); if (error) throw error;
+  }
+  const billingType = String(payment?.billingType || "").toUpperCase();
+  const forma = billingType === "PIX" ? "pix" : billingType === "BOLETO" ? "boleto" : billingType === "CREDIT_CARD" ? "cartao_credito" : "link";
+  const internalStatus = paymentStatus === "pago" ? "pago" : paymentStatus === "estornado" ? "estornado" : paymentStatus === "cancelado" ? "cancelado" : paymentStatus === "vencido" ? "falhou" : "pendente";
+  const { error: paymentError } = await supabaseAdmin.from("pagamentos_loja_clinica").upsert({ clinica_id: order.clinica_id, cliente_id: order.cliente_id, pedido_id: order.id, valor: Number(payment?.value || order.total || 0), forma, status: internalStatus, provedor: "asaas", provedor_pagamento_id: paymentId, link_pagamento: invoiceUrl, pago_em: paymentStatus === "pago" ? (paidAt ? new Date(paidAt).toISOString() : new Date().toISOString()) : null, vencimento_em: payment?.dueDate ? new Date(`${payment.dueDate}T23:59:59`).toISOString() : null, payload, observacoes: "Atualizado automaticamente pelo webhook da lojinha." }, { onConflict: "clinica_id,provedor,provedor_pagamento_id" });
+  if (paymentError) throw paymentError;
+  return true;
+}
+
 async function findClinicBySubscription(subscription) {
   const subscriptionId = subscription?.id || "";
   const customerId = subscription?.customer || "";
@@ -161,7 +193,7 @@ async function findClinicBySubscription(subscription) {
 }
 
 export async function POST(request) {
-  if (!(await isAllowedWebhookToken(getWebhookToken(request)))) {
+  if (!(await isAllowedWebhookToken(request, getWebhookToken(request)))) {
     return unauthorized();
   }
 
@@ -197,6 +229,9 @@ export async function POST(request) {
   const payment = payload?.payment || payload?.data || payload;
   const paymentStatus = normalizePaymentStatus(payment?.status);
   const paidAt = payment?.paymentDate || payment?.confirmedDate || payment?.clientPaymentDate || null;
+
+  const storeOrderUpdated = await updateStoreOrderPayment({ payment, payload, event, paymentStatus, paidAt });
+  if (storeOrderUpdated) return NextResponse.json({ ok: true, matched: true, type: "store-order-payment" });
 
   const publicBookingUpdated = await updatePublicBookingPayment({ payment, payload, event, paymentStatus, paidAt });
   if (publicBookingUpdated) {

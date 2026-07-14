@@ -1,4 +1,4 @@
-﻿-- Storage-backed client photos and basic clinic finance.
+-- Storage-backed client photos and basic clinic finance.
 
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 values (

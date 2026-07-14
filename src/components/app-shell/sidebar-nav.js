@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Bell, CalendarDays, CreditCard, KanbanSquare, LayoutDashboard, Menu, ReceiptText, Scissors, Settings, Stethoscope, UserCog, UsersRound, X } from "lucide-react";
+import { Bell, CalendarDays, CreditCard, KanbanSquare, LayoutDashboard, Menu, ReceiptText, Scissors, ShoppingBag, PackageCheck, Settings, Stethoscope, UserCog, UsersRound, X } from "lucide-react";
 import { useState } from "react";
 
 const iconMap = {
@@ -13,6 +13,8 @@ const iconMap = {
   crm: KanbanSquare,
   profissionais: Stethoscope,
   procedimentos: Scissors,
+  produtos: ShoppingBag,
+  pedidos: PackageCheck,
   usuarios: UserCog,
   configuracoes: Settings,
   financeiro: CreditCard,

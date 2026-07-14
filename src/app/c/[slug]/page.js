@@ -1,4 +1,4 @@
-﻿import { Fragment } from "react";
+import { Fragment } from "react";
 import { CheckCircle2, Clock, CreditCard, MapPin, MessageCircle, Quote, ShieldCheck, Sparkles, Star } from "lucide-react";
 import { notFound } from "next/navigation";
 import { getGooglePlaceReviews } from "@/lib/google/places";
@@ -8,6 +8,8 @@ import { PublicLeadForm } from "./lead-form";
 import { PublicMobileMenu } from "./mobile-menu";
 import { PublicScrollEffects } from "./scroll-effects";
 import { PublicServicesSection } from "./services-section";
+import { PublicStorefront } from "./store-cart";
+import { availableProductStock } from "@/lib/store/config";
 
 export const dynamic = "force-dynamic";
 
@@ -224,12 +226,13 @@ export default async function PublicClinicPage({ params, searchParams }) {
 
   const meta = clinic.metadata || {};
   const site = meta.site_publico || {};
+  const lojinhaAtiva = site.lojinha_ativa !== false;
   if (site.publicado === false) notFound();
 
   const primaryColor = safeColor(meta.primary_color, "#2e3a2d");
   const accentColor = safeColor(meta.accent_color, "#d99bae");
 
-  const [{ data: procedimentos = [] }, { data: profissionais = [] }] = await Promise.all([
+  const [{ data: procedimentos = [] }, { data: profissionais = [] }, { data: produtos = [] }] = await Promise.all([
     supabaseAdmin
       .from("procedimentos")
       .select("id, nome, categoria, descricao, duracao_minutos, preco, cuidados_antes, cuidados_depois, sinal_percentual, sinal_valor, destaque_site, ordem_site, imagem_url")
@@ -245,14 +248,27 @@ export default async function PublicClinicPage({ params, searchParams }) {
       .eq("clinica_id", clinic.id)
       .eq("ativo", true)
       .order("nome", { ascending: true }),
+    supabaseAdmin
+      .from("produtos_clinica")
+      .select("id, nome, categoria, descricao, preco, estoque_atual, estoque_reservado, unidade, imagem_url")
+      .eq("clinica_id", clinic.id)
+      .eq("ativo", true)
+      .eq("publicado_site", true)
+      .gt("estoque_atual", 0)
+      .order("categoria", { ascending: true })
+      .order("nome", { ascending: true }),
   ]);
+
+  const publicProcedures = Array.isArray(procedimentos) ? procedimentos : [];
+  const publicProfessionals = Array.isArray(profissionais) ? profissionais : [];
+  const publicProducts = Array.isArray(produtos) ? produtos : [];
 
   const brandName = meta.brand_name || clinic.nome;
   const logoUrl = meta.logo_url || "";
   const whatsapp = String(clinic.telefone || "").replace(/\D/g, "");
   const schedule = meta.horario_funcionamento || {};
-  const professionalName = site.nome_profissional || profissionais[0]?.nome || brandName;
-  const professionalBio = site.bio_profissional || profissionais[0]?.observacoes || "Atendimento cuidadoso, escuta ativa e plano de tratamento alinhado ao seu objetivo estético.";
+  const professionalName = site.nome_profissional || publicProfessionals[0]?.nome || brandName;
+  const professionalBio = site.bio_profissional || publicProfessionals[0]?.observacoes || "Atendimento cuidadoso, escuta ativa e plano de tratamento alinhado ao seu objetivo estético.";
   const heroImage = site.hero_image_url || site.profissional_image_url || fallbackImage(brandName, true);
   const professionalImage = site.profissional_image_url || site.hero_image_url || fallbackImage(professionalName);
   const clinicPhotos = [site.clinica_foto_1, site.clinica_foto_2, site.clinica_foto_3].filter(Boolean);
@@ -304,6 +320,7 @@ export default async function PublicClinicPage({ params, searchParams }) {
           <nav className="hidden items-center gap-5 text-sm font-semibold text-white/78 lg:flex">
             <a href="#sobre">Sobre</a>
             <a href="#servicos">Serviços</a>
+            {lojinhaAtiva ? <a href="#loja">Lojinha</a> : null}
             <a href="#depoimentos">Depoimentos</a>
             <a href="#localizacao">Localização</a>
             <a href="popup">Quero saber mais</a>
@@ -389,7 +406,9 @@ export default async function PublicClinicPage({ params, searchParams }) {
         </div>
       </section>
 
-      <PublicServicesSection procedimentos={procedimentos} />
+      <PublicServicesSection procedimentos={publicProcedures} />
+
+      {lojinhaAtiva && publicProducts.length ? <PublicStorefront slug={clinic.slug} products={publicProducts.map((produto) => ({ ...produto, estoque_disponivel: availableProductStock(produto) }))} recoveryToken={query?.carrinho || ""} /> : null}
 
       <section id="depoimentos" className="public-section-soft mx-auto max-w-7xl px-5 py-24 sm:px-8">
         <SectionHeading eyebrow="Depoimentos" title="O que pacientes dizem:" description="A satisfação dos pacientes são o maior reconhecimento." center />
@@ -492,6 +511,7 @@ export default async function PublicClinicPage({ params, searchParams }) {
               <a href="#topo">Início</a>
               <a href="#sobre">Sobre</a>
               <a href="#servicos">Serviços</a>
+              {lojinhaAtiva ? <a href="#loja">Lojinha</a> : null}
               <a href="#depoimentos">Depoimentos</a>
               <a href="#agendar">Agendamento</a>
               <a href="#localizacao">Localização</a>
@@ -524,7 +544,7 @@ export default async function PublicClinicPage({ params, searchParams }) {
       ) : null}
 
       <PublicLeadForm slug={clinic.slug} query={query} />
-      <PublicMobileMenu />
+      <PublicMobileMenu lojinhaAtiva={lojinhaAtiva} />
     </main>
   );
 }

@@ -6,6 +6,7 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 import { createAsaasCustomerForPatient, createAsaasPaymentForBooking, isAsaasConfigured } from "@/lib/asaas/client";
 import { notifyClinicPublicBooking } from "@/lib/notifications/booking";
 import { isWithinWorkingPeriods } from "@/lib/clinic/schedule";
+import { decryptClinicSecrets } from "@/lib/security/clinic-secrets";
 
 function text(formData, key) {
   return String(formData.get(key) || "").trim();
@@ -96,12 +97,13 @@ export async function createPublicBookingAction(formData) {
 
   const { data: integration, error: integrationError } = await supabaseAdmin
     .from("clinica_integracoes")
-    .select("clinica_id, asaas_ativo, asaas_api_key, asaas_base_url, email_ativo, email_destino, email_remetente, whatsapp_ativo, whatsapp_provider, whatsapp_numero_destino, whatsapp_webhook_url, whatsapp_token")
+    .select("clinica_id, asaas_ativo, asaas_api_key, asaas_base_url, asaas_configuracao_publica, asaas_segredos_criptografados, email_ativo, email_destino, email_remetente, whatsapp_ativo, whatsapp_provider, whatsapp_numero_destino, whatsapp_webhook_url, whatsapp_token")
     .eq("clinica_id", clinic.id)
     .maybeSingle();
 
   if (integrationError) throw integrationError;
-  const clinicIntegration = integration || { clinica_id: clinic.id };
+  const integrationSecrets = decryptClinicSecrets(integration?.asaas_segredos_criptografados);
+  const clinicIntegration = integration ? { ...integration, apiKey: integrationSecrets.apiKey || integration.asaas_api_key, baseUrl: integration.asaas_configuracao_publica?.baseUrl || integration.asaas_base_url } : { clinica_id: clinic.id };
 
   const siteConfig = clinic.metadata?.site_publico || {};
   if (siteConfig.publicado === false) {

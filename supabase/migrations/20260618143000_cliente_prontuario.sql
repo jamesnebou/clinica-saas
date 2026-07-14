@@ -1,4 +1,4 @@
-﻿-- Adds client medical record fields and before/after photo registry.
+-- Adds client medical record fields and before/after photo registry.
 
 alter table public.clientes
   add column if not exists observacoes_clinicas text,

@@ -1,4 +1,4 @@
-﻿-- Stronger medical record controls: consent records and photo governance.
+-- Stronger medical record controls: consent records and photo governance.
 
 create or replace function app_private.usuario_prontuario_clinica(p_clinica_id uuid)
 returns boolean

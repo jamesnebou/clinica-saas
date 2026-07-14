@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Menu, X } from "lucide-react";
 
-export function PublicMobileMenu() {
+export function PublicMobileMenu({ lojinhaAtiva = false }) {
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
@@ -39,6 +39,7 @@ export function PublicMobileMenu() {
           <nav className="public-floating-menu-panel" aria-label="Menu do site">
             <a href="#sobre" onClick={close}>Sobre</a>
             <a href="#servicos" onClick={close}>Serviços</a>
+            {lojinhaAtiva ? <a href="#loja" onClick={close}>Lojinha</a> : null}
             <a href="#depoimentos" onClick={close}>Depoimentos</a>
             <a href="#localizacao" onClick={close}>Localização</a>
             <a href="popup" onClick={close}>Quero saber mais</a>

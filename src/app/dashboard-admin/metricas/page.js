@@ -1,4 +1,4 @@
-﻿import { KpiCard, PageHero, formatMoney, getOverviewStats, loadDashboardAdminData, metricCards } from "../admin-core";
+import { KpiCard, PageHero, formatMoney, getOverviewStats, loadDashboardAdminData, metricCards } from "../admin-core";
 
 export const metadata = { title: "Métricas admin | NexaWi Clínicas" };
 

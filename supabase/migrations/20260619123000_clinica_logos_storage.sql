@@ -1,4 +1,4 @@
-﻿-- Public storage bucket for clinic logos.
+-- Public storage bucket for clinic logos.
 
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 values (
