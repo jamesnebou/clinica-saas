@@ -220,17 +220,27 @@ export function PublicServicesSection({ procedimentos = [] }) {
               className="group public-card-reveal public-reveal-up public-service-card public-service-card-dark w-[330px] shrink-0 overflow-hidden rounded-[1.75rem] border border-white/10 bg-white/[0.075] p-0 text-left text-white backdrop-blur-2xl md:w-[390px]"
             >
               {item.destaque_site ? <span className="public-service-reflection" aria-hidden="true" /> : null}
-              {item.imagem_url ? (
-                <div className="relative aspect-square w-full overflow-hidden border-b border-white/10 bg-black/20">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
+              <div className="relative aspect-square w-full overflow-hidden border-b border-white/10 bg-black/20">
+                {item.imagem_url ? (
+                  // eslint-disable-next-line @next/next/no-img-element
                   <img src={item.imagem_url} alt={item.nome} className="h-full w-full object-cover transition duration-500 group-hover:scale-[1.02]" />
-                </div>
-              ) : null}
-              <div className="p-6">
+                ) : (
+                  <div className="flex h-full w-full flex-col items-center justify-center bg-[radial-gradient(circle_at_30%_20%,color-mix(in_srgb,var(--clinic-accent)_20%,transparent),transparent_45%),linear-gradient(145deg,#17130f,#24201c)] px-10 text-center">
+                    <span className="text-xs font-black uppercase tracking-[0.28em] text-[var(--clinic-accent)]">{item.categoria || "Procedimento"}</span>
+                    <strong className="mt-4 text-2xl font-semibold text-white/88">{item.nome}</strong>
+                  </div>
+                )}
+              </div>
+              <div className="flex h-[370px] flex-col p-6">
                 <div className="flex items-start justify-between gap-4">
-                  <div>
+                  <div className="min-w-0 flex-1">
                     <p className="text-xs font-bold uppercase tracking-[0.22em] text-[var(--clinic-accent)]">{item.categoria || "Procedimento"}</p>
-                    <h3 className="mt-3 text-2xl font-semibold text-white">{item.nome}</h3>
+                    <h3
+                      className="mt-3 h-16 overflow-hidden text-2xl font-semibold text-white"
+                      style={{ display: "-webkit-box", WebkitBoxOrient: "vertical", WebkitLineClamp: 2 }}
+                    >
+                      {item.nome}
+                    </h3>
                   </div>
                   <span className="shrink-0 whitespace-nowrap rounded-full border border-white/10 bg-white/10 px-3 py-1 text-xs font-bold text-white/78">{item.duracao_minutos} min</span>
                 </div>
@@ -241,7 +251,7 @@ export function PublicServicesSection({ procedimentos = [] }) {
                   {item.descricao || "Procedimento com avaliação profissional e orientações personalizadas."}
                 </p>
                 <span className="mt-3 inline-flex text-xs font-black text-[var(--clinic-accent)]">Ver mais...</span>
-                <div className="mt-5 flex items-end justify-between gap-4 border-t border-white/10 pt-5">
+                <div className="mt-auto flex items-end justify-between gap-4 border-t border-white/10 pt-5">
                   <div>
                     <p className="text-xs text-white/42">Valor</p>
                     <strong className="text-2xl text-white">{money(item.preco)}</strong>
