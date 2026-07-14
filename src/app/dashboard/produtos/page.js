@@ -81,6 +81,14 @@ export default async function ProdutosPage({ searchParams }) {
           </div>
         ) : null}
 
+        {params?.ok === "configuracao" ? (
+          <div className="mt-6">
+            <Notice type="success" title="Configurações salvas">
+              A operação da lojinha foi atualizada com sucesso.
+            </Notice>
+          </div>
+        ) : null}
+
         <div className={`mt-7 flex flex-col gap-4 rounded-xl border p-5 sm:flex-row sm:items-center sm:justify-between ${lojinhaAtiva ? "border-emerald-200 bg-emerald-50/80" : "border-neutral-200 bg-neutral-100/80"}`}>
           <div>
             <p className={`text-xs font-black uppercase tracking-[0.2em] ${lojinhaAtiva ? "text-emerald-700" : "text-neutral-500"}`}>Lojinha {lojinhaAtiva ? "ativa" : "desativada"}</p>

@@ -49,7 +49,7 @@ export function Field({ label, name, type = "text", required = false, placeholde
     <label className="block">
       <span className="text-sm font-medium text-neutral-700">{label}</span>
       <input
-        className="mt-2 h-11 w-full rounded-lg border border-neutral-200 bg-white px-3 text-sm outline-none transition placeholder:text-neutral-400 focus:border-[var(--clinic-primary)] focus:shadow-[0_0_0_4px_color-mix(in_srgb,var(--clinic-primary)_12%,transparent)] focus:ring-0"
+        className="dashboard-field mt-2 h-11 w-full rounded-lg border border-neutral-200 bg-white px-3 text-sm text-neutral-900 outline-none transition placeholder:text-neutral-400 focus:border-[var(--clinic-primary)] focus:shadow-[0_0_0_4px_color-mix(in_srgb,var(--clinic-primary)_12%,transparent)] focus:ring-0"
         name={name}
         type={type}
         required={required}
@@ -65,7 +65,7 @@ export function TextArea({ label, name, placeholder = "", defaultValue = "" }) {
     <label className="block">
       <span className="text-sm font-medium text-neutral-700">{label}</span>
       <textarea
-        className="mt-2 min-h-24 w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none transition placeholder:text-neutral-400 focus:border-[var(--clinic-primary)] focus:shadow-[0_0_0_4px_color-mix(in_srgb,var(--clinic-primary)_12%,transparent)] focus:ring-0"
+        className="dashboard-field mt-2 min-h-24 w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-900 outline-none transition placeholder:text-neutral-400 focus:border-[var(--clinic-primary)] focus:shadow-[0_0_0_4px_color-mix(in_srgb,var(--clinic-primary)_12%,transparent)] focus:ring-0"
         name={name}
         placeholder={placeholder}
         defaultValue={defaultValue}
@@ -82,7 +82,7 @@ export function SelectField({ label, name, defaultValue = "", required = false, 
         name={name}
         defaultValue={defaultValue}
         required={required}
-        className="mt-2 h-11 w-full rounded-lg border border-neutral-200 bg-white px-3 text-sm outline-none transition focus:border-[var(--clinic-primary)] focus:shadow-[0_0_0_4px_color-mix(in_srgb,var(--clinic-primary)_12%,transparent)] focus:ring-0"
+        className="dashboard-field mt-2 h-11 w-full rounded-lg border border-neutral-200 bg-white px-3 text-sm text-neutral-900 outline-none transition focus:border-[var(--clinic-primary)] focus:shadow-[0_0_0_4px_color-mix(in_srgb,var(--clinic-primary)_12%,transparent)] focus:ring-0"
       >
         {children}
       </select>

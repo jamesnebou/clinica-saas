@@ -518,12 +518,17 @@ export async function updateStoreCommerceSettingsAction(formData) {
   if (!nextConfig.retirada_ativa && !nextConfig.entrega_ativa) {
     redirectWithMessage("/dashboard/produtos", "configuracao", "Ative retirada ou entrega para receber pedidos.");
   }
-  const { error } = await supabaseAdmin.from("clinicas").update({
+  const { data: updatedClinic, error } = await supabaseAdmin.from("clinicas").update({
     metadata: { ...metadata, site_publico: { ...site, lojinha_config: nextConfig } },
-  }).eq("id", clinicaId);
+  }).eq("id", clinicaId).select("id").maybeSingle();
   if (error) throw error;
+  if (!updatedClinic?.id) {
+    redirectWithMessage("/dashboard/produtos", "configuracao", "As configurações da lojinha não foram gravadas. Tente novamente.");
+  }
   revalidatePath("/dashboard/produtos");
   revalidatePath(`/c/${activeClinic.slug}`);
+  revalidatePath(`/c/${activeClinic.slug}/loja`);
+  redirect("/dashboard/produtos?ok=configuracao");
 }
 
 function agendaRedirectUrl(formData, fallbackDate = "") {

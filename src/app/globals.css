@@ -974,6 +974,23 @@ textarea {
   background: rgba(3, 3, 5, 0.78) !important;
   color: #fafafa !important;
 }
+.premium-shell .product-edit-panel input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]),
+.premium-shell .product-edit-panel textarea,
+.premium-shell .product-edit-panel select {
+  border-color: rgba(255, 255, 255, 0.17) !important;
+  background: rgba(3, 3, 5, 0.82) !important;
+  color: #fafafa !important;
+  caret-color: #fafafa;
+}
+.premium-shell .product-edit-panel input::placeholder,
+.premium-shell .product-edit-panel textarea::placeholder {
+  color: rgba(229, 229, 234, 0.52) !important;
+  opacity: 1;
+}
+.premium-shell .product-edit-panel select option {
+  background: #101014;
+  color: #fafafa;
+}
 .premium-shell .product-upload-field {
   border-color: rgba(255, 255, 255, 0.13) !important;
   background: rgba(255, 255, 255, 0.035) !important;
