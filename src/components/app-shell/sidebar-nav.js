@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Bell, CalendarDays, CreditCard, KanbanSquare, LayoutDashboard, Menu, ReceiptText, Scissors, ShoppingBag, PackageCheck, Settings, Stethoscope, UserCog, UsersRound, X } from "lucide-react";
+import { Bell, BookOpenCheck, CalendarDays, CreditCard, KanbanSquare, LayoutDashboard, Menu, ReceiptText, Scissors, ShoppingBag, PackageCheck, Settings, Stethoscope, UserCog, UsersRound, X } from "lucide-react";
 import { useState } from "react";
 
 const iconMap = {
@@ -19,13 +19,14 @@ const iconMap = {
   configuracoes: Settings,
   financeiro: CreditCard,
   assinatura: ReceiptText,
+  tutoriais: BookOpenCheck,
 };
 
 export function SidebarNav({ items }) {
   const pathname = usePathname();
 
   return (
-    <nav className="relative mt-5 flex gap-2 overflow-x-auto pb-1 md:flex-col md:overflow-visible md:pb-0">
+    <nav className="relative mt-5 flex gap-2 overflow-x-auto pb-1 md:min-h-0 md:flex-1 md:flex-col md:overflow-x-hidden md:overflow-y-auto md:pr-1 md:pb-2">
       {items.map((item) => {
         const Icon = iconMap[item.icon] || LayoutDashboard;
         const active = item.href === "/dashboard" ? pathname === "/dashboard" : pathname === item.href || pathname.startsWith(`${item.href}/`);

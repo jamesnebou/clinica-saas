@@ -43,6 +43,7 @@ const navItems = [
   { href: "/dashboard/configuracoes", label: "Configurações", icon: "configuracoes", section: "configuracoes" },
   { href: "/dashboard/financeiro", label: "Financeiro", icon: "financeiro", section: "financeiro" },
   { href: "/dashboard/assinatura", label: "Assinatura", icon: "assinatura", section: "assinatura" },
+  { href: "/dashboard/tutoriais", label: "Tutoriais", icon: "tutoriais", section: "tutoriais" },
 ];
 
 function safeColor(value, fallback) {
@@ -142,7 +143,7 @@ export default async function DashboardLayout({ children }) {
     >
       <MobileSidebarMenu items={allowedNavItems} brandName={brandName} logoUrl={logoUrl} />
 
-      <aside className="fixed inset-y-0 left-0 z-30 hidden w-[260px] border-r border-neutral-200 bg-white/95 px-4 py-4 shadow-sm backdrop-blur-xl md:block">
+      <aside className="fixed inset-y-0 left-0 z-30 hidden w-[260px] flex-col border-r border-neutral-200 bg-white/95 px-4 py-4 shadow-sm backdrop-blur-xl md:flex">
         <div className="pointer-events-none absolute inset-y-0 right-0 w-px bg-[linear-gradient(180deg,transparent,var(--clinic-accent),transparent)] opacity-55" />
         <div className="pointer-events-none absolute left-0 top-0 h-48 w-full bg-[radial-gradient(circle_at_18%_0%,color-mix(in_srgb,var(--clinic-accent)_15%,transparent),transparent_70%)]" />
         <div className="flex items-center justify-between gap-3 md:block">
@@ -171,7 +172,7 @@ export default async function DashboardLayout({ children }) {
 
         <SidebarNav items={allowedNavItems} />
 
-        <form action={signOutAction} className="mt-6 hidden md:block">
+        <form action={signOutAction} className="mt-3 hidden shrink-0 border-t border-neutral-200 pt-3 md:block">
           <input type="hidden" name="next" value="/login-cliente" />
           <button className="inline-flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-neutral-500 transition hover:bg-red-50 hover:text-red-700" type="submit">
             <LogOut size={17} />

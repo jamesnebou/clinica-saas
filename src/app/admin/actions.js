@@ -44,6 +44,28 @@ function slugify(value) {
     .slice(0, 60);
 }
 
+function httpUrl(value, message, { optional = false } = {}) {
+  const normalized = String(value || "").trim();
+  if (!normalized && optional) return null;
+  if (!normalized) throw new Error(message);
+
+  try {
+    const parsed = new URL(normalized);
+    if (!["http:", "https:"].includes(parsed.protocol)) throw new Error();
+    return parsed.toString();
+  } catch {
+    throw new Error(message);
+  }
+}
+
+function tutorialSteps(value) {
+  return String(value || "")
+    .split(/\r?\n/)
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .slice(0, 12);
+}
+
 async function findAuthUserByEmail(email) {
   let page = 1;
   const perPage = 100;
@@ -211,6 +233,47 @@ export async function upsertSystemPlanAction(formData) {
   revalidatePath("/admin");
   revalidatePath("/dashboard-admin");
   revalidatePath("/dashboard-admin/planos");
+}
+
+export async function upsertClinicTutorialAction(formData) {
+  await requireInternalAdmin();
+
+  const id = nullableText(formData, "id");
+  const payload = {
+    titulo: requireValue(text(formData, "titulo"), "Informe o título do tutorial."),
+    descricao_curta: nullableText(formData, "descricao_curta"),
+    descricao: nullableText(formData, "descricao"),
+    categoria: nullableText(formData, "categoria") || "Primeiros passos",
+    video_url: httpUrl(text(formData, "video_url"), "Informe uma URL válida do vídeo."),
+    thumbnail_url: httpUrl(text(formData, "thumbnail_url"), "Informe uma URL válida para a capa.", { optional: true }),
+    duracao_minutos: intValue(formData, "duracao_minutos", 1),
+    ordem: Math.max(0, Math.round(numberValue(formData, "ordem", 0))),
+    passos: tutorialSteps(formData.get("passos")),
+    destaque: formData.get("destaque") === "on",
+    ativo: formData.get("ativo") === "on",
+    updated_at: new Date().toISOString(),
+  };
+
+  const query = id
+    ? supabaseAdmin.from("clinica_tutoriais").update(payload).eq("id", id)
+    : supabaseAdmin.from("clinica_tutoriais").insert(payload);
+  const { error } = await query;
+  if (error) throw error;
+
+  revalidatePath("/dashboard-admin/tutoriais");
+  revalidatePath("/dashboard/tutoriais");
+  redirect(`/dashboard-admin/tutoriais?ok=${id ? "atualizado" : "criado"}`);
+}
+
+export async function deleteClinicTutorialAction(formData) {
+  await requireInternalAdmin();
+  const id = requireValue(text(formData, "id"), "Tutorial não informado.");
+  const { error } = await supabaseAdmin.from("clinica_tutoriais").delete().eq("id", id);
+  if (error) throw error;
+
+  revalidatePath("/dashboard-admin/tutoriais");
+  revalidatePath("/dashboard/tutoriais");
+  redirect("/dashboard-admin/tutoriais?ok=excluido");
 }
 
 export async function updateInternalAdminCredentialsAction(formData) {

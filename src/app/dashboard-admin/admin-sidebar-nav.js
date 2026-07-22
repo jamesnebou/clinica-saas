@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import {
   AlertTriangle,
   BarChart3,
+  BookOpenCheck,
   Building2,
   CreditCard,
   LineChart,
@@ -24,6 +25,7 @@ export const adminNavItems = [
   { href: "/dashboard-admin/alertas", label: "Alertas", icon: AlertTriangle },
   { href: "/dashboard-admin/nova-alerta", label: "Nova clínica", icon: UserCheck },
   { href: "/dashboard-admin/planos", label: "Planos", icon: CreditCard },
+  { href: "/dashboard-admin/tutoriais", label: "Tutoriais", icon: BookOpenCheck },
   { href: "/dashboard-admin/configuracoes", label: "Configurações", icon: Settings },
 ];
 
