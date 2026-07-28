@@ -203,10 +203,11 @@ export async function generateMetadata({ params }) {
   const { slug } = await params;
   const { data } = await supabaseAdmin.from("clinicas").select("nome, metadata").eq("slug", slug).maybeSingle();
   const site = data?.metadata?.site_publico || {};
+  const faviconUrl = site.favicon_url || data?.metadata?.logo_url || "";
   return {
-    title: `${site.titulo_hero || data?.metadata?.brand_name || data?.nome || "Clí­nica"} | Agendamento`,
+    title: `${site.titulo_hero || data?.metadata?.brand_name || data?.nome || "Clínica"} | Agendamento`,
     description: site.subtitulo_hero || "Conheça os procedimentos e agende seu atendimento.",
-    icons: site.favicon_url ? { icon: [{ url: site.favicon_url }], shortcut: [{ url: site.favicon_url }], apple: [{ url: site.favicon_url }] } : undefined,
+    icons: faviconUrl ? { icon: [{ url: faviconUrl }], shortcut: [{ url: faviconUrl }], apple: [{ url: faviconUrl }] } : undefined,
   };
 }
 
@@ -464,7 +465,7 @@ export default async function PublicClinicPage({ params, searchParams }) {
         <div className="public-card-reveal public-reveal-left public-hover-card rounded-[1.75rem] border border-white/70 bg-white/72 p-7 shadow-[0_20px_54px_rgba(20,18,15,0.09)] backdrop-blur">
           <SectionHeading eyebrow="Agendamento" title="Reserve seu horário" description="Escolha procedimento, profissional e horário. A disponibilidade é validada com a agenda real da clínica." />
           <div className="mt-8 space-y-4 text-sm text-neutral-700">
-            <p className="flex gap-3"><Clock size={18} className="text-[var(--clinic-primary)]" /> Atendimento de {schedule.inicio || "08:00"} às {schedule.fim || "18:00"}, conforme disponibilidade.</p>
+            <p className="flex gap-3"><Clock size={18} className="text-[var(--clinic-primary)]" /> Atendimento de 8:00 às 18:00 de segunda a quinta e dàs 08:00 às 17:00 na sexta, conforme disponibilidade.</p>
             <p className="flex gap-3"><CreditCard size={18} className="text-[var(--clinic-primary)]" /> Quando houver sinal, você será direcionado para um checkout seguro.</p>
             <p className="flex gap-3"><ShieldCheck size={18} className="text-[var(--clinic-primary)]" /> Seus dados entram na agenda e no CRM da clínica automaticamente.</p>
             {address ? <p className="flex gap-3"><MapPin size={18} className="text-[var(--clinic-primary)]" /> {address}</p> : null}

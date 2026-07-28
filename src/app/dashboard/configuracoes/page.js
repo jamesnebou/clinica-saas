@@ -130,6 +130,7 @@ export default async function ConfiguracoesPage({ searchParams }) {
   const meta = activeClinic.metadata || {};
   const site = meta.site_publico || {};
   const schedule = normalizeSchedule(meta.horario_funcionamento || {});
+  const inactiveDates = [...(schedule.datas_inativas || []), ...Array.from({ length: 5 }, () => ({ data: "", motivo: "" }))].slice(0, 12);
   const { data: domains = [] } = await supabaseAdmin
     .from("clinica_dominios")
     .select("dominio, status, observacoes")
@@ -392,6 +393,24 @@ export default async function ConfiguracoesPage({ searchParams }) {
                   </div>
                 );
               })}
+            </div>
+
+            <div className="mt-6 rounded-lg border border-[color-mix(in_srgb,var(--clinic-primary)_18%,#e5e5e5)] bg-neutral-50 p-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h3 className="text-base font-black text-neutral-950">Datas sem atendimento</h3>
+                  <p className="mt-1 text-sm leading-6 text-neutral-600">Bloqueie feriados, folgas, eventos ou qualquer data em que a clínica não atenderá. Para remover uma data, apague o campo e salve.</p>
+                </div>
+                <span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-neutral-500 shadow-sm">Até 12 datas</span>
+              </div>
+              <div className="mt-4 grid gap-3">
+                {inactiveDates.map((item, index) => (
+                  <div key={`inactive-date-${index}`} className="grid gap-3 rounded-lg border border-neutral-200 bg-white p-3 md:grid-cols-[180px_1fr]">
+                    <Field label="Data inativa" name={`inactive_date_${index}`} type="date" defaultValue={item.data || ""} />
+                    <Field label="Motivo opcional" name={`inactive_reason_${index}`} defaultValue={item.motivo || ""} placeholder="Ex.: feriado, congresso, manutenção ou folga da equipe" />
+                  </div>
+                ))}
+              </div>
             </div>
           </section>
 

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
-import { getWorkingPeriods } from "@/lib/clinic/schedule";
+import { getWorkingPeriods, inactiveDateFor } from "@/lib/clinic/schedule";
 
 function pad(value) {
   return String(value).padStart(2, "0");
@@ -69,6 +69,11 @@ export async function GET(request) {
   if (!profissionais.length) return NextResponse.json({ slots: [], message: "Nenhum profissional disponivel." });
 
   const schedule = clinic.metadata?.horario_funcionamento || {};
+  const inactiveDate = inactiveDateFor(schedule, date);
+  if (inactiveDate) {
+    return NextResponse.json({ slots: [], message: inactiveDate.motivo || "Clínica sem atendimento nesta data." });
+  }
+
   const dateAtNoon = new Date(`${date}T12:00:00`);
   const day = String(dateAtNoon.getDay());
   const periods = getWorkingPeriods(schedule, day);

@@ -18,6 +18,33 @@ function periodFromValues(inicio, fim) {
   return { inicio, fim, start, end };
 }
 
+export function normalizeInactiveDates(value = []) {
+  if (!Array.isArray(value)) return [];
+
+  const seen = new Set();
+  return value
+    .map((item) => ({
+      data: String(item?.data || "").trim(),
+      motivo: String(item?.motivo || "").trim(),
+    }))
+    .filter((item) => /^\d{4}-\d{2}-\d{2}$/.test(item.data))
+    .filter((item) => {
+      if (seen.has(item.data)) return false;
+      seen.add(item.data);
+      return true;
+    })
+    .sort((a, b) => a.data.localeCompare(b.data));
+}
+
+export function inactiveDateFor(schedule = {}, date) {
+  const value = date instanceof Date
+    ? `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`
+    : String(date || "").slice(0, 10);
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+  return normalizeInactiveDates(schedule.datas_inativas).find((item) => item.data === value) || null;
+}
+
 export function defaultLegacySchedule(schedule = {}) {
   const period = periodFromValues(schedule.inicio || "08:00", schedule.fim || "18:00");
   const days = Array.isArray(schedule.dias) && schedule.dias.length ? schedule.dias.map(String) : DEFAULT_DAYS;
@@ -41,6 +68,7 @@ export function defaultLegacySchedule(schedule = {}) {
 export function normalizeSchedule(schedule = {}) {
   const legacy = defaultLegacySchedule(schedule);
   const source = schedule.dias_config && typeof schedule.dias_config === "object" ? schedule.dias_config : legacy.dias_config;
+  const datas_inativas = normalizeInactiveDates(schedule.datas_inativas);
   const dias_config = {};
   const dias = [];
 
@@ -62,6 +90,7 @@ export function normalizeSchedule(schedule = {}) {
     fim: schedule.fim || legacy.fim,
     dias: dias.length ? dias : legacy.dias,
     dias_config,
+    datas_inativas,
   };
 }
 
@@ -78,6 +107,7 @@ export function getWorkingPeriods(schedule = {}, day) {
 
 export function isWithinWorkingPeriods({ schedule, startDate, endDate }) {
   if (!startDate || !endDate || startDate.toDateString() !== endDate.toDateString()) return false;
+  if (inactiveDateFor(schedule, startDate)) return false;
 
   const startsAt = localTimeFromDate(startDate);
   const endsAt = localTimeFromDate(endDate);
@@ -108,5 +138,11 @@ export function buildScheduleFromForm(formData) {
     fim: firstPeriod.fim,
     dias: activeDays.length ? activeDays : DEFAULT_DAYS,
     dias_config,
+    datas_inativas: normalizeInactiveDates(
+      Array.from({ length: 12 }, (_, index) => ({
+        data: String(formData.get(`inactive_date_${index}`) || "").trim(),
+        motivo: String(formData.get(`inactive_reason_${index}`) || "").trim(),
+      }))
+    ),
   };
 }
