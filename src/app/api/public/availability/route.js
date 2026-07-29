@@ -23,11 +23,14 @@ function overlaps(startMinutes, endMinutes, booking) {
 export async function GET(request) {
   const { searchParams } = new URL(request.url);
   const slug = String(searchParams.get("slug") || "").trim();
-  const procedimentoId = String(searchParams.get("procedimento_id") || "").trim();
+  const procedimentoIds = Array.from(new Set([
+    ...searchParams.getAll("procedimento_ids"),
+    String(searchParams.get("procedimento_id") || ""),
+  ].map((item) => String(item || "").trim()).filter(Boolean)));
   const profissionalId = String(searchParams.get("profissional_id") || "").trim();
   const date = String(searchParams.get("date") || "").trim();
 
-  if (!slug || !procedimentoId || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+  if (!slug || !procedimentoIds.length || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
     return NextResponse.json({ slots: [], message: "Parametros invalidos." }, { status: 400 });
   }
 
@@ -43,17 +46,16 @@ export async function GET(request) {
     return NextResponse.json({ slots: [], message: "Clinica indisponivel." }, { status: 404 });
   }
 
-  const { data: procedimento, error: procedimentoError } = await supabaseAdmin
+  const { data: procedimentos = [], error: procedimentoError } = await supabaseAdmin
     .from("procedimentos")
     .select("id, duracao_minutos")
     .eq("clinica_id", clinic.id)
-    .eq("id", procedimentoId)
+    .in("id", procedimentoIds)
     .eq("ativo", true)
-    .eq("publicado_site", true)
-    .maybeSingle();
+    .eq("publicado_site", true);
 
   if (procedimentoError) throw procedimentoError;
-  if (!procedimento) return NextResponse.json({ slots: [], message: "Procedimento indisponivel." }, { status: 404 });
+  if (procedimentos.length !== procedimentoIds.length) return NextResponse.json({ slots: [], message: "Um ou mais procedimentos estao indisponiveis." }, { status: 404 });
 
   let profissionaisQuery = supabaseAdmin
     .from("profissionais")
@@ -82,10 +84,10 @@ export async function GET(request) {
     return NextResponse.json({ slots: [], message: "Dia fora do expediente da clinica." });
   }
 
-  const duration = Math.max(1, Number(procedimento.duracao_minutos || 60));
+  const duration = Math.max(1, procedimentos.reduce((total, item) => total + Number(item.duracao_minutos || 60), 0));
 
   if (!periods.some((period) => period.end >= period.start + duration)) {
-    return NextResponse.json({ slots: [], message: "Expediente insuficiente para este procedimento." });
+    return NextResponse.json({ slots: [], message: "Expediente insuficiente para os procedimentos selecionados." });
   }
 
   const startISO = new Date(`${date}T00:00:00`).toISOString();

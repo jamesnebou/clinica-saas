@@ -14,18 +14,25 @@ function money(value) {
 }
 
 function serviceLabel(procedimento) {
-  const price = Number(procedimento?.preco || 0);
-  const fixed = Number(procedimento?.sinal_valor || 0);
-  const percent = Number(procedimento?.sinal_percentual || 0);
-  const signal = fixed > 0 ? fixed : percent > 0 ? price * (percent / 100) : 0;
+  const signal = depositValue(procedimento);
   if (signal <= 0) return "sem sinal online";
   return `sinal de ${money(signal)}`;
 }
 
+function depositValue(procedimento) {
+  const price = Number(procedimento?.preco || 0);
+  const fixed = Number(procedimento?.sinal_valor || 0);
+  const percent = Number(procedimento?.sinal_percentual || 0);
+  const signal = fixed > 0 ? fixed : percent > 0 ? price * (percent / 100) : 0;
+  return Math.max(0, Math.min(price, Number(signal.toFixed(2))));
+}
+
 export function PublicBookingForm({ slug, procedimentos, profissionais, query }) {
   const firstProcedure = procedimentos[0]?.id || "";
-  const [procedimentoId, setProcedimentoId] = useState(firstProcedure);
+  const [procedimentoIds, setProcedimentoIds] = useState(firstProcedure ? [firstProcedure] : []);
   const [profissionalId, setProfissionalId] = useState("");
+  const [proceduresOpen, setProceduresOpen] = useState(false);
+  const [procedureSearch, setProcedureSearch] = useState("");
   const [date, setDate] = useState(nextDate());
   const [slots, setSlots] = useState([]);
   const [selectedSlot, setSelectedSlot] = useState("");
@@ -33,21 +40,31 @@ export function PublicBookingForm({ slug, procedimentos, profissionais, query })
   const [loadingSlots, setLoadingSlots] = useState(false);
   const [slotsMessage, setSlotsMessage] = useState("");
 
-  const selectedProcedure = useMemo(() => procedimentos.find((item) => item.id === procedimentoId), [procedimentos, procedimentoId]);
+  const selectedProcedures = useMemo(() => procedimentos.filter((item) => procedimentoIds.includes(item.id)), [procedimentos, procedimentoIds]);
+  const filteredProcedures = useMemo(() => {
+    const search = procedureSearch.trim().toLowerCase();
+    if (!search) return procedimentos;
+    return procedimentos.filter((item) => [item.nome, item.categoria, item.descricao].filter(Boolean).join(" ").toLowerCase().includes(search));
+  }, [procedimentos, procedureSearch]);
+  const totals = useMemo(() => selectedProcedures.reduce((acc, item) => ({
+    duration: acc.duration + Number(item.duracao_minutos || 60),
+    price: acc.price + Number(item.preco || 0),
+    deposit: acc.deposit + depositValue(item),
+  }), { duration: 0, price: 0, deposit: 0 }), [selectedProcedures]);
 
   useEffect(() => {
     let cancelled = false;
 
     async function loadSlots() {
-      if (!slug || !procedimentoId || !date) return;
+      if (!slug || !procedimentoIds.length || !date) return;
       setLoadingSlots(true);
       setSlotsMessage("");
 
       const params = new URLSearchParams({
         slug,
-        procedimento_id: procedimentoId,
         date,
       });
+      procedimentoIds.forEach((id) => params.append("procedimento_ids", id));
       if (profissionalId) params.set("profissional_id", profissionalId);
 
       try {
@@ -75,7 +92,16 @@ export function PublicBookingForm({ slug, procedimentos, profissionais, query })
     return () => {
       cancelled = true;
     };
-  }, [date, procedimentoId, profissionalId, slug]);
+  }, [date, procedimentoIds, profissionalId, slug]);
+
+  function toggleProcedure(id) {
+    setProcedimentoIds((current) => {
+      if (current.includes(id)) {
+        return current.length > 1 ? current.filter((item) => item !== id) : current;
+      }
+      return [...current, id];
+    });
+  }
 
   function handleSlotChange(value) {
     const slot = slots.find((item) => item.value === value);
@@ -93,13 +119,48 @@ export function PublicBookingForm({ slug, procedimentos, profissionais, query })
       {query?.ok ? <div className="mb-5 rounded-2xl border border-emerald-300/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-100">{query.mensagem || "Agendamento solicitado com sucesso."}</div> : null}
 
       <div className="grid gap-4 md:grid-cols-2">
-        <label className="block md:col-span-2">
-          <span className="text-sm font-semibold text-white/75">Procedimento</span>
-          <select name="procedimento_id" value={procedimentoId} onChange={(event) => setProcedimentoId(event.target.value)} required className="mt-2 h-12 w-full rounded-2xl border border-white/10 bg-white/10 px-4 text-sm text-white outline-none">
-            {procedimentos.map((item) => <option key={item.id} value={item.id} className="text-neutral-950">{item.nome} - {money(item.preco)} - {serviceLabel(item)}</option>)}
-          </select>
-          {selectedProcedure ? <span className="mt-2 block text-xs text-white/45">{selectedProcedure.duracao_minutos} minutos de atendimento.</span> : null}
-        </label>
+        <div className="relative block md:col-span-2">
+          <span className="text-sm font-semibold text-white/75">Procedimentos</span>
+          {procedimentoIds.map((id) => <input key={id} type="hidden" name="procedimento_ids" value={id} />)}
+          <button type="button" onClick={() => setProceduresOpen((open) => !open)} className="mt-2 flex min-h-14 w-full items-center justify-between gap-4 rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-left text-sm text-white outline-none transition hover:border-white/25">
+            <span>
+              <strong className="block">{selectedProcedures.length ? `${selectedProcedures.length} procedimento(s) selecionado(s)` : "Selecionar procedimentos"}</strong>
+              <span className="mt-1 block text-xs text-white/55">{totals.duration || 0} min - Total {money(totals.price)} - Sinal {money(totals.deposit)}</span>
+            </span>
+            <span className="shrink-0 rounded-full border border-white/10 px-3 py-1 text-xs text-white/60">{proceduresOpen ? "Fechar" : "Alterar"}</span>
+          </button>
+
+          {selectedProcedures.length ? (
+            <div className="mt-2 flex flex-wrap gap-2">
+              {selectedProcedures.map((item) => (
+                <button key={item.id} type="button" onClick={() => toggleProcedure(item.id)} className="rounded-full border border-[var(--clinic-accent)]/30 bg-[var(--clinic-accent)]/15 px-3 py-1 text-xs font-bold text-white transition hover:bg-[var(--clinic-accent)]/25">
+                  {item.nome} x
+                </button>
+              ))}
+            </div>
+          ) : null}
+
+          {proceduresOpen ? (
+            <div className="absolute left-0 right-0 top-full z-50 mt-3 overflow-hidden rounded-[1.5rem] border border-white/12 bg-[#211b18]/95 p-3 shadow-[0_28px_90px_rgba(0,0,0,0.45)] backdrop-blur-xl">
+              <input value={procedureSearch} onChange={(event) => setProcedureSearch(event.target.value)} placeholder="Buscar procedimento" className="h-11 w-full rounded-2xl border border-white/10 bg-white/10 px-4 text-sm text-white outline-none placeholder:text-white/35" />
+              <div className="mt-3 max-h-72 space-y-2 overflow-y-auto pr-1">
+                {filteredProcedures.map((item) => {
+                  const checked = procedimentoIds.includes(item.id);
+                  return (
+                    <button key={item.id} type="button" onClick={() => toggleProcedure(item.id)} className={["flex w-full items-start justify-between gap-3 rounded-2xl border px-4 py-3 text-left text-sm transition", checked ? "border-[var(--clinic-accent)] bg-[var(--clinic-accent)]/18 text-white" : "border-white/10 bg-white/8 text-white/75 hover:border-white/25 hover:bg-white/12"].join(" ")}>
+                      <span>
+                        <strong className="block text-white">{item.nome}</strong>
+                        <span className="mt-1 block text-xs text-white/55">{money(item.preco)} - {item.duracao_minutos || 60} min - {serviceLabel(item)}</span>
+                      </span>
+                      <span className={["mt-1 h-5 w-5 shrink-0 rounded-full border", checked ? "border-[var(--clinic-accent)] bg-[var(--clinic-accent)]" : "border-white/25"].join(" ")} />
+                    </button>
+                  );
+                })}
+                {!filteredProcedures.length ? <p className="px-3 py-4 text-sm text-white/50">Nenhum procedimento encontrado.</p> : null}
+              </div>
+            </div>
+          ) : null}
+        </div>
 
         <label className="block">
           <span className="text-sm font-semibold text-white/75">Profissional</span>

@@ -31,11 +31,9 @@ export function PublicServicesSection({ procedimentos = [] }) {
   const [selected, setSelected] = useState(null);
   const viewportRef = useRef(null);
   const trackRef = useRef(null);
-  const animationRef = useRef(null);
   const pointerRef = useRef({ active: false, captured: false, pointerId: null, startX: 0, startScrollLeft: 0 });
   const draggedRef = useRef(false);
-  const hoverRef = useRef(false);
-  const repeatCount = procedimentos.length <= 2 ? 12 : procedimentos.length <= 4 ? 9 : 6;
+  const repeatCount = procedimentos.length <= 2 ? 8 : procedimentos.length <= 4 ? 6 : 4;
   const servicesLoop = useMemo(
     () => Array.from({ length: repeatCount }).flatMap(() => procedimentos),
     [procedimentos, repeatCount]
@@ -64,56 +62,23 @@ export function PublicServicesSection({ procedimentos = [] }) {
     if (!viewport || !track || procedimentos.length === 0) return;
 
     const segmentWidth = () => track.scrollWidth / repeatCount;
-    const startOffset = () => segmentWidth() * Math.floor(repeatCount / 2);
-
-    const normalizeScroll = () => {
-      const segment = segmentWidth();
-      if (!segment) return;
-
-      const min = segment * 2;
-      const max = segment * (repeatCount - 2);
-
-      if (viewport.scrollLeft < min) {
-        viewport.scrollLeft += segment;
-      } else if (viewport.scrollLeft > max) {
-        viewport.scrollLeft -= segment;
-      }
-    };
-
     const setInitialPosition = () => {
-      viewport.scrollLeft = startOffset();
+      viewport.scrollLeft = 0;
     };
 
     setInitialPosition();
-
-
-    let lastTime = performance.now();
-    const speed = 58;
-
-    const animate = (time) => {
-      const delta = Math.min(64, time - lastTime);
-      lastTime = time;
-
-      if (!pointerRef.current.active && !hoverRef.current && !selected) {
-        viewport.scrollLeft += (speed * delta) / 1000;
-        normalizeScroll();
-      }
-
-      animationRef.current = requestAnimationFrame(animate);
-    };
-
-    animationRef.current = requestAnimationFrame(animate);
     window.addEventListener("resize", setInitialPosition);
 
     return () => {
-      if (animationRef.current) cancelAnimationFrame(animationRef.current);
       window.removeEventListener("resize", setInitialPosition);
     };
-  }, [procedimentos, repeatCount, selected]);
+  }, [procedimentos, repeatCount]);
 
   function handlePointerDown(event) {
     const viewport = viewportRef.current;
     if (!viewport) return;
+
+    viewport.classList.add("is-dragging");
 
     pointerRef.current = {
       active: true,
@@ -138,6 +103,7 @@ export function PublicServicesSection({ procedimentos = [] }) {
       viewport.setPointerCapture?.(event.pointerId);
       pointerRef.current.captured = true;
     }
+    viewport.classList.add("is-dragging");
     viewport.scrollLeft = pointer.startScrollLeft - distance;
   }
 
@@ -161,6 +127,7 @@ export function PublicServicesSection({ procedimentos = [] }) {
     pointerRef.current.active = false;
     pointerRef.current.captured = false;
     pointerRef.current.pointerId = null;
+    viewportRef.current?.classList.remove("is-dragging");
     if (wasCaptured) viewportRef.current?.releasePointerCapture?.(event.pointerId);
     requestAnimationFrame(normalizeViewportPosition);
 
@@ -199,13 +166,9 @@ export function PublicServicesSection({ procedimentos = [] }) {
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerUp}
-        onMouseEnter={() => { hoverRef.current = true; }}
         onMouseLeave={(event) => {
-          hoverRef.current = false;
           if (pointerRef.current.active) handlePointerUp(event);
         }}
-        onFocusCapture={() => { hoverRef.current = true; }}
-        onBlurCapture={() => { hoverRef.current = false; }}
       >
         <div ref={trackRef} className="public-services-track flex w-max items-start gap-5 px-16 sm:px-24">
           {servicesLoop.map((item, index) => (

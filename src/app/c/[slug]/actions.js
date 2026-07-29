@@ -17,6 +17,18 @@ function nullableText(formData, key) {
   return value || null;
 }
 
+function uniqueTexts(formData, key) {
+  return Array.from(new Set(formData.getAll(key).map((value) => String(value || "").trim()).filter(Boolean)));
+}
+
+function procedureSummary(procedimentos) {
+  return procedimentos.map((item) => item.nome).join(", ");
+}
+
+function calculateTotalDeposit(procedimentos) {
+  return Number(procedimentos.reduce((total, item) => total + calculateDeposit(item), 0).toFixed(2));
+}
+
 function normalizePhone(value) {
   return String(value || "").replace(/\D/g, "");
 }
@@ -68,7 +80,8 @@ async function assertSlotAvailable({ clinicId, profissionalId, startISO, endISO,
 
 export async function createPublicBookingAction(formData) {
   const slug = text(formData, "slug");
-  const procedimentoId = text(formData, "procedimento_id");
+  const procedimentoIds = uniqueTexts(formData, "procedimento_ids");
+  const procedimentoId = procedimentoIds[0] || text(formData, "procedimento_id");
   const profissionalId = nullableText(formData, "profissional_id") || nullableText(formData, "profissional_disponivel_id");
   const nome = text(formData, "nome");
   const telefone = nullableText(formData, "telefone");
@@ -110,24 +123,32 @@ export async function createPublicBookingAction(formData) {
     publicRedirect(slug, { erro: "site", mensagem: "O agendamento online desta clínica ainda nao esta publicado." });
   }
 
-  const { data: procedimento, error: procedimentoError } = await supabaseAdmin
+  const selectedIds = procedimentoIds.length ? procedimentoIds : [procedimentoId];
+  const { data: procedimentosSelecionados = [], error: procedimentoError } = await supabaseAdmin
     .from("procedimentos")
     .select("id, nome, descricao, duracao_minutos, preco, sinal_percentual, sinal_valor, publicado_site, ativo")
     .eq("clinica_id", clinic.id)
-    .eq("id", procedimentoId)
+    .in("id", selectedIds)
     .eq("ativo", true)
-    .eq("publicado_site", true)
-    .maybeSingle();
+    .eq("publicado_site", true);
 
   if (procedimentoError) throw procedimentoError;
-  if (!procedimento) publicRedirect(slug, { erro: "procedimento", mensagem: "Procedimento indisponível para agendamento online." });
+  if (procedimentosSelecionados.length !== selectedIds.length) {
+    publicRedirect(slug, { erro: "procedimento", mensagem: "Um ou mais procedimentos est?o indispon?veis para agendamento online." });
+  }
+
+  const procedimentosById = new Map(procedimentosSelecionados.map((item) => [item.id, item]));
+  const procedimentos = selectedIds.map((id) => procedimentosById.get(id)).filter(Boolean);
+  const procedimento = procedimentos[0];
+  const procedimentosTexto = procedureSummary(procedimentos);
 
   const start = new Date(dataHora);
   if (Number.isNaN(start.getTime()) || start < new Date()) {
     publicRedirect(slug, { erro: "agenda", mensagem: "Escolha uma data futura valida." });
   }
 
-  const end = new Date(start.getTime() + Number(procedimento.duracao_minutos || 60) * 60000);
+  const duracaoTotal = procedimentos.reduce((total, item) => total + Number(item.duracao_minutos || 60), 0);
+  const end = new Date(start.getTime() + duracaoTotal * 60000);
   assertWorkingHours({ clinic, start, end, slug });
 
   if (!profissionalId) {
@@ -176,8 +197,8 @@ export async function createPublicBookingAction(formData) {
     clienteId = cliente.id;
   }
 
-  const valorTotal = Number(procedimento.preco || 0);
-  const valorSinal = calculateDeposit(procedimento);
+  const valorTotal = Number(procedimentos.reduce((total, item) => total + Number(item.preco || 0), 0).toFixed(2));
+  const valorSinal = calculateTotalDeposit(procedimentos);
   const pagamentoStatus = valorSinal > 0 ? "pendente" : "sem_sinal";
 
   if (valorSinal > 0 && !isAsaasConfigured(clinicIntegration)) {
@@ -197,7 +218,7 @@ export async function createPublicBookingAction(formData) {
       valor: valorTotal,
       pagamento_status: pagamentoStatus === "sem_sinal" ? "pendente" : "parcial",
       valor_pago: 0,
-      observacoes: "Agendamento criado pelo site público.",
+      observacoes: `Agendamento criado pelo site p?blico. Procedimentos: ${procedimentosTexto}. Dura??o total: ${duracaoTotal} min.`,
     })
     .select("id")
     .single();
@@ -214,7 +235,7 @@ export async function createPublicBookingAction(formData) {
       const payment = await createAsaasPaymentForBooking({
         customerId: customer.id,
         value: valorSinal,
-        description: `Sinal ${procedimento.nome} - ${clinic.nome}`,
+        description: `Sinal ${procedimentosTexto} - ${clinic.nome}`,
         externalReference: agendamento.id,
         billingType: "UNDEFINED",
         integration: clinicIntegration,
@@ -243,7 +264,17 @@ export async function createPublicBookingAction(formData) {
     pagamento_status: asaasPaymentId ? "pendente" : pagamentoStatus,
     asaas_payment_id: asaasPaymentId,
     invoice_url: invoiceUrl,
-    payload: paymentPayload,
+    payload: {
+      pagamento: paymentPayload,
+      procedimentos: procedimentos.map((item) => ({
+        id: item.id,
+        nome: item.nome,
+        preco: Number(item.preco || 0),
+        duracao_minutos: Number(item.duracao_minutos || 60),
+        sinal: calculateDeposit(item),
+      })),
+      duracao_total_minutos: duracaoTotal,
+    },
   }).select("id, nome, telefone, email, data_hora, valor_total, valor_sinal").single();
 
   if (publicError) throw publicError;
@@ -258,8 +289,8 @@ export async function createPublicBookingAction(formData) {
     status: "avaliacao_marcada",
     valor_estimado: valorTotal,
     proxima_acao_em: start.toISOString(),
-    proxima_acao: `Atendimento agendado: ${procedimento.nome}`,
-    observacoes: asaasPaymentId ? "Criado automaticamente pelo site publico com checkout de sinal." : "Criado automaticamente pelo site publico.",
+    proxima_acao: `Atendimento agendado: ${procedimentosTexto}`,
+    observacoes: asaasPaymentId ? `Criado automaticamente pelo site p?blico com checkout de sinal. Procedimentos: ${procedimentosTexto}.` : `Criado automaticamente pelo site p?blico. Procedimentos: ${procedimentosTexto}.`,
   });
 
   revalidatePath(`/c/${slug}`);
@@ -269,7 +300,7 @@ export async function createPublicBookingAction(formData) {
   await notifyClinicPublicBooking({
     clinic,
     booking: publicBooking,
-    procedimento,
+    procedimento: { ...procedimento, nome: procedimentosTexto },
     invoiceUrl,
     integration: clinicIntegration,
   });

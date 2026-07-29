@@ -605,6 +605,7 @@ textarea {
 }
 
 .public-services-viewport {
+  contain: layout paint;
   cursor: grab;
   overscroll-behavior-x: contain;
   scroll-behavior: auto;
@@ -623,12 +624,21 @@ textarea {
 }
 
 .public-services-track {
-  transform: translateZ(0);
-  will-change: scroll-position;
+  transform: translate3d(0, 0, 0);
+  will-change: transform;
+  animation: public-services-marquee 58s linear infinite;
+}
+
+.public-services-viewport:hover .public-services-track,
+.public-services-viewport:focus-within .public-services-track,
+.public-services-viewport.is-dragging .public-services-track {
+  animation-play-state: paused;
 }
 
 .public-service-card {
   position: relative;
+  backface-visibility: hidden;
+  contain: layout paint;
   isolation: isolate;
 }
 
@@ -725,12 +735,53 @@ textarea {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .public-services-track,
   .public-service-card::after,
   .whatsapp-pulse {
     animation: none;
   }
 }
 
+@keyframes public-services-marquee {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+
+  to {
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+
+@media (max-width: 640px) {
+  .public-services-viewport {
+    -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 1.25rem, #000 calc(100% - 1.25rem), transparent 100%);
+    mask-image: linear-gradient(90deg, transparent 0, #000 1.25rem, #000 calc(100% - 1.25rem), transparent 100%);
+  }
+
+  .public-services-track {
+    animation-duration: 82s;
+    gap: 1rem;
+    will-change: transform;
+  }
+
+  .public-service-card,
+  .public-services-track .public-card-reveal {
+    opacity: 1;
+    transform: translateZ(0);
+    animation-name: none;
+  }
+
+  .public-service-card::after {
+    animation: none;
+    opacity: 0.72;
+  }
+
+  .public-service-reflection {
+    animation-duration: 7.2s;
+    filter: blur(14px);
+    opacity: 0.42;
+  }
+}
 @keyframes whatsapp-pulse {
   0%,
   100% {
