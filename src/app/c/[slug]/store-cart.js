@@ -5,6 +5,7 @@
 import { Minus, Plus, Search, ShoppingBag, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { publicImageSrcSet, publicImageUrl } from "@/lib/public-image";
 
 function money(value) {
   return Number(value || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -37,7 +38,7 @@ function StoreProductCard({ product, onAdd, moving = false, index = 0 }) {
   return (
     <article className={cardClassName} data-store-index={index} style={moving ? { width: "17.5rem" } : undefined}>
       {product.imagem_url ? (
-        <img src={product.imagem_url} alt={product.nome} className="aspect-[4/3] w-full object-cover" />
+        <img src={publicImageUrl(product.imagem_url, { width: 560, height: 420, quality: 68 })} srcSet={publicImageSrcSet(product.imagem_url, [320, 420, 560], { aspectRatio: 4 / 3, quality: 68 })} sizes={moving ? "280px" : "(max-width: 768px) 100vw, 320px"} alt={product.nome} loading="lazy" decoding="async" className="aspect-[4/3] w-full object-cover" />
       ) : (
         <div className="flex aspect-[4/3] items-center justify-center bg-[radial-gradient(circle,color-mix(in_srgb,var(--clinic-accent)_28%,transparent),transparent_68%)]"><ShoppingBag size={42} className="text-[var(--clinic-primary)]" /></div>
       )}
@@ -73,7 +74,7 @@ export function PublicStorefront({ slug, products, recoveryToken = "", mode = "s
   const showcaseDraggedRef = useRef(false);
   const showcasePointerRef = useRef({ active: false, captured: false, startX: 0, startScrollLeft: 0 });
   const showcaseProducts = useMemo(() => products.slice(0, 12), [products]);
-  const showcaseRepeatCount = 5;
+  const showcaseRepeatCount = 3;
   const showcaseLoop = useMemo(
     () => Array.from({ length: showcaseRepeatCount }).flatMap(() => showcaseProducts),
     [showcaseProducts]
@@ -164,13 +165,13 @@ export function PublicStorefront({ slug, products, recoveryToken = "", mode = "s
     const segmentWidth = () => track.scrollWidth / showcaseRepeatCount;
     const setInitialPosition = () => {
       const segment = segmentWidth();
-      if (segment) viewport.scrollLeft = segment * 2;
+      if (segment) viewport.scrollLeft = segment;
     };
     const normalizePosition = () => {
       const segment = segmentWidth();
       if (!segment) return;
-      if (viewport.scrollLeft < segment) viewport.scrollLeft += segment * 2;
-      if (viewport.scrollLeft > segment * 3) viewport.scrollLeft -= segment * 2;
+      if (viewport.scrollLeft < segment * 0.5) viewport.scrollLeft += segment;
+      if (viewport.scrollLeft > segment * 1.5) viewport.scrollLeft -= segment;
     };
 
     const initialFrame = window.requestAnimationFrame(setInitialPosition);
@@ -292,7 +293,7 @@ export function PublicStorefront({ slug, products, recoveryToken = "", mode = "s
               {items.length ? items.map((item) => (
                 <article key={item.id} className="flex gap-4 rounded-2xl border border-white/10 bg-white/[0.055] p-3.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
                   <div className="h-20 w-20 shrink-0 overflow-hidden rounded-xl bg-white/8">
-                    {item.imagem_url ? <img src={item.imagem_url} alt="" className="h-full w-full object-cover" /> : <ShoppingBag className="m-6 text-white/30" size={28} />}
+                    {item.imagem_url ? <img src={publicImageUrl(item.imagem_url, { width: 96, height: 96, quality: 64 })} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover" /> : <ShoppingBag className="m-6 text-white/30" size={28} />}
                   </div>
                   <div className="min-w-0 flex-1">
                     <h3 className="truncate text-sm font-bold text-white">{item.nome}</h3>

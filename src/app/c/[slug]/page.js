@@ -10,6 +10,7 @@ import { PublicScrollEffects } from "./scroll-effects";
 import { PublicServicesSection } from "./services-section";
 import { PublicStorefront } from "./store-cart";
 import { availableProductStock } from "@/lib/store/config";
+import { publicImageSrcSet, publicImageUrl } from "@/lib/public-image";
 
 export const dynamic = "force-dynamic";
 
@@ -74,18 +75,19 @@ function PublicMediaFrame({ url, title, fallbackImageUrl }) {
         className="h-full min-h-[320px] w-full border-0"
         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
         allowFullScreen
+        loading="lazy"
       />
     );
   }
 
   if (media.type === "video") {
-    return <video src={media.url} title={title} className="h-full min-h-[320px] w-full object-cover" controls playsInline />;
+    return <video src={media.url} title={title} className="h-full min-h-[320px] w-full object-cover" controls playsInline preload="metadata" />;
   }
 
   if (media.type === "image") {
     return (
       // eslint-disable-next-line @next/next/no-img-element
-      <img src={media.url} alt={title} className="h-[420px] w-full object-cover" />
+      <img src={publicImageUrl(media.url, { width: 1200, quality: 72 })} srcSet={publicImageSrcSet(media.url, [640, 960, 1200], { quality: 72 })} sizes="(max-width: 1024px) 100vw, 50vw" alt={title} loading="lazy" decoding="async" className="h-[420px] w-full object-cover" />
     );
   }
 
@@ -111,7 +113,7 @@ function PublicMediaFrame({ url, title, fallbackImageUrl }) {
   if (fallbackImageUrl) {
     return (
       // eslint-disable-next-line @next/next/no-img-element
-      <img src={fallbackImageUrl} alt={title} className="h-[420px] w-full object-cover" />
+      <img src={publicImageUrl(fallbackImageUrl, { width: 1200, quality: 72 })} srcSet={publicImageSrcSet(fallbackImageUrl, [640, 960, 1200], { quality: 72 })} sizes="(max-width: 1024px) 100vw, 50vw" alt={title} loading="lazy" decoding="async" className="h-[420px] w-full object-cover" />
     );
   }
 
@@ -203,7 +205,8 @@ export async function generateMetadata({ params }) {
   const { slug } = await params;
   const { data } = await supabaseAdmin.from("clinicas").select("nome, metadata").eq("slug", slug).maybeSingle();
   const site = data?.metadata?.site_publico || {};
-  const faviconUrl = site.favicon_url || data?.metadata?.logo_url || "";
+  const faviconSource = site.favicon_url || data?.metadata?.logo_url || "";
+  const faviconUrl = publicImageUrl(faviconSource, { width: 128, height: 128, quality: 80, resize: "contain" });
   return {
     title: `${site.titulo_hero || data?.metadata?.brand_name || data?.nome || "Clínica"} | Agendamento`,
     description: site.subtitulo_hero || "Conheça os procedimentos e agende seu atendimento.",
@@ -312,7 +315,7 @@ export default async function PublicClinicPage({ params, searchParams }) {
           <a href="#topo" className="flex min-w-0 items-center gap-3">
             {logoUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={logoUrl} alt={`Logo ${brandName}`} className="h-10 w-10 rounded-full object-contain" />
+              <img src={publicImageUrl(logoUrl, { width: 96, height: 96, quality: 76, resize: "contain" })} alt={`Logo ${brandName}`} width="40" height="40" decoding="async" className="h-10 w-10 rounded-full object-contain" />
             ) : (
               <span className="flex h-10 w-10 items-center justify-center rounded-full bg-white/12"><Sparkles size={19} /></span>
             )}
@@ -335,13 +338,13 @@ export default async function PublicClinicPage({ params, searchParams }) {
 
       <section id="topo" className="relative flex min-h-screen items-center justify-center px-5 py-28 text-center text-white sm:px-8">
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={heroImage} alt={brandName} className="absolute inset-0 h-full w-full object-cover" />
+        <img src={publicImageUrl(heroImage, { width: 1280, quality: 70 })} srcSet={publicImageSrcSet(heroImage, [640, 960, 1280, 1600], { quality: 70 })} sizes="100vw" alt={brandName} fetchPriority="high" decoding="async" className="absolute inset-0 h-full w-full object-cover" />
         <div className="absolute inset-0 bg-[#17130f]/55" />
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_42%,transparent_0%,rgba(0,0,0,0.48)_72%)]" />
         <div className="relative z-10 mx-auto max-w-5xl">
           {logoUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={logoUrl} alt={`Logo ${brandName}`} className="mx-auto mb-8 h-28 w-28 rounded-full object-contain shadow-[0_24px_60px_rgba(0,0,0,0.24)]" />
+            <img src={publicImageUrl(logoUrl, { width: 224, height: 224, quality: 76, resize: "contain" })} alt={`Logo ${brandName}`} width="112" height="112" decoding="async" className="mx-auto mb-8 h-28 w-28 rounded-full object-contain shadow-[0_24px_60px_rgba(0,0,0,0.24)]" />
           ) : null}
           <p className="text-xs font-bold uppercase tracking-[0.34em] text-white/70">{site.eyebrow || "Estética premium e atendimento personalizado"}</p>
           <h1 className="mx-auto mt-5 max-w-5xl text-5xl font-semibold leading-[1.03] tracking-tight sm:text-7xl">
@@ -363,7 +366,7 @@ export default async function PublicClinicPage({ params, searchParams }) {
       <section id="sobre" className="public-section-soft mx-auto grid max-w-7xl gap-14 px-5 py-24 sm:px-8 lg:grid-cols-[0.95fr_1.05fr] lg:items-center">
         <div className="relative">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={professionalImage} alt={professionalName} className="public-card-reveal public-reveal-left aspect-[4/5] w-full rounded-[2rem] object-cover shadow-[0_30px_86px_rgba(23,19,15,0.18)]" />
+          <img src={publicImageUrl(professionalImage, { width: 800, height: 1000, quality: 72 })} srcSet={publicImageSrcSet(professionalImage, [480, 640, 800], { aspectRatio: 0.8, quality: 72 })} sizes="(max-width: 1024px) 100vw, 46vw" alt={professionalName} loading="lazy" decoding="async" className="public-card-reveal public-reveal-left aspect-[4/5] w-full rounded-[2rem] object-cover shadow-[0_30px_86px_rgba(23,19,15,0.18)]" />
         </div>
         <div className="public-card-reveal public-reveal-right">
           <SectionHeading eyebrow="Sobre" title={professionalName} />
@@ -397,12 +400,12 @@ export default async function PublicClinicPage({ params, searchParams }) {
         <SectionHeading eyebrow="A clínica" title="Ambiente pensado para acolher, cuidar e transformar" description="O nosso espaço foi feito para o seu conforto e aconchego, com ambientes pensados para bem-estar, privacidade e segurança." center />
         <div className="mt-10 grid gap-4 lg:grid-cols-[1.15fr_0.85fr]">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={gallery[0]} alt="clínica" className="public-card-reveal public-reveal-left h-[460px] w-full rounded-[2rem] object-cover shadow-[0_24px_70px_rgba(23,19,15,0.16)]" />
+          <img src={publicImageUrl(gallery[0], { width: 960, height: 700, quality: 72 })} srcSet={publicImageSrcSet(gallery[0], [480, 720, 960], { aspectRatio: 1.37, quality: 72 })} sizes="(max-width: 1024px) 100vw, 58vw" alt="clínica" loading="lazy" decoding="async" className="public-card-reveal public-reveal-left h-[460px] w-full rounded-[2rem] object-cover shadow-[0_24px_70px_rgba(23,19,15,0.16)]" />
           <div className="grid gap-4">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={gallery[1]} alt="Espaço da clínica" className="public-card-reveal public-reveal-right h-[222px] w-full rounded-[2rem] object-cover shadow-[0_20px_54px_rgba(23,19,15,0.12)]" />
+            <img src={publicImageUrl(gallery[1], { width: 720, height: 440, quality: 70 })} srcSet={publicImageSrcSet(gallery[1], [420, 560, 720], { aspectRatio: 1.64, quality: 70 })} sizes="(max-width: 1024px) 100vw, 40vw" alt="Espaço da clínica" loading="lazy" decoding="async" className="public-card-reveal public-reveal-right h-[222px] w-full rounded-[2rem] object-cover shadow-[0_20px_54px_rgba(23,19,15,0.12)]" />
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={gallery[2]} alt="Atendimento" className="public-card-reveal public-reveal-up h-[222px] w-full rounded-[2rem] object-cover shadow-[0_20px_54px_rgba(23,19,15,0.12)]" />
+            <img src={publicImageUrl(gallery[2], { width: 720, height: 440, quality: 70 })} srcSet={publicImageSrcSet(gallery[2], [420, 560, 720], { aspectRatio: 1.64, quality: 70 })} sizes="(max-width: 1024px) 100vw, 40vw" alt="Atendimento" loading="lazy" decoding="async" className="public-card-reveal public-reveal-up h-[222px] w-full rounded-[2rem] object-cover shadow-[0_20px_54px_rgba(23,19,15,0.12)]" />
           </div>
         </div>
       </section>
@@ -500,7 +503,7 @@ export default async function PublicClinicPage({ params, searchParams }) {
           <div>
             {logoUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={logoUrl} alt={`Logo ${brandName}`} className="h-28 w-28 rounded-2xl object-contain bg-white/8 p-2" />
+              <img src={publicImageUrl(logoUrl, { width: 224, height: 224, quality: 76, resize: "contain" })} alt={`Logo ${brandName}`} width="112" height="112" loading="lazy" decoding="async" className="h-28 w-28 rounded-2xl object-contain bg-white/8 p-2" />
             ) : null}
             <h3 className="mt-5 text-xl font-semibold">{brandName}</h3>
             <p className="mt-3 max-w-sm text-sm leading-7 text-white/65">{professionalName}</p>
