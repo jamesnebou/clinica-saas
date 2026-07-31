@@ -254,10 +254,16 @@ export default async function ConfiguracoesPage({ searchParams }) {
               <Field label="Credencial 2" name="site_credencial_2" defaultValue={site.credencial_2 || ""} placeholder="Ambiente reservado" />
               <Field label="Credencial 3" name="site_credencial_3" defaultValue={site.credencial_3 || ""} placeholder="Acompanhamento pos-procedimento" />
               <label className="block">
-                <span className="text-sm font-medium text-neutral-700">Foto principal do site</span>
+                <span className="text-sm font-medium text-neutral-700">Foto principal do site (desktop)</span>
                 <input name="site_hero_image_file" type="file" accept="image/jpeg,image/png,image/webp,image/svg+xml" className="mt-2 block w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm file:mr-4 file:rounded-md file:border-0 file:bg-[var(--clinic-primary)] file:px-3 file:py-2 file:text-sm file:font-semibold file:text-white" />
-                <span className="mt-2 block text-xs leading-5 text-neutral-500">Hero/capa. Recomendado: 1920x1200 px ou maior, horizontal. Limite 50 MB.</span>
+                <span className="mt-2 block text-xs leading-5 text-neutral-500">Hero/capa para computador. Recomendado: 1920x1200 px ou maior, horizontal. Limite 50 MB.</span>
                 {site.hero_image_url ? <span className="mt-2 block text-xs font-semibold text-[var(--clinic-primary)]">Imagem salva.</span> : null}
+              </label>
+              <label className="block">
+                <span className="text-sm font-medium text-neutral-700">Foto principal do site (mobile)</span>
+                <input name="site_hero_mobile_image_file" type="file" accept="image/jpeg,image/png,image/webp,image/svg+xml" className="mt-2 block w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm file:mr-4 file:rounded-md file:border-0 file:bg-[var(--clinic-primary)] file:px-3 file:py-2 file:text-sm file:font-semibold file:text-white" />
+                <span className="mt-2 block text-xs leading-5 text-neutral-500">Hero/capa para celular. Recomendado: 1080x1600 px ou 1080x1920 px, vertical. Limite 50 MB.</span>
+                {site.hero_mobile_image_url ? <span className="mt-2 block text-xs font-semibold text-[var(--clinic-primary)]">Imagem mobile salva.</span> : null}
               </label>
               <label className="block">
                 <span className="text-sm font-medium text-neutral-700">Foto da profissional</span>

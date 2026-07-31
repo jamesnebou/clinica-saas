@@ -274,6 +274,7 @@ export default async function PublicClinicPage({ params, searchParams }) {
   const professionalName = site.nome_profissional || publicProfessionals[0]?.nome || brandName;
   const professionalBio = site.bio_profissional || publicProfessionals[0]?.observacoes || "Atendimento cuidadoso, escuta ativa e plano de tratamento alinhado ao seu objetivo estético.";
   const heroImage = site.hero_image_url || site.profissional_image_url || fallbackImage(brandName, true);
+  const mobileHeroImage = site.hero_mobile_image_url || heroImage;
   const professionalImage = site.profissional_image_url || site.hero_image_url || fallbackImage(professionalName);
   const clinicPhotos = [site.clinica_foto_1, site.clinica_foto_2, site.clinica_foto_3].filter(Boolean);
   const gallery = clinicPhotos.length ? clinicPhotos : [heroImage, professionalImage, fallbackImage("Clínica")];
@@ -336,29 +337,35 @@ export default async function PublicClinicPage({ params, searchParams }) {
         </div>
       </header>
 
-      <section id="topo" className="relative flex min-h-screen items-center justify-center px-5 py-28 text-center text-white sm:px-8">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={publicImageUrl(heroImage, { width: 1280, quality: 70 })} srcSet={publicImageSrcSet(heroImage, [640, 960, 1280, 1600], { quality: 70 })} sizes="100vw" alt={brandName} fetchPriority="high" decoding="async" className="absolute inset-0 h-full w-full object-cover" />
+      <section id="topo" className="relative flex min-h-[calc(100svh-4.5rem)] items-start justify-center px-5 pb-16 pt-10 text-center text-white sm:min-h-screen sm:items-center sm:px-8 sm:py-28">
+        <picture className="absolute inset-0">
+          <source
+            media="(max-width: 639px)"
+            srcSet={publicImageSrcSet(mobileHeroImage, [480, 640, 828], { quality: 70 }) || publicImageUrl(mobileHeroImage, { width: 828, quality: 70 })}
+            sizes="100vw"
+          />
+          <img src={publicImageUrl(heroImage, { width: 1280, quality: 70 })} srcSet={publicImageSrcSet(heroImage, [640, 960, 1280, 1600], { quality: 70 })} sizes="100vw" alt={brandName} fetchPriority="high" decoding="async" className="h-full w-full object-cover" />
+        </picture>
         <div className="absolute inset-0 bg-[#17130f]/55" />
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_42%,transparent_0%,rgba(0,0,0,0.48)_72%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_34%,transparent_0%,rgba(0,0,0,0.48)_72%)] sm:bg-[radial-gradient(circle_at_50%_42%,transparent_0%,rgba(0,0,0,0.48)_72%)]" />
         <div className="relative z-10 mx-auto max-w-5xl">
           {logoUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={publicImageUrl(logoUrl, { width: 224, height: 224, quality: 76, resize: "contain" })} alt={`Logo ${brandName}`} width="112" height="112" decoding="async" className="mx-auto mb-8 h-28 w-28 rounded-full object-contain shadow-[0_24px_60px_rgba(0,0,0,0.24)]" />
+            <img src={publicImageUrl(logoUrl, { width: 224, height: 224, quality: 76, resize: "contain" })} alt={`Logo ${brandName}`} width="112" height="112" decoding="async" className="mx-auto mb-4 h-20 w-20 rounded-full object-contain shadow-[0_20px_48px_rgba(0,0,0,0.24)] sm:mb-8 sm:h-28 sm:w-28 sm:shadow-[0_24px_60px_rgba(0,0,0,0.24)]" />
           ) : null}
-          <p className="text-xs font-bold uppercase tracking-[0.34em] text-white/70">{site.eyebrow || "Estética premium e atendimento personalizado"}</p>
-          <h1 className="mx-auto mt-5 max-w-5xl text-5xl font-semibold leading-[1.03] tracking-tight sm:text-7xl">
+          <p className="text-[10px] font-bold uppercase leading-5 tracking-[0.24em] text-white/75 sm:text-xs sm:tracking-[0.34em]">{site.eyebrow || "Estética premium e atendimento personalizado"}</p>
+          <h1 className="mx-auto mt-3 max-w-5xl text-[2.55rem] font-semibold leading-[1.02] tracking-tight sm:mt-5 sm:text-7xl sm:leading-[1.03]">
             {site.titulo_hero || `Beleza, cuidado e tecnologia em ${brandName}`}
           </h1>
-          <p className="mx-auto mt-6 max-w-3xl text-lg leading-8 text-white/82">
+          <p className="mx-auto mt-4 max-w-3xl text-base leading-7 text-white/82 sm:mt-6 sm:text-lg sm:leading-8">
             {site.subtitulo_hero || "Conheça a clínica, veja os procedimentos e reserve seu horário online com segurança."}
           </p>
-          <div className="mt-8 flex flex-wrap justify-center gap-3">
+          <div className="mt-6 flex flex-wrap justify-center gap-3 sm:mt-8">
             <a href="#agendar" className="rounded-full bg-[var(--clinic-accent)] px-7 py-4 text-sm font-bold text-[#17130f] shadow-[0_20px_48px_rgba(0,0,0,0.24)]">Agendar consulta</a>
             <a href="#servicos" className="rounded-full border border-white/40 bg-white/10 px-7 py-4 text-sm font-bold text-white backdrop-blur">Conheça os serviços</a>
           </div>
         </div>
-        <div className="absolute bottom-8 left-1/2 h-10 w-6 -translate-x-1/2 rounded-full border border-white/55">
+        <div className="absolute bottom-5 left-1/2 hidden h-10 w-6 -translate-x-1/2 rounded-full border border-white/55 sm:block sm:bottom-8">
           <span className="mx-auto mt-2 block h-2 w-1 rounded-full bg-white/75" />
         </div>
       </section>

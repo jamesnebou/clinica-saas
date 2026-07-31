@@ -1361,6 +1361,7 @@ export async function updateClinicSettingsAction(formData) {
     uploadedLogo = await uploadClinicLogo({ clinicaId, file: logoFile });
     for (const [field, slot] of [
       ["site_hero_image_file", "hero"],
+      ["site_hero_mobile_image_file", "hero-mobile"],
       ["site_profissional_image_file", "profissional"],
       ["site_clinica_foto_1_file", "clinica-1"],
       ["site_clinica_foto_2_file", "clinica-2"],
@@ -1414,6 +1415,8 @@ export async function updateClinicSettingsAction(formData) {
       credencial_3: nullableText(formData, "site_credencial_3"),
       hero_image_url: siteUploads.site_hero_image_file?.publicUrl || metadata.site_publico?.hero_image_url || "",
       hero_image_storage_path: siteUploads.site_hero_image_file?.path || metadata.site_publico?.hero_image_storage_path || null,
+      hero_mobile_image_url: siteUploads.site_hero_mobile_image_file?.publicUrl || metadata.site_publico?.hero_mobile_image_url || "",
+      hero_mobile_image_storage_path: siteUploads.site_hero_mobile_image_file?.path || metadata.site_publico?.hero_mobile_image_storage_path || null,
       profissional_image_url: siteUploads.site_profissional_image_file?.publicUrl || metadata.site_publico?.profissional_image_url || "",
       profissional_image_storage_path: siteUploads.site_profissional_image_file?.path || metadata.site_publico?.profissional_image_storage_path || null,
       clinica_foto_1: siteUploads.site_clinica_foto_1_file?.publicUrl || metadata.site_publico?.clinica_foto_1 || "",
