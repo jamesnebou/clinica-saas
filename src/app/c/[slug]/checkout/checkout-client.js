@@ -14,7 +14,7 @@ function storageKey(slug) {
   return `clinica_cart_${slug}`;
 }
 
-export function StoreCheckout({ slug, brandName, config, onlinePaymentAvailable, cartToken = "", query = {} }) {
+export function StoreCheckout({ slug, brandName, config, onlinePaymentAvailable, paymentProvider = "pagamento online", cartToken = "", query = {} }) {
   const [items, setItems] = useState([]);
   const [sessionToken, setSessionToken] = useState(cartToken);
   const [deliveryType, setDeliveryType] = useState(config.retiradaAtiva ? "retirada" : "entrega");
@@ -121,7 +121,7 @@ export function StoreCheckout({ slug, brandName, config, onlinePaymentAvailable,
 
                 <div className="grid gap-4 sm:grid-cols-2">
                   <label className="block"><span className="text-xs font-bold text-neutral-600">Cupom</span><input name="cupom_codigo" placeholder="Digite o código" className="mt-2 h-12 w-full rounded-xl border border-neutral-200 bg-white px-4 text-sm uppercase outline-none focus:border-[var(--clinic-primary)]" /></label>
-                  <label className="block"><span className="text-xs font-bold text-neutral-600">Pagamento</span><select name="forma_pagamento" className="mt-2 h-12 w-full rounded-xl border border-neutral-200 bg-white px-4 text-sm outline-none focus:border-[var(--clinic-primary)]">{onlinePaymentAvailable && config.pixAtivo ? <option value="PIX">Pix no Asaas</option> : null}{onlinePaymentAvailable && config.cartaoAtivo ? <option value="CREDIT_CARD">Cartão de crédito no Asaas</option> : null}{config.pagamentoRetiradaAtivo && deliveryType === "retirada" ? <option value="PAGAR_NA_RETIRADA">Pagar na retirada</option> : null}</select></label>
+                  <label className="block"><span className="text-xs font-bold text-neutral-600">Pagamento</span><select name="forma_pagamento" className="mt-2 h-12 w-full rounded-xl border border-neutral-200 bg-white px-4 text-sm outline-none focus:border-[var(--clinic-primary)]">{onlinePaymentAvailable && paymentProvider === "InfinitePay" ? <option value="PIX">Pix ou cartão via InfinitePay</option> : null}{onlinePaymentAvailable && paymentProvider !== "InfinitePay" && config.pixAtivo ? <option value="PIX">Pix via {paymentProvider}</option> : null}{onlinePaymentAvailable && paymentProvider !== "InfinitePay" && config.cartaoAtivo ? <option value="CREDIT_CARD">Cartão de crédito via {paymentProvider}</option> : null}{config.pagamentoRetiradaAtivo && deliveryType === "retirada" ? <option value="PAGAR_NA_RETIRADA">Pagar na retirada</option> : null}</select></label>
                 </div>
 
                 <label className="flex items-start gap-3 text-sm leading-6 text-neutral-600"><input type="checkbox" name="consentimento_lgpd" required className="mt-1" /><span>Concordo com o uso dos meus dados para processar o pedido, pagamento, entrega e atendimento, conforme a política de privacidade.</span></label>

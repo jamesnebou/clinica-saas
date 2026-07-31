@@ -5,6 +5,8 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { createAsaasCheckoutForOrder, isAsaasConfigured } from "@/lib/asaas/client";
+import { createInfinitePayCheckout } from "@/lib/infinitepay/client";
+import { resolveClinicPaymentProvider } from "@/lib/payments/provider";
 import { decryptClinicSecrets } from "@/lib/security/clinic-secrets";
 import { getStoreConfig } from "@/lib/store/config";
 
@@ -41,14 +43,14 @@ async function getOrigin() {
 async function getClinicIntegration(clinicId) {
   const { data, error } = await supabaseAdmin
     .from("clinica_integracoes")
-    .select("clinica_id, asaas_ativo, asaas_base_url, asaas_configuracao_publica, asaas_segredos_criptografados, asaas_api_key")
+    .select("clinica_id, pagamento_gateway, asaas_ativo, asaas_base_url, asaas_configuracao_publica, asaas_segredos_criptografados, asaas_api_key, infinitepay_ativo, infinitepay_handle, infinitepay_configuracao_publica")
     .eq("clinica_id", clinicId)
-    .eq("asaas_ativo", true)
     .maybeSingle();
   if (error) throw error;
-  if (!data) return { clinica_id: clinicId, asaas_ativo: false };
+  if (!data) return { clinica_id: clinicId, asaas_ativo: false, infinitepay_ativo: false };
   const secrets = decryptClinicSecrets(data.asaas_segredos_criptografados);
   return {
+    ...data,
     clinica_id: clinicId,
     asaas_ativo: data.asaas_ativo,
     baseUrl: data.asaas_configuracao_publica?.baseUrl || data.asaas_base_url,
@@ -237,8 +239,9 @@ export async function createPublicStoreOrderAction(formData) {
   }
 
   const integration = await getClinicIntegration(clinic.id);
-  if (!config.checkoutAsaasAtivo || !isAsaasConfigured(integration)) {
-    await supabaseAdmin.rpc("cancelar_pedido_loja", { p_pedido_id: order.pedido_id, p_motivo: "Checkout Asaas indisponível." });
+  const paymentProvider = resolveClinicPaymentProvider(integration);
+  if (!config.checkoutAsaasAtivo || !paymentProvider) {
+    await supabaseAdmin.rpc("cancelar_pedido_loja", { p_pedido_id: order.pedido_id, p_motivo: "Checkout online indisponível." });
     redirectCheckout(slug, "pagamento", "O pagamento online está indisponível. Escolha pagar na retirada ou fale com a clínica.");
   }
 
@@ -246,27 +249,43 @@ export async function createPublicStoreOrderAction(formData) {
   try {
     const origin = await getOrigin();
     const callbackUrl = `${origin}${orderUrl}`;
-    const checkout = await createAsaasCheckoutForOrder({
-      value: order.total,
-      description: `Pedido #${order.numero} - ${clinic.nome}`,
-      externalReference: `loja:${order.pedido_id}`,
-      billingTypes: [formaPagamento],
-      minutesToExpire: config.reservaMinutos,
-      callback: {
-        successUrl: callbackUrl,
-        cancelUrl: callbackUrl,
-        expiredUrl: callbackUrl,
-      },
-      customerData: { name: nome, email, phone: telefone, cpfCnpj: cpf },
-      integration,
-    });
-    const checkoutUrl = checkout.link || null;
-    if (!checkoutUrl) throw new Error("O Asaas não retornou o link do checkout.");
+    const orderNsu = `loja:${order.pedido_id}`;
+    const checkout = paymentProvider === "asaas" && isAsaasConfigured(integration)
+      ? await createAsaasCheckoutForOrder({
+          value: order.total,
+          description: `Pedido #${order.numero} - ${clinic.nome}`,
+          externalReference: orderNsu,
+          billingTypes: [formaPagamento],
+          minutesToExpire: config.reservaMinutos,
+          callback: {
+            successUrl: callbackUrl,
+            cancelUrl: callbackUrl,
+            expiredUrl: callbackUrl,
+          },
+          customerData: { name: nome, email, phone: telefone, cpfCnpj: cpf },
+          integration,
+        })
+      : await createInfinitePayCheckout({
+          handle: integration.infinitepay_handle,
+          orderNsu,
+          redirectUrl: callbackUrl,
+          webhookUrl: `${origin}/api/webhooks/infinitepay`,
+          items: [{
+            quantity: 1,
+            price: Math.round(Number(order.total || 0) * 100),
+            description: `Pedido #${order.numero} - ${clinic.nome}`,
+          }],
+          customer: { name: nome, email, phone: telefone },
+        });
+    const checkoutUrl = paymentProvider === "asaas" ? checkout.link : checkout.url;
+    if (!checkoutUrl) throw new Error("O gateway não retornou o link do checkout.");
 
     const { error: orderUpdateError } = await supabaseAdmin.from("pedidos_clinica").update({
+      pagamento_gateway: paymentProvider,
+      pagamento_external_id: paymentProvider === "infinitepay" ? orderNsu : null,
       asaas_payment_id: null,
       invoice_url: checkoutUrl,
-      payload_pagamento: { checkout },
+      payload_pagamento: { pagamento_gateway: paymentProvider, checkout },
     }).eq("id", order.pedido_id).eq("clinica_id", clinic.id);
     if (orderUpdateError) throw orderUpdateError;
 
@@ -275,7 +294,7 @@ export async function createPublicStoreOrderAction(formData) {
     revalidatePath("/dashboard/pedidos");
     paymentRedirectUrl = checkoutUrl;
   } catch (error) {
-    await supabaseAdmin.rpc("cancelar_pedido_loja", { p_pedido_id: order.pedido_id, p_motivo: "Falha ao gerar checkout Asaas." });
+    await supabaseAdmin.rpc("cancelar_pedido_loja", { p_pedido_id: order.pedido_id, p_motivo: `Falha ao gerar checkout ${paymentProvider}.` });
     redirectCheckout(slug, "pagamento", error.message || "Não foi possível gerar o pagamento. Tente novamente.");
   }
 

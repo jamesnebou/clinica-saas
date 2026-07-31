@@ -1,7 +1,7 @@
 import { Clock, CreditCard, Mail, MessageCircle, Palette, Settings, ShieldCheck, UsersRound } from "lucide-react";
 import { requireClinicSection } from "@/lib/auth/session";
 import { EmptyClinicState, Field, PageHeader, SubmitButton, TextArea } from "@/components/app-shell/ui";
-import { connectClinicAsaasAction, disconnectClinicAsaasAction, removeClinicDomainAction, syncClinicDomainAction, testClinicWhatsappIntegrationAction, updateClinicAccountAction, updateClinicSettingsAction, updateClinicUserAction } from "../actions";
+import { connectClinicAsaasAction, connectClinicInfinitePayAction, disconnectClinicAsaasAction, disconnectClinicInfinitePayAction, removeClinicDomainAction, syncClinicDomainAction, testClinicWhatsappIntegrationAction, updateClinicAccountAction, updateClinicSettingsAction, updateClinicUserAction } from "../actions";
 import { ConfigTabs } from "./config-tabs";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { normalizeSchedule } from "@/lib/clinic/schedule";
@@ -138,11 +138,13 @@ export default async function ConfiguracoesPage({ searchParams }) {
     .order("created_at", { ascending: false });
   const { data: integration } = await supabaseAdmin
     .from("clinica_integracoes")
-    .select("asaas_ativo, asaas_ambiente, asaas_base_url, asaas_configuracao_publica, asaas_segredos_criptografados, asaas_api_key, asaas_webhook_url, email_ativo, email_destino, email_remetente, whatsapp_ativo, whatsapp_provider, whatsapp_numero_destino, whatsapp_webhook_url, whatsapp_token")
+    .select("pagamento_gateway, asaas_ativo, asaas_ambiente, asaas_base_url, asaas_configuracao_publica, asaas_segredos_criptografados, asaas_api_key, asaas_webhook_url, infinitepay_ativo, infinitepay_handle, infinitepay_configuracao_publica, email_ativo, email_destino, email_remetente, whatsapp_ativo, whatsapp_provider, whatsapp_numero_destino, whatsapp_webhook_url, whatsapp_token")
     .eq("clinica_id", activeClinic.id)
     .maybeSingle();
   const asaasConfig = integration?.asaas_configuracao_publica || {};
   const asaasConnected = Boolean(integration?.asaas_ativo && (integration?.asaas_segredos_criptografados || integration?.asaas_api_key));
+  const infinitePayConnected = Boolean(integration?.infinitepay_ativo && integration?.infinitepay_handle);
+  const paymentGateway = integration?.pagamento_gateway || (asaasConnected ? "asaas" : infinitePayConnected ? "infinitepay" : "");
   const { data: usuarios = [] } = await supabaseAdmin
     .from("usuarios_clinica")
     .select("id, nome, email, papel, ativo, permissoes, accepted_at, created_at")
@@ -156,6 +158,8 @@ export default async function ConfiguracoesPage({ searchParams }) {
 
         {params?.ok === "configuracoes" ? <Notice>Configurações atualizadas com sucesso.</Notice> : null}
         {params?.ok === "whatsapp" ? <Notice>Mensagem de teste enviada pelo WhatsApp.</Notice> : null}
+        {params?.ok === "infinitepay" ? <Notice>InfinitePay conectada e definida como gateway principal da clínica.</Notice> : null}
+        {params?.ok === "infinitepay_desconectado" ? <Notice>InfinitePay desconectada desta clínica.</Notice> : null}
         {params?.ok === "asaas" ? <Notice>Conta Asaas validada e conectada com segurança.</Notice> : null}
         {params?.ok === "asaas_desconectado" ? <Notice>Conta Asaas desconectada desta clínica.</Notice> : null}
         {params?.ok === "conta" ? <Notice>Dados de acesso atualizados com sucesso.</Notice> : null}
@@ -432,17 +436,61 @@ export default async function ConfiguracoesPage({ searchParams }) {
             <div className="flex items-center gap-2"><CreditCard size={20} className="text-[var(--clinic-primary)]" /><h2 className="text-lg font-semibold">Integrações da clínica</h2></div>
             <p className="mt-2 text-sm text-neutral-600">Estas credenciais pertencem somente a esta clínica. Deixe campos sensíveis em branco para manter o valor já salvo.</p>
             <div className="mt-5 grid gap-5">
+              <div className="grid gap-4 lg:grid-cols-2">
+                <div className={`rounded-lg border p-4 ${paymentGateway === "infinitepay" ? "border-[var(--clinic-primary)] bg-[color-mix(in_srgb,var(--clinic-accent)_8%,white)]" : "border-neutral-200 bg-white"}`}>
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <strong className="text-neutral-950">InfinitePay</strong>
+                      <p className="mt-2 text-sm leading-6 text-neutral-600">Configuração simples com a InfiniteTag. O cliente final paga por Pix ou cartão no checkout hospedado pela InfinitePay.</p>
+                    </div>
+                    {paymentGateway === "infinitepay" ? <span className="rounded-full bg-[var(--clinic-primary)] px-3 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-white">Principal</span> : null}
+                  </div>
+                  <p className="mt-3 text-xs leading-5 text-neutral-500">Boa escolha para clínicas que já recebem pela InfinitePay e querem ativação rápida.</p>
+                </div>
+                <div className={`rounded-lg border p-4 ${paymentGateway === "asaas" ? "border-[var(--clinic-primary)] bg-[color-mix(in_srgb,var(--clinic-accent)_8%,white)]" : "border-neutral-200 bg-white"}`}>
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <strong className="text-neutral-950">Asaas</strong>
+                      <p className="mt-2 text-sm leading-6 text-neutral-600">Integração por API Key, com Pix, cartão e boleto, além de uma estrutura financeira mais ampla.</p>
+                    </div>
+                    {paymentGateway === "asaas" ? <span className="rounded-full bg-[var(--clinic-primary)] px-3 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-white">Principal</span> : null}
+                  </div>
+                  <p className="mt-3 text-xs leading-5 text-neutral-500">Indicada para clínicas que já usam o Asaas ou precisam de boleto e automações financeiras.</p>
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <div className="flex items-center gap-2"><CreditCard size={18} className="text-[var(--clinic-primary)]" /><strong>Recebimentos com InfinitePay</strong></div>
+                    <p className="mt-2 text-sm leading-6 text-neutral-600">Informe apenas a InfiniteTag da conta da clínica. Os dados de cartão nunca passam pelo sistema.</p>
+                  </div>
+                  <span className={`rounded-full px-3 py-1 text-xs font-black uppercase tracking-[0.12em] ${infinitePayConnected ? "bg-emerald-100 text-emerald-800" : "bg-neutral-200 text-neutral-600"}`}>{paymentGateway === "infinitepay" ? "Principal" : infinitePayConnected ? "Conectado" : "Desconectado"}</span>
+                </div>
+                <div className="mt-4 grid gap-4 lg:grid-cols-2">
+                  <Field label="InfiniteTag da clínica" name="infinitepay_handle" defaultValue={integration?.infinitepay_handle || ""} placeholder="Ex.: minha_clinica" />
+                  <div className="rounded-lg border border-neutral-200 bg-white px-4 py-3 text-xs leading-5 text-neutral-600">
+                    Ative o Checkout Integrado no aplicativo InfinitePay. O webhook é validado automaticamente antes de marcar qualquer pagamento como recebido.
+                  </div>
+                </div>
+                <div className="mt-4 flex flex-wrap gap-3">
+                  <button type="submit" formAction={connectClinicInfinitePayAction} formNoValidate className="h-10 rounded-lg bg-[var(--clinic-primary)] px-4 text-sm font-bold text-white shadow-sm transition hover:brightness-105">
+                    {infinitePayConnected ? paymentGateway === "infinitepay" ? "Salvar configuração" : "Usar InfinitePay como principal" : "Conectar InfinitePay"}
+                  </button>
+                  {infinitePayConnected ? <button type="submit" formAction={disconnectClinicInfinitePayAction} formNoValidate className="h-10 rounded-lg border border-red-200 bg-white px-4 text-sm font-bold text-red-700 hover:bg-red-50">Desconectar</button> : null}
+                </div>
+              </div>
               <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-4">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div><div className="flex items-center gap-2"><CreditCard size={18} className="text-[var(--clinic-primary)]" /><strong>Recebimentos com Asaas</strong></div><p className="mt-2 text-sm leading-6 text-neutral-600">A clínica conecta a própria conta. A chave fica criptografada e os dados do cartão são digitados somente no checkout hospedado pelo Asaas.</p></div>
-                  <span className={`rounded-full px-3 py-1 text-xs font-black uppercase tracking-[0.12em] ${asaasConnected ? "bg-emerald-100 text-emerald-800" : "bg-neutral-200 text-neutral-600"}`}>{asaasConnected ? "Conectado" : "Desconectado"}</span>
+                  <span className={`rounded-full px-3 py-1 text-xs font-black uppercase tracking-[0.12em] ${asaasConnected ? "bg-emerald-100 text-emerald-800" : "bg-neutral-200 text-neutral-600"}`}>{paymentGateway === "asaas" ? "Principal" : asaasConnected ? "Conectado" : "Desconectado"}</span>
                 </div>
                 <div className="mt-4 grid gap-4 lg:grid-cols-2">
                   <label className="block"><span className="text-sm font-medium text-neutral-700">Ambiente</span><select name="asaas_ambiente" defaultValue={integration?.asaas_ambiente || "sandbox"} className="mt-2 h-11 w-full rounded-lg border border-neutral-200 bg-white px-3 text-sm text-neutral-900 outline-none focus:border-[var(--clinic-primary)]"><option value="sandbox">Sandbox (testes)</option><option value="producao">Produção (vendas reais)</option></select></label>
                   <Field label="API Key da conta Asaas" name="asaas_api_key" type="password" placeholder={asaasConnected ? `Chave salva ••••${asaasConfig.key_last_four || ""}` : "Cole a API Key gerada no Asaas"} />
                 </div>
                 <div className="mt-4 rounded-lg border border-neutral-200 bg-white px-4 py-3 text-xs leading-5 text-neutral-600">{asaasConfig.webhook_status === "active" ? <>Webhook automático ativo em <strong>{integration?.asaas_webhook_url}</strong>.</> : asaasConnected ? <>A chave está validada. Em localhost o webhook fica pendente; após publicar, clique novamente em conectar para ativá-lo automaticamente.</> : <>Gere uma API Key na conta Asaas da clínica. Não informe senha, login ou chave de outra empresa.</>}</div>
-                <div className="mt-4 flex flex-wrap gap-3"><button type="submit" formAction={connectClinicAsaasAction} formNoValidate className="h-10 rounded-lg bg-[var(--clinic-primary)] px-4 text-sm font-bold text-white shadow-sm transition hover:brightness-105">{asaasConnected ? "Validar e reconectar" : "Conectar conta Asaas"}</button>{asaasConnected ? <button type="submit" formAction={disconnectClinicAsaasAction} formNoValidate className="h-10 rounded-lg border border-red-200 bg-white px-4 text-sm font-bold text-red-700 hover:bg-red-50">Desconectar</button> : null}</div>
+                <div className="mt-4 flex flex-wrap gap-3"><button type="submit" formAction={connectClinicAsaasAction} formNoValidate className="h-10 rounded-lg bg-[var(--clinic-primary)] px-4 text-sm font-bold text-white shadow-sm transition hover:brightness-105">{asaasConnected ? paymentGateway === "asaas" ? "Validar e reconectar" : "Usar Asaas como principal" : "Conectar conta Asaas"}</button>{asaasConnected ? <button type="submit" formAction={disconnectClinicAsaasAction} formNoValidate className="h-10 rounded-lg border border-red-200 bg-white px-4 text-sm font-bold text-red-700 hover:bg-red-50">Desconectar</button> : null}</div>
               </div>
 
               <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-4">

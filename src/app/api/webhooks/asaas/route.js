@@ -110,6 +110,8 @@ async function updatePublicBookingPayment({ payment, payload, event, paymentStat
     .from("site_agendamentos_publicos")
     .update({
       pagamento_status: publicStatus,
+      pagamento_gateway: "asaas",
+      pagamento_external_id: paymentId || externalReference || null,
       asaas_payment_id: paymentId || null,
       invoice_url: payment?.invoiceUrl || null,
       payload,
@@ -152,7 +154,7 @@ async function updateStoreOrderPayment({ payment, payload, paymentStatus, paidAt
   }
   if (!order?.id) return false;
   const invoiceUrl = payment?.invoiceUrl || payment?.bankSlipUrl || null;
-  const { error: orderPayloadError } = await supabaseAdmin.from("pedidos_clinica").update({ asaas_payment_id: paymentId || null, invoice_url: invoiceUrl, payload_pagamento: payload }).eq("id", order.id).eq("clinica_id", order.clinica_id);
+  const { error: orderPayloadError } = await supabaseAdmin.from("pedidos_clinica").update({ pagamento_gateway: "asaas", pagamento_external_id: paymentId || externalReference || null, asaas_payment_id: paymentId || null, invoice_url: invoiceUrl, payload_pagamento: payload }).eq("id", order.id).eq("clinica_id", order.clinica_id);
   if (orderPayloadError) throw orderPayloadError;
   if (paymentStatus === "pago") {
     const { error } = await supabaseAdmin.rpc("confirmar_pagamento_pedido_loja", { p_pedido_id: order.id, p_asaas_payment_id: paymentId || null, p_payload: payload, p_pago_em: paidAt ? new Date(paidAt).toISOString() : new Date().toISOString() }); if (error) throw error;

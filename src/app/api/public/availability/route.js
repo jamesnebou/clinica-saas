@@ -1,6 +1,15 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
-import { getWorkingPeriods, inactiveDateFor } from "@/lib/clinic/schedule";
+import {
+  clinicTimeZone,
+  dateFromClinicLocal,
+  dateKeyInTimeZone,
+  getWorkingPeriods,
+  inactiveDateFor,
+  localTimeFromDate,
+  utcRangeForClinicDate,
+  weekdayFromDateKey,
+} from "@/lib/clinic/schedule";
 
 function pad(value) {
   return String(value).padStart(2, "0");
@@ -12,11 +21,14 @@ function localDateTime(date, minutes) {
   return `${date}T${pad(hours)}:${pad(mins)}`;
 }
 
-function overlaps(startMinutes, endMinutes, booking) {
+function overlaps(startMinutes, endMinutes, booking, date, timeZone) {
   const start = new Date(booking.inicio);
   const end = new Date(booking.fim);
-  const bookingStart = start.getHours() * 60 + start.getMinutes();
-  const bookingEnd = end.getHours() * 60 + end.getMinutes();
+  if (dateKeyInTimeZone(start, timeZone) !== date) return false;
+  const bookingStart = localTimeFromDate(start, timeZone);
+  const bookingEnd = dateKeyInTimeZone(end, timeZone) === date
+    ? localTimeFromDate(end, timeZone)
+    : 24 * 60;
   return startMinutes < bookingEnd && endMinutes > bookingStart;
 }
 
@@ -71,17 +83,17 @@ export async function GET(request) {
   if (!profissionais.length) return NextResponse.json({ slots: [], message: "Nenhum profissional disponivel." });
 
   const schedule = clinic.metadata?.horario_funcionamento || {};
-  const inactiveDate = inactiveDateFor(schedule, date);
+  const timeZone = clinicTimeZone(clinic);
+  const inactiveDate = inactiveDateFor(schedule, date, timeZone);
   if (inactiveDate) {
     return NextResponse.json({ slots: [], message: inactiveDate.motivo || "Clínica sem atendimento nesta data." });
   }
 
-  const dateAtNoon = new Date(`${date}T12:00:00`);
-  const day = String(dateAtNoon.getDay());
+  const day = weekdayFromDateKey(date);
   const periods = getWorkingPeriods(schedule, day);
 
   if (!periods.length) {
-    return NextResponse.json({ slots: [], message: "Dia fora do expediente da clinica." });
+    return NextResponse.json({ slots: [], message: "A clínica não atende nesta data." });
   }
 
   const duration = Math.max(1, procedimentos.reduce((total, item) => total + Number(item.duracao_minutos || 60), 0));
@@ -90,16 +102,19 @@ export async function GET(request) {
     return NextResponse.json({ slots: [], message: "Expediente insuficiente para os procedimentos selecionados." });
   }
 
-  const startISO = new Date(`${date}T00:00:00`).toISOString();
-  const endISO = new Date(`${date}T23:59:59`).toISOString();
+  const dateRange = utcRangeForClinicDate(date, timeZone);
+  if (!dateRange) {
+    return NextResponse.json({ slots: [], message: "Data inválida." }, { status: 400 });
+  }
+
   const { data: bookings = [], error: bookingsError } = await supabaseAdmin
     .from("agendamentos")
     .select("id, profissional_id, inicio, fim, status")
     .eq("clinica_id", clinic.id)
     .in("profissional_id", profissionais.map((item) => item.id))
     .not("status", "eq", "cancelado")
-    .gte("inicio", startISO)
-    .lte("inicio", endISO);
+    .gte("inicio", dateRange.start.toISOString())
+    .lt("inicio", dateRange.end.toISOString());
 
   if (bookingsError) throw bookingsError;
 
@@ -109,12 +124,13 @@ export async function GET(request) {
   for (const period of periods) {
     for (let minutes = period.start; minutes + duration <= period.end; minutes += 30) {
       const value = localDateTime(date, minutes);
-      const slotDate = new Date(value);
+      const slotDate = dateFromClinicLocal(value, timeZone);
+      if (!slotDate) continue;
       if (slotDate <= now) continue;
 
       const availableProfessional = profissionais.find((professional) => {
         const professionalBookings = bookings.filter((booking) => booking.profissional_id === professional.id);
-        return !professionalBookings.some((booking) => overlaps(minutes, minutes + duration, booking));
+        return !professionalBookings.some((booking) => overlaps(minutes, minutes + duration, booking, date, timeZone));
       });
 
       if (!availableProfessional) continue;

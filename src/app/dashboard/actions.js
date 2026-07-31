@@ -11,10 +11,17 @@ import { uploadClientPhoto, uploadClinicLogo, uploadClinicSiteImage, uploadProce
 import { assertClinicLimit, assertClinicOperational } from "@/lib/saas/plans";
 import { ensureVercelProjectDomain, getVercelProjectDomain, normalizeCustomDomain, removeVercelProjectDomain } from "@/lib/vercel/domains";
 import { sendWhatsAppIntegrationTest } from "@/lib/notifications/booking";
-import { buildScheduleFromForm, isWithinWorkingPeriods } from "@/lib/clinic/schedule";
+import {
+  buildScheduleFromForm,
+  clinicDateTimeValue,
+  clinicTimeZone,
+  dateFromClinicLocal,
+  isWithinWorkingPeriods,
+} from "@/lib/clinic/schedule";
 import { ACCESS_SECTIONS } from "@/lib/auth/permissions";
 import { decryptClinicSecrets, encryptClinicSecrets } from "@/lib/security/clinic-secrets";
 import { getAsaasBaseUrl, removeAsaasWebhook, upsertAsaasWebhook, validateAsaasConnection } from "@/lib/asaas/client";
+import { normalizeInfinitePayHandle } from "@/lib/infinitepay/client";
 
 async function getScopedSupabase() {
   const context = await requireClinic();
@@ -171,10 +178,10 @@ function safeHexColor(value, fallback) {
   return /^#[0-9a-f]{6}$/i.test(color) ? color : fallback;
 }
 
-function assertWithinWorkingHours({ clinic, inicioRaw, fimRaw, inicio, fim, formData }) {
+function assertWithinWorkingHours({ clinic, inicioRaw, fimRaw, inicio, fim, formData, timeZone }) {
   const schedule = clinic?.metadata?.horario_funcionamento || {};
 
-  if (!isWithinWorkingPeriods({ schedule, startDate: inicio, endDate: fim }) || fimRaw.slice(0, 10) !== inicioRaw.slice(0, 10)) {
+  if (!isWithinWorkingPeriods({ schedule, startDate: inicio, endDate: fim, timeZone }) || fimRaw.slice(0, 10) !== inicioRaw.slice(0, 10)) {
     redirectAgendaError(formData, "Este horário está fora do expediente configurado da clínica.", inicioRaw.slice(0, 10));
   }
 }
@@ -546,9 +553,8 @@ function redirectAgendaError(formData, message, fallbackDate = "") {
   redirect(`${url}${separator}error=${encodeURIComponent(message)}`);
 }
 
-function parseDateTime(value) {
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? null : date;
+function parseDateTime(value, timeZone) {
+  return dateFromClinicLocal(value, timeZone);
 }
 
 async function assertHorarioDisponivel({ supabase, clinicaId, profissionalId, inicioISO, fimISO, ignoreId = "", formData }) {
@@ -580,29 +586,29 @@ async function assertHorarioDisponivel({ supabase, clinicaId, profissionalId, in
 async function buildAgendaPayload({ supabase, formData, clinicaId, activeClinic, userId }) {
   const inicioRaw = requireValue(text(formData, "inicio"), "Informe o inicio do agendamento.");
   const procedimentoId = nullableText(formData, "procedimento_id");
-  const inicio = parseDateTime(inicioRaw);
+  const timeZone = clinicTimeZone(activeClinic);
+  const inicio = parseDateTime(inicioRaw, timeZone);
 
   if (!inicio) {
     redirectAgendaError(formData, "Informe uma data válida para o agendamento.");
   }
 
   let fimRaw = text(formData, "fim");
-  let fim = fimRaw ? parseDateTime(fimRaw) : await resolveFimByProcedimento({ supabase, clinicaId, procedimentoId, inicio });
+  let fim = fimRaw ? parseDateTime(fimRaw, timeZone) : await resolveFimByProcedimento({ supabase, clinicaId, procedimentoId, inicio });
 
   if (!fim) {
     redirectAgendaError(formData, "Informe o fim do agendamento ou selecione um procedimento com duração cadastrada.", inicioRaw.slice(0, 10));
   }
 
   if (!fimRaw) {
-    const local = new Date(fim.getTime() - fim.getTimezoneOffset() * 60000);
-    fimRaw = local.toISOString().slice(0, 16);
+    fimRaw = clinicDateTimeValue(fim, timeZone);
   }
 
   if (fim <= inicio) {
     redirectAgendaError(formData, "O horário final precisa ser maior que o horário inicial.", inicio.toISOString().slice(0, 10));
   }
 
-  assertWithinWorkingHours({ clinic: activeClinic, inicioRaw, fimRaw, inicio, fim, formData });
+  assertWithinWorkingHours({ clinic: activeClinic, inicioRaw, fimRaw, inicio, fim, formData, timeZone });
 
   return {
     clinica_id: clinicaId,
@@ -1556,7 +1562,7 @@ export async function connectClinicAsaasAction(formData) {
   const { clinicaId, activeClinic, memberships, user } = await getScopedSupabase();
   requireClinicManager(memberships, clinicaId, "/dashboard/configuracoes");
   const { data: current, error: currentError } = await supabaseAdmin.from("clinica_integracoes")
-    .select("asaas_ambiente, asaas_base_url, asaas_configuracao_publica, asaas_segredos_criptografados, asaas_api_key, asaas_webhook_token, asaas_webhook_url")
+    .select("asaas_ambiente, asaas_base_url, asaas_configuracao_publica, asaas_segredos_criptografados, asaas_api_key, asaas_webhook_token, asaas_webhook_url, infinitepay_ativo")
     .eq("clinica_id", clinicaId).maybeSingle();
   if (currentError) throw currentError;
 
@@ -1595,7 +1601,7 @@ export async function connectClinicAsaasAction(formData) {
   const now = new Date().toISOString();
   const preservedWebhook = !connectionChanged && currentConfig.webhook_status === "active";
   const { error } = await supabaseAdmin.from("clinica_integracoes").upsert({
-    clinica_id: clinicaId, asaas_ativo: true, asaas_ambiente: ambiente, asaas_base_url: baseUrl,
+    clinica_id: clinicaId, pagamento_gateway: "asaas", asaas_ativo: true, asaas_ambiente: ambiente, asaas_base_url: baseUrl,
     asaas_configuracao_publica: { baseUrl, connection_status: "connected", connected_at: now, key_last_four: apiKey.slice(-4), webhook_status: canPublishWebhook || preservedWebhook ? "active" : "awaiting_public_url", webhook_id: webhook?.id || (!connectionChanged ? currentConfig.webhook_id : null) || null },
     asaas_segredos_criptografados: encryptClinicSecrets({ apiKey, webhookToken }),
     asaas_webhook_url: canPublishWebhook ? webhookUrl : (preservedWebhook ? current?.asaas_webhook_url : null),
@@ -1610,7 +1616,7 @@ export async function disconnectClinicAsaasAction() {
   const { clinicaId, activeClinic, memberships } = await getScopedSupabase();
   requireClinicManager(memberships, clinicaId, "/dashboard/configuracoes");
   const { data: current, error: currentError } = await supabaseAdmin.from("clinica_integracoes")
-    .select("asaas_ambiente, asaas_base_url, asaas_configuracao_publica, asaas_segredos_criptografados, asaas_api_key")
+    .select("asaas_ambiente, asaas_base_url, asaas_configuracao_publica, asaas_segredos_criptografados, asaas_api_key, infinitepay_ativo")
     .eq("clinica_id", clinicaId).maybeSingle();
   if (currentError) throw currentError;
   const secrets = decryptClinicSecrets(current?.asaas_segredos_criptografados);
@@ -1618,12 +1624,74 @@ export async function disconnectClinicAsaasAction() {
     try { await removeAsaasWebhook(current.asaas_configuracao_publica.webhook_id, { ambiente: current.asaas_ambiente, baseUrl: current.asaas_base_url, apiKey: secrets.apiKey || current.asaas_api_key }); } catch {}
   }
   const { error } = await supabaseAdmin.from("clinica_integracoes").update({
+    pagamento_gateway: current?.infinitepay_ativo ? "infinitepay" : null,
     asaas_ativo: false, asaas_configuracao_publica: { ...(current?.asaas_configuracao_publica || {}), connection_status: "disconnected", webhook_status: "inactive", disconnected_at: new Date().toISOString(), webhook_id: null },
     asaas_segredos_criptografados: null, asaas_webhook_url: null, asaas_api_key: null, asaas_webhook_token: null,
   }).eq("clinica_id", clinicaId);
   if (error) throw error;
   revalidatePath("/dashboard/configuracoes"); revalidatePath("/dashboard/produtos"); revalidatePath(`/c/${activeClinic.slug}`);
   redirect("/dashboard/configuracoes?ok=asaas_desconectado");
+}
+
+export async function connectClinicInfinitePayAction(formData) {
+  const { clinicaId, activeClinic, memberships } = await getScopedSupabase();
+  requireClinicManager(memberships, clinicaId, "/dashboard/configuracoes");
+
+  const handle = normalizeInfinitePayHandle(text(formData, "infinitepay_handle"));
+  if (!handle || !/^[a-zA-Z0-9._-]{3,80}$/.test(handle)) {
+    redirectWithMessage(
+      "/dashboard/configuracoes",
+      "infinitepay",
+      "Informe uma InfiniteTag válida, sem espaços. Exemplo: minha_clinica.",
+    );
+  }
+
+  const now = new Date().toISOString();
+  const { error } = await supabaseAdmin.from("clinica_integracoes").upsert({
+    clinica_id: clinicaId,
+    pagamento_gateway: "infinitepay",
+    infinitepay_ativo: true,
+    infinitepay_handle: handle,
+    infinitepay_configuracao_publica: {
+      connection_status: "connected",
+      connected_at: now,
+    },
+    infinitepay_ultimo_sync_em: now,
+    infinitepay_ultimo_erro: null,
+  }, { onConflict: "clinica_id" });
+
+  if (error) throw error;
+  revalidatePath("/dashboard/configuracoes");
+  revalidatePath("/dashboard/produtos");
+  revalidatePath(`/c/${activeClinic.slug}`);
+  redirect("/dashboard/configuracoes?ok=infinitepay");
+}
+
+export async function disconnectClinicInfinitePayAction() {
+  const { clinicaId, activeClinic, memberships } = await getScopedSupabase();
+  requireClinicManager(memberships, clinicaId, "/dashboard/configuracoes");
+
+  const { data: current, error: currentError } = await supabaseAdmin
+    .from("clinica_integracoes")
+    .select("asaas_ativo")
+    .eq("clinica_id", clinicaId)
+    .maybeSingle();
+  if (currentError) throw currentError;
+
+  const { error } = await supabaseAdmin.from("clinica_integracoes").update({
+    pagamento_gateway: current?.asaas_ativo ? "asaas" : null,
+    infinitepay_ativo: false,
+    infinitepay_configuracao_publica: {
+      connection_status: "disconnected",
+      disconnected_at: new Date().toISOString(),
+    },
+  }).eq("clinica_id", clinicaId);
+
+  if (error) throw error;
+  revalidatePath("/dashboard/configuracoes");
+  revalidatePath("/dashboard/produtos");
+  revalidatePath(`/c/${activeClinic.slug}`);
+  redirect("/dashboard/configuracoes?ok=infinitepay_desconectado");
 }
 
 export async function testClinicWhatsappIntegrationAction() {

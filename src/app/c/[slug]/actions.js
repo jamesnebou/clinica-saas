@@ -1,11 +1,14 @@
 "use server";
 
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { createAsaasCustomerForPatient, createAsaasPaymentForBooking, isAsaasConfigured } from "@/lib/asaas/client";
+import { createInfinitePayCheckout } from "@/lib/infinitepay/client";
+import { resolveClinicPaymentProvider } from "@/lib/payments/provider";
 import { notifyClinicPublicBooking } from "@/lib/notifications/booking";
-import { isWithinWorkingPeriods } from "@/lib/clinic/schedule";
+import { clinicTimeZone, dateFromClinicLocal, isWithinWorkingPeriods } from "@/lib/clinic/schedule";
 import { decryptClinicSecrets } from "@/lib/security/clinic-secrets";
 
 function text(formData, key) {
@@ -38,6 +41,15 @@ function publicRedirect(slug, params) {
   redirect(`/c/${slug}${query ? `?${query}` : ""}#agendar`);
 }
 
+async function publicAppOrigin() {
+  const requestHeaders = await headers();
+  const configured = String(process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || "").trim().replace(/\/$/, "");
+  if (configured) return configured;
+  const protocol = requestHeaders.get("x-forwarded-proto") || (process.env.NODE_ENV === "production" ? "https" : "http");
+  const host = requestHeaders.get("x-forwarded-host") || requestHeaders.get("host") || "localhost:3000";
+  return `${protocol}://${host}`;
+}
+
 function publicLeadRedirect(slug, params) {
   const query = new URLSearchParams(params).toString();
   redirect(`/c/${slug}${query ? `?${query}` : ""}#form`);
@@ -51,11 +63,11 @@ function calculateDeposit(procedimento) {
   return Math.max(0, Math.min(price, Number(value.toFixed(2))));
 }
 
-function assertWorkingHours({ clinic, start, end, slug }) {
+function assertWorkingHours({ clinic, start, end, slug, timeZone }) {
   const schedule = clinic?.metadata?.horario_funcionamento || {};
 
-  if (!isWithinWorkingPeriods({ schedule, startDate: start, endDate: end })) {
-    publicRedirect(slug, { erro: "agenda", mensagem: "Este horário esta fora do expediente da clinica." });
+  if (!isWithinWorkingPeriods({ schedule, startDate: start, endDate: end, timeZone })) {
+    publicRedirect(slug, { erro: "agenda", mensagem: "Este horário está fora do expediente da clínica." });
   }
 }
 
@@ -110,13 +122,14 @@ export async function createPublicBookingAction(formData) {
 
   const { data: integration, error: integrationError } = await supabaseAdmin
     .from("clinica_integracoes")
-    .select("clinica_id, asaas_ativo, asaas_api_key, asaas_base_url, asaas_configuracao_publica, asaas_segredos_criptografados, email_ativo, email_destino, email_remetente, whatsapp_ativo, whatsapp_provider, whatsapp_numero_destino, whatsapp_webhook_url, whatsapp_token")
+    .select("clinica_id, pagamento_gateway, asaas_ativo, asaas_api_key, asaas_base_url, asaas_configuracao_publica, asaas_segredos_criptografados, infinitepay_ativo, infinitepay_handle, infinitepay_configuracao_publica, email_ativo, email_destino, email_remetente, whatsapp_ativo, whatsapp_provider, whatsapp_numero_destino, whatsapp_webhook_url, whatsapp_token")
     .eq("clinica_id", clinic.id)
     .maybeSingle();
 
   if (integrationError) throw integrationError;
   const integrationSecrets = decryptClinicSecrets(integration?.asaas_segredos_criptografados);
   const clinicIntegration = integration ? { ...integration, apiKey: integrationSecrets.apiKey || integration.asaas_api_key, baseUrl: integration.asaas_configuracao_publica?.baseUrl || integration.asaas_base_url } : { clinica_id: clinic.id };
+  const paymentProvider = resolveClinicPaymentProvider(clinicIntegration);
 
   const siteConfig = clinic.metadata?.site_publico || {};
   if (siteConfig.publicado === false) {
@@ -134,7 +147,7 @@ export async function createPublicBookingAction(formData) {
 
   if (procedimentoError) throw procedimentoError;
   if (procedimentosSelecionados.length !== selectedIds.length) {
-    publicRedirect(slug, { erro: "procedimento", mensagem: "Um ou mais procedimentos est?o indispon?veis para agendamento online." });
+    publicRedirect(slug, { erro: "procedimento", mensagem: "Um ou mais procedimentos estão indisponíveis para agendamento online." });
   }
 
   const procedimentosById = new Map(procedimentosSelecionados.map((item) => [item.id, item]));
@@ -142,14 +155,15 @@ export async function createPublicBookingAction(formData) {
   const procedimento = procedimentos[0];
   const procedimentosTexto = procedureSummary(procedimentos);
 
-  const start = new Date(dataHora);
-  if (Number.isNaN(start.getTime()) || start < new Date()) {
-    publicRedirect(slug, { erro: "agenda", mensagem: "Escolha uma data futura valida." });
+  const timeZone = clinicTimeZone(clinic);
+  const start = dateFromClinicLocal(dataHora, timeZone);
+  if (!start || start < new Date()) {
+    publicRedirect(slug, { erro: "agenda", mensagem: "Escolha uma data futura válida." });
   }
 
   const duracaoTotal = procedimentos.reduce((total, item) => total + Number(item.duracao_minutos || 60), 0);
   const end = new Date(start.getTime() + duracaoTotal * 60000);
-  assertWorkingHours({ clinic, start, end, slug });
+  assertWorkingHours({ clinic, start, end, slug, timeZone });
 
   if (!profissionalId) {
     publicRedirect(slug, { erro: "agenda", mensagem: "Escolha um horário disponível para concluir o agendamento." });
@@ -201,8 +215,8 @@ export async function createPublicBookingAction(formData) {
   const valorSinal = calculateTotalDeposit(procedimentos);
   const pagamentoStatus = valorSinal > 0 ? "pendente" : "sem_sinal";
 
-  if (valorSinal > 0 && !isAsaasConfigured(clinicIntegration)) {
-    publicRedirect(slug, { erro: "pagamento", mensagem: "Checkout online indisponível no momento. A clínica precisa configurar o Asaas para receber o sinal pelo site." });
+  if (valorSinal > 0 && !paymentProvider) {
+    publicRedirect(slug, { erro: "pagamento", mensagem: "Checkout online indisponível no momento. A clínica precisa conectar Asaas ou InfinitePay para receber o sinal pelo site." });
   }
 
   const { data: agendamento, error: agendaError } = await supabaseAdmin
@@ -227,22 +241,44 @@ export async function createPublicBookingAction(formData) {
 
   let invoiceUrl = null;
   let asaasPaymentId = null;
+  let paymentExternalId = null;
   let paymentPayload = {};
 
-  if (valorSinal > 0 && isAsaasConfigured(clinicIntegration)) {
+  if (valorSinal > 0 && paymentProvider) {
     try {
-      const customer = await createAsaasCustomerForPatient({ clinicId: clinic.id, nome, email, telefone, cpf, integration: clinicIntegration });
-      const payment = await createAsaasPaymentForBooking({
-        customerId: customer.id,
-        value: valorSinal,
-        description: `Sinal ${procedimentosTexto} - ${clinic.nome}`,
-        externalReference: agendamento.id,
-        billingType: "UNDEFINED",
-        integration: clinicIntegration,
-      });
-      invoiceUrl = payment.invoiceUrl || payment.bankSlipUrl || null;
-      asaasPaymentId = payment.id || null;
-      paymentPayload = payment || {};
+      if (paymentProvider === "asaas" && isAsaasConfigured(clinicIntegration)) {
+        const customer = await createAsaasCustomerForPatient({ clinicId: clinic.id, nome, email, telefone, cpf, integration: clinicIntegration });
+        const payment = await createAsaasPaymentForBooking({
+          customerId: customer.id,
+          value: valorSinal,
+          description: `Sinal ${procedimentosTexto} - ${clinic.nome}`,
+          externalReference: agendamento.id,
+          billingType: "UNDEFINED",
+          integration: clinicIntegration,
+        });
+        invoiceUrl = payment.invoiceUrl || payment.bankSlipUrl || null;
+        asaasPaymentId = payment.id || null;
+        paymentExternalId = asaasPaymentId;
+        paymentPayload = payment || {};
+      } else if (paymentProvider === "infinitepay") {
+        const origin = await publicAppOrigin();
+        const orderNsu = `agendamento:${agendamento.id}`;
+        const checkout = await createInfinitePayCheckout({
+          handle: clinicIntegration.infinitepay_handle,
+          orderNsu,
+          redirectUrl: `${origin}/c/${slug}?pagamento=retorno#agendar`,
+          webhookUrl: `${origin}/api/webhooks/infinitepay`,
+          items: [{
+            quantity: 1,
+            price: Math.round(valorSinal * 100),
+            description: `Sinal ${procedimentosTexto} - ${clinic.nome}`,
+          }],
+          customer: { name: nome, email, phone: telefone },
+        });
+        invoiceUrl = checkout.url;
+        paymentExternalId = orderNsu;
+        paymentPayload = checkout;
+      }
     } catch (error) {
       await supabaseAdmin.from("agendamentos").delete().eq("id", agendamento.id).eq("clinica_id", clinic.id);
       publicRedirect(slug, { erro: "pagamento", mensagem: error.message || "Nao foi possivel gerar o checkout do sinal. Tente novamente." });
@@ -261,11 +297,14 @@ export async function createPublicBookingAction(formData) {
     data_hora: start.toISOString(),
     valor_total: valorTotal,
     valor_sinal: valorSinal,
-    pagamento_status: asaasPaymentId ? "pendente" : pagamentoStatus,
+    pagamento_status: invoiceUrl ? "pendente" : pagamentoStatus,
+    pagamento_gateway: paymentProvider,
+    pagamento_external_id: paymentExternalId,
     asaas_payment_id: asaasPaymentId,
     invoice_url: invoiceUrl,
     payload: {
       pagamento: paymentPayload,
+      pagamento_gateway: paymentProvider,
       procedimentos: procedimentos.map((item) => ({
         id: item.id,
         nome: item.nome,
@@ -290,7 +329,7 @@ export async function createPublicBookingAction(formData) {
     valor_estimado: valorTotal,
     proxima_acao_em: start.toISOString(),
     proxima_acao: `Atendimento agendado: ${procedimentosTexto}`,
-    observacoes: asaasPaymentId ? `Criado automaticamente pelo site p?blico com checkout de sinal. Procedimentos: ${procedimentosTexto}.` : `Criado automaticamente pelo site p?blico. Procedimentos: ${procedimentosTexto}.`,
+    observacoes: invoiceUrl ? `Criado automaticamente pelo site público com checkout de sinal via ${paymentProvider === "infinitepay" ? "InfinitePay" : "Asaas"}. Procedimentos: ${procedimentosTexto}.` : `Criado automaticamente pelo site público. Procedimentos: ${procedimentosTexto}.`,
   });
 
   revalidatePath(`/c/${slug}`);

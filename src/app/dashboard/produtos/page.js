@@ -112,7 +112,7 @@ export default async function ProdutosPage({ searchParams }) {
             <summary className="cursor-pointer text-sm font-black text-white">Configurar vendas, entrega e pagamento</summary>
             <form action={updateStoreCommerceSettingsAction} className="mt-5 grid gap-5">
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {[['retirada_ativa', 'Permitir retirada', storeConfig.retiradaAtiva], ['entrega_ativa', 'Permitir entrega local', storeConfig.entregaAtiva], ['pagamento_retirada_ativo', 'Pagar na retirada', storeConfig.pagamentoRetiradaAtivo], ['checkout_asaas_ativo', 'Checkout Asaas', storeConfig.checkoutAsaasAtivo], ['pix_ativo', 'Aceitar Pix', storeConfig.pixAtivo], ['cartao_ativo', 'Aceitar cartão', storeConfig.cartaoAtivo]].map(([name, label, checked]) => (
+                {[['retirada_ativa', 'Permitir retirada', storeConfig.retiradaAtiva], ['entrega_ativa', 'Permitir entrega local', storeConfig.entregaAtiva], ['pagamento_retirada_ativo', 'Pagar na retirada', storeConfig.pagamentoRetiradaAtivo], ['checkout_asaas_ativo', 'Checkout online', storeConfig.checkoutAsaasAtivo], ['pix_ativo', 'Aceitar Pix', storeConfig.pixAtivo], ['cartao_ativo', 'Aceitar cartão', storeConfig.cartaoAtivo]].map(([name, label, checked]) => (
                   <label key={name} className="flex items-center gap-2 rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-sm font-bold text-neutral-200"><input type="checkbox" name={name} defaultChecked={checked} /> {label}</label>
                 ))}
               </div>
