@@ -232,7 +232,7 @@ export async function createPublicBookingAction(formData) {
       valor: valorTotal,
       pagamento_status: pagamentoStatus === "sem_sinal" ? "pendente" : "parcial",
       valor_pago: 0,
-      observacoes: `Agendamento criado pelo site p?blico. Procedimentos: ${procedimentosTexto}. Dura??o total: ${duracaoTotal} min.`,
+      observacoes: `Agendamento criado pelo site público. Procedimentos: ${procedimentosTexto}. Duração total: ${duracaoTotal} min.`,
     })
     .select("id")
     .single();
