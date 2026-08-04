@@ -14,6 +14,7 @@ import {
   updateClienteFichaAction,
 } from "../../actions";
 import { ConsentimentoForm } from "./consentimento-form";
+import { clinicTimeZone } from "@/lib/clinic/schedule";
 
 export const metadata = { title: "Ficha do cliente | Clínica SaaS" };
 
@@ -22,9 +23,9 @@ function formatDate(value) {
   return new Date(value).toLocaleDateString("pt-BR");
 }
 
-function formatDateTime(value) {
+function formatDateTime(value, timeZone) {
   if (!value) return "-";
-  return new Date(value).toLocaleString("pt-BR");
+  return new Date(value).toLocaleString("pt-BR", { timeZone });
 }
 
 function formatMoney(value) {
@@ -69,6 +70,8 @@ export default async function ClienteDetalhePage({ params }) {
   if (!activeClinic) {
     return <main className="px-5 py-8 sm:px-8 lg:px-10"><EmptyClinicState /></main>;
   }
+
+  const timeZone = clinicTimeZone(activeClinic);
 
   const membership = (memberships || []).find((item) => item.clinica_id === activeClinic.id) || memberships?.[0];
   const canAccessProntuario = ["owner", "admin", "profissional"].includes(membership?.papel);
@@ -224,7 +227,7 @@ export default async function ClienteDetalhePage({ params }) {
                 {agendamentos.length === 0 ? <p className="rounded-lg bg-neutral-50 px-4 py-3 text-sm text-neutral-600">Sem histórico.</p> : agendamentos.map((item) => (
                   <div key={item.id} className="rounded-lg border border-neutral-200 p-3">
                     <p className="text-sm font-semibold">{item.procedimentos?.nome || "Procedimento"}</p>
-                    <p className="mt-1 text-xs text-neutral-500">{formatDateTime(item.inicio)} · {item.profissionais?.nome || "Profissional"}</p>
+                    <p className="mt-1 text-xs text-neutral-500">{formatDateTime(item.inicio, timeZone)} · {item.profissionais?.nome || "Profissional"}</p>
                     <p className="mt-1 text-xs text-neutral-500">{item.status} · {formatMoney(item.valor)} · Pagamento: {item.pagamento_status || "pendente"}</p>
                   </div>
                 ))}
@@ -248,7 +251,7 @@ export default async function ClienteDetalhePage({ params }) {
                 </SelectField>
                 <SelectField label="Termo vinculado" name="consentimento_id" defaultValue="">
                   <option value="">Sem termo vinculado</option>
-                  {consentimentos.map((termo) => <option key={termo.id} value={termo.id}>{termo.titulo} - {formatDateTime(termo.aceito_em)}</option>)}
+                  {consentimentos.map((termo) => <option key={termo.id} value={termo.id}>{termo.titulo} - {formatDateTime(termo.aceito_em, timeZone)}</option>)}
                 </SelectField>
                 <Field label="Título" name="titulo" />
                 <label className="block">
@@ -281,7 +284,7 @@ export default async function ClienteDetalhePage({ params }) {
                   </SelectField>
                   <SelectField label="Termo vinculado" name="consentimento_id" defaultValue="">
                     <option value="">Sem termo vinculado</option>
-                    {consentimentos.map((termo) => <option key={termo.id} value={termo.id}>{termo.titulo} - {formatDateTime(termo.aceito_em)}</option>)}
+                    {consentimentos.map((termo) => <option key={termo.id} value={termo.id}>{termo.titulo} - {formatDateTime(termo.aceito_em, timeZone)}</option>)}
                   </SelectField>
                   <Field label="Título" name="titulo" />
                   <Field label="URL da imagem" name="url" required />
@@ -340,7 +343,7 @@ export default async function ClienteDetalhePage({ params }) {
                 {consentimentos.length === 0 ? <p className="rounded-lg bg-white/70 px-4 py-3 text-sm text-neutral-600">Nenhum consentimento formal registrado.</p> : consentimentos.map((termo) => (
                   <div key={termo.id} className="rounded-lg border border-neutral-200 bg-white p-3">
                     <p className="text-sm font-semibold">{termo.titulo}</p>
-                    <p className="mt-1 text-xs text-neutral-500">{termo.tipo} - {termo.versao} - {formatDateTime(termo.aceito_em)}</p>
+                    <p className="mt-1 text-xs text-neutral-500">{termo.tipo} - {termo.versao} - {formatDateTime(termo.aceito_em, timeZone)}</p>
                     <p className="mt-2 line-clamp-3 text-xs leading-5 text-neutral-600">{termo.texto}</p>
                   </div>
                 ))}

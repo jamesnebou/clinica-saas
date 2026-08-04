@@ -4,6 +4,7 @@ import { requireClinic } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { Card, EmptyClinicState, EmptyState, Notice, PageHeader } from "@/components/app-shell/ui";
 import { getClinicBillingState, getClinicPlan } from "@/lib/saas/plans";
+import { clinicTimeZone, dateKeyInTimeZone, utcRangeForClinicDate } from "@/lib/clinic/schedule";
 
 async function countRows(supabase, table, clinicaId) {
   const { count, error } = await supabase.from(table).select("id", { count: "exact", head: true }).eq("clinica_id", clinicaId);
@@ -24,20 +25,26 @@ function formatShortMoney(value) {
   return formatMoney(number);
 }
 
-function dayLabel(date) {
-  return date.toLocaleDateString("pt-BR", { weekday: "short" }).replace(".", "");
+function addDays(dateString, days) {
+  const date = new Date(`${dateString}T12:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
 }
 
-function buildLastDays(days = 7) {
-  const today = new Date();
+function dayLabel(dateKey) {
+  return new Date(`${dateKey}T12:00:00Z`).toLocaleDateString("pt-BR", { weekday: "short", timeZone: "UTC" }).replace(".", "");
+}
+
+function buildLastDays(timeZone, days = 7) {
+  const todayKey = dateKeyInTimeZone(new Date(), timeZone);
   return Array.from({ length: days }).map((_, index) => {
-    const date = new Date(today.getFullYear(), today.getMonth(), today.getDate() - (days - 1 - index));
-    const next = new Date(date.getFullYear(), date.getMonth(), date.getDate() + 1);
+    const key = addDays(todayKey, -(days - 1 - index));
+    const range = utcRangeForClinicDate(key, timeZone);
     return {
-      key: date.toISOString().slice(0, 10),
-      label: dayLabel(date),
-      start: date.toISOString(),
-      end: next.toISOString(),
+      key,
+      label: dayLabel(key),
+      start: range.start.toISOString(),
+      end: range.end.toISOString(),
       previsto: 0,
       recebido: 0,
       atendimentos: 0,
@@ -69,10 +76,11 @@ export default async function DashboardPage({ searchParams }) {
   const brandName = activeClinic.metadata?.brand_name || activeClinic.nome;
   const plan = await getClinicPlan(activeClinic);
   const billingState = getClinicBillingState(activeClinic);
-  const today = new Date();
-  const dayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate()).toISOString();
-  const dayEnd = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1).toISOString();
-  const days = buildLastDays(7);
+  const timeZone = clinicTimeZone(activeClinic);
+  const todayRange = utcRangeForClinicDate(dateKeyInTimeZone(new Date(), timeZone), timeZone);
+  const dayStart = todayRange.start.toISOString();
+  const dayEnd = todayRange.end.toISOString();
+  const days = buildLastDays(timeZone, 7);
   const chartStart = days[0].start;
   const chartEnd = days[days.length - 1].end;
 
@@ -98,7 +106,7 @@ export default async function DashboardPage({ searchParams }) {
 
   const dayMap = new Map(days.map((item) => [item.key, item]));
   for (const item of periodo) {
-    const key = new Date(item.inicio).toISOString().slice(0, 10);
+    const key = dateKeyInTimeZone(new Date(item.inicio), timeZone);
     const row = dayMap.get(key);
     if (!row) continue;
     if (isFaturavel(item)) {
@@ -277,7 +285,7 @@ export default async function DashboardPage({ searchParams }) {
               ) : proximos.map((item) => (
                 <div key={item.id} className="rounded-lg border border-neutral-200 p-4">
                   <div className="flex items-start justify-between gap-3"><div><p className="font-semibold">{item.clientes?.nome || "Cliente não informado"}</p><p className="mt-1 text-sm text-neutral-600">{item.procedimentos?.nome || "Procedimento não informado"}</p></div><span className="rounded-full bg-[color-mix(in_srgb,var(--clinic-accent)_10%,white)] px-3 py-1 text-xs font-bold uppercase text-[var(--clinic-primary)]">{item.status}</span></div>
-                  <p className="mt-3 text-sm text-neutral-500">{new Date(item.inicio).toLocaleString("pt-BR")} com {item.profissionais?.nome || "profissional não informado"}</p>
+                  <p className="mt-3 text-sm text-neutral-500">{new Date(item.inicio).toLocaleString("pt-BR", { timeZone, dateStyle: "short", timeStyle: "short" })} com {item.profissionais?.nome || "profissional não informado"}</p>
                 </div>
               ))}
             </div>

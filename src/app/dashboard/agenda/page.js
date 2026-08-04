@@ -2,6 +2,13 @@
 import { AlertTriangle, CalendarRange, CheckCircle2, Clock, MessageCircle, XCircle } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { requireClinicSection } from "@/lib/auth/session";
+import {
+  clinicDateTimeValue,
+  clinicTimeZone,
+  dateKeyInTimeZone,
+  utcRangeForClinicDate,
+  weekdayFromDateKey,
+} from "@/lib/clinic/schedule";
 import { EmptyClinicState, EmptyState, Field, PageHeader, SubmitButton, TextArea } from "@/components/app-shell/ui";
 import { createAgendamentoAction, deleteAgendamentoAction, updateAgendamentoAction, updateAgendamentoStatusAction } from "../actions";
 
@@ -31,46 +38,35 @@ function whatsappUrl(phone, message) {
   return `https://wa.me/${number}?text=${encodeURIComponent(message)}`;
 }
 
-function toDateInput(date) {
-  return date.toISOString().slice(0, 10);
-}
-
-function toDatetimeLocal(value) {
+function toDatetimeLocal(value, timeZone) {
   if (!value) return "";
-  const date = new Date(value);
-  const offset = date.getTimezoneOffset();
-  const local = new Date(date.getTime() - offset * 60000);
-  return local.toISOString().slice(0, 16);
+  return clinicDateTimeValue(new Date(value), timeZone);
 }
 
 function addDays(dateString, days) {
-  const date = new Date(`${dateString}T12:00:00`);
-  date.setDate(date.getDate() + days);
-  return toDateInput(date);
+  const date = new Date(`${dateString}T12:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
 }
 
-function dayRange(dateString) {
-  const start = new Date(`${dateString}T00:00:00`);
-  const end = new Date(start);
-  end.setDate(end.getDate() + 1);
-  return { start: start.toISOString(), end: end.toISOString() };
+function dayRange(dateString, timeZone) {
+  const range = utcRangeForClinicDate(dateString, timeZone);
+  return { start: range.start.toISOString(), end: range.end.toISOString() };
 }
 
-function weekRange(dateString) {
-  const date = new Date(`${dateString}T12:00:00`);
-  const day = date.getDay();
+function weekRange(dateString, timeZone) {
+  const day = Number(weekdayFromDateKey(dateString));
   const diff = day === 0 ? -6 : 1 - day;
-  const startDate = new Date(date);
-  startDate.setDate(date.getDate() + diff);
-  const days = Array.from({ length: 7 }, (_, index) => {
-    const item = new Date(startDate);
-    item.setDate(startDate.getDate() + index);
-    return toDateInput(item);
-  });
-  const start = new Date(`${days[0]}T00:00:00`);
-  const end = new Date(`${days[6]}T00:00:00`);
-  end.setDate(end.getDate() + 1);
-  return { days, weekStart: start.toISOString(), weekEnd: end.toISOString() };
+  const firstDay = addDays(dateString, diff);
+  const days = Array.from({ length: 7 }, (_, index) => addDays(firstDay, index));
+  const startRange = utcRangeForClinicDate(days[0], timeZone);
+  const endRange = utcRangeForClinicDate(days[6], timeZone);
+  return { days, weekStart: startRange.start.toISOString(), weekEnd: endRange.end.toISOString() };
+}
+
+function formatClinicDateTime(value, timeZone, options = {}) {
+  if (!value) return "-";
+  return new Date(value).toLocaleString("pt-BR", { timeZone, ...options });
 }
 
 function fillWhatsAppTemplate(template, { cliente, data, procedimento }) {
@@ -134,16 +130,21 @@ function SelectField({ label, name, defaultValue = "", required = false, childre
 
 export default async function AgendaPage({ searchParams }) {
   const params = await searchParams;
-  const selectedDate = String(params?.date || toDateInput(new Date()));
   const selectedProfessional = String(params?.profissional || "");
   const errorMessage = params?.error ? String(params.error) : "";
-  const { start, end } = dayRange(selectedDate);
-  const { days: weekDays, weekStart, weekEnd } = weekRange(selectedDate);
   const { activeClinic } = await requireClinicSection("agenda");
 
   if (!activeClinic) {
     return <main className="px-5 py-8 sm:px-8 lg:px-10"><EmptyClinicState /></main>;
   }
+
+  const timeZone = clinicTimeZone(activeClinic);
+  const requestedDate = String(params?.date || "");
+  const selectedDate = /^\d{4}-\d{2}-\d{2}$/.test(requestedDate)
+    ? requestedDate
+    : dateKeyInTimeZone(new Date(), timeZone);
+  const { start, end } = dayRange(selectedDate, timeZone);
+  const { days: weekDays, weekStart, weekEnd } = weekRange(selectedDate, timeZone);
 
   const supabase = await createClient();
   let agendaQuery = supabase
@@ -224,7 +225,7 @@ export default async function AgendaPage({ searchParams }) {
           <div className="flex items-center gap-2"><CalendarRange size={18} className="text-[var(--clinic-primary)]" /><h2 className="text-sm font-bold uppercase tracking-[0.16em] text-neutral-700">Visao semanal</h2></div>
           <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-7">
             {weekDays.map((day) => {
-              const items = agendamentosSemana.filter((item) => toDateInput(new Date(item.inicio)) === day);
+              const items = agendamentosSemana.filter((item) => dateKeyInTimeZone(new Date(item.inicio), timeZone) === day);
               const total = items.filter((item) => !["cancelado", "faltou"].includes(item.status)).reduce((acc, item) => acc + Number(item.valor || 0), 0);
               return (
                 <Link key={day} href={`/dashboard/agenda?date=${day}${selectedProfessional ? `&profissional=${selectedProfessional}` : ""}`} className={`rounded-lg border p-3 text-sm transition hover:border-[color-mix(in_srgb,var(--clinic-primary)_38%,#d4d4d4)] hover:bg-[color-mix(in_srgb,var(--clinic-accent)_10%,white)] ${day === selectedDate ? "border-[color-mix(in_srgb,var(--clinic-primary)_38%,#d4d4d4)] bg-[color-mix(in_srgb,var(--clinic-accent)_10%,white)]" : "border-neutral-200 bg-white"}`}>
@@ -265,7 +266,7 @@ export default async function AgendaPage({ searchParams }) {
               ) : agendamentos.map((item) => {
                 const whatsMessage = fillWhatsAppTemplate(activeClinic.metadata?.whatsapp_mensagem_padrao, {
                   cliente: item.clientes?.nome,
-                  data: new Date(item.inicio).toLocaleString("pt-BR"),
+                  data: formatClinicDateTime(item.inicio, timeZone, { dateStyle: "short", timeStyle: "short" }),
                   procedimento: item.procedimentos?.nome,
                 });
                 const whats = whatsappUrl(item.clientes?.telefone, whatsMessage);
@@ -275,7 +276,7 @@ export default async function AgendaPage({ searchParams }) {
                       <div>
                         <div className="flex flex-wrap items-center gap-2"><h3 className="font-semibold">{item.clientes?.nome || "Cliente nao informado"}</h3><StatusBadge status={item.status} /><PaymentBadge pagamentoStatus={item.pagamento_status} valorPago={item.valor_pago} /></div>
                         <p className="mt-1 text-sm text-neutral-600">{item.procedimentos?.nome || "Procedimento"} com {item.profissionais?.nome || "profissional"}</p>
-                        <p className="mt-1 text-xs text-neutral-500">{new Date(item.inicio).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })} - {new Date(item.fim).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })} · {formatMoney(item.valor)} · recebido {formatMoney(item.valor_pago)}</p>
+                        <p className="mt-1 text-xs text-neutral-500">{formatClinicDateTime(item.inicio, timeZone, { hour: "2-digit", minute: "2-digit" })} - {formatClinicDateTime(item.fim, timeZone, { hour: "2-digit", minute: "2-digit" })} · {formatMoney(item.valor)} · recebido {formatMoney(item.valor_pago)}</p>
                       </div>
                       <div className="flex flex-wrap gap-2">
                         {whats ? <a className="inline-flex h-9 items-center gap-2 rounded-lg border border-[color-mix(in_srgb,var(--clinic-primary)_24%,#e5e5e5)] px-3 text-sm font-semibold text-[var(--clinic-primary)]" href={whats} target="_blank" rel="noreferrer"><MessageCircle size={15} /> WhatsApp</a> : null}
@@ -303,8 +304,8 @@ export default async function AgendaPage({ searchParams }) {
                           <SelectField label="Procedimento" name="procedimento_id" defaultValue={item.procedimento_id} required><option value="">Selecione</option>{procedimentos.map((procedimento) => <option key={procedimento.id} value={procedimento.id}>{procedimento.nome}</option>)}</SelectField>
                         </div>
                         <div className="grid gap-4 md:grid-cols-4">
-                          <Field label="Inicio" name="inicio" type="datetime-local" defaultValue={toDatetimeLocal(item.inicio)} required />
-                          <Field label="Fim" name="fim" type="datetime-local" defaultValue={toDatetimeLocal(item.fim)} />
+                          <Field label="Inicio" name="inicio" type="datetime-local" defaultValue={toDatetimeLocal(item.inicio, timeZone)} required />
+                          <Field label="Fim" name="fim" type="datetime-local" defaultValue={toDatetimeLocal(item.fim, timeZone)} />
                           <Field label="Valor" name="valor" type="number" defaultValue={String(item.valor || 0)} />
                           <SelectField label="Status" name="status" defaultValue={item.status}>{Object.entries(statusConfig).map(([value, config]) => <option key={value} value={value}>{config.label}</option>)}</SelectField>
                         </div>

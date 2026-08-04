@@ -1,3 +1,5 @@
+import { clinicTimeZone } from "@/lib/clinic/schedule";
+
 function onlyDigits(value) {
   return String(value || "").replace(/\D/g, "");
 }
@@ -6,8 +8,12 @@ function formatMoney(value) {
   return Number(value || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
-function formatDateTime(value) {
-  return new Date(value).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
+function formatDateTime(value, clinic) {
+  return new Date(value).toLocaleString("pt-BR", {
+    dateStyle: "short",
+    timeStyle: "short",
+    timeZone: clinicTimeZone(clinic),
+  });
 }
 
 function normalizeProvider(value) {
@@ -21,7 +27,7 @@ function notificationText({ clinic, booking, procedimento, invoiceUrl }) {
     `WhatsApp: ${booking.telefone || "-"}`,
     `E-mail: ${booking.email || "-"}`,
     `Procedimento: ${procedimento.nome}`,
-    `Data: ${formatDateTime(booking.data_hora)}`,
+    `Data: ${formatDateTime(booking.data_hora, clinic)}`,
     `Valor: ${formatMoney(booking.valor_total)}`,
     `Sinal: ${formatMoney(booking.valor_sinal)}`,
     invoiceUrl ? `Checkout: ${invoiceUrl}` : "",
@@ -38,7 +44,7 @@ function notificationHtml({ clinic, booking, procedimento, invoiceUrl }) {
         <p><strong>WhatsApp:</strong> ${booking.telefone || "-"}</p>
         <p><strong>E-mail:</strong> ${booking.email || "-"}</p>
         <p><strong>Procedimento:</strong> ${procedimento.nome}</p>
-        <p><strong>Data:</strong> ${formatDateTime(booking.data_hora)}</p>
+        <p><strong>Data:</strong> ${formatDateTime(booking.data_hora, clinic)}</p>
         <p><strong>Valor:</strong> ${formatMoney(booking.valor_total)}</p>
         <p><strong>Sinal:</strong> ${formatMoney(booking.valor_sinal)}</p>
       </div>

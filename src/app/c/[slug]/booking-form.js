@@ -3,10 +3,40 @@
 import { useEffect, useMemo, useState } from "react";
 import { createPublicBookingAction } from "./actions";
 
-function nextDate() {
-  const date = new Date();
-  date.setDate(date.getDate() + 1);
+function nextDate(timeZone) {
+  const parts = Object.fromEntries(new Intl.DateTimeFormat("en", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date()).filter((part) => part.type !== "literal").map((part) => [part.type, part.value]));
+  const date = new Date(`${parts.year}-${parts.month}-${parts.day}T12:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + 1);
   return date.toISOString().slice(0, 10);
+}
+
+function isoToBrazilianDate(value) {
+  const match = String(value || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  return match ? `${match[3]}/${match[2]}/${match[1]}` : "";
+}
+
+function maskBrazilianDate(value) {
+  const digits = String(value || "").replace(/\D/g, "").slice(0, 8);
+  if (digits.length <= 2) return digits;
+  if (digits.length <= 4) return `${digits.slice(0, 2)}/${digits.slice(2)}`;
+  return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`;
+}
+
+function brazilianDateToIso(value) {
+  const match = String(value || "").match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (!match) return "";
+
+  const day = Number(match[1]);
+  const month = Number(match[2]);
+  const year = Number(match[3]);
+  const date = new Date(Date.UTC(year, month - 1, day, 12));
+  if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) return "";
+  return `${match[3]}-${match[2]}-${match[1]}`;
 }
 
 function money(value) {
@@ -27,13 +57,15 @@ function depositValue(procedimento) {
   return Math.max(0, Math.min(price, Number(signal.toFixed(2))));
 }
 
-export function PublicBookingForm({ slug, procedimentos, profissionais, query }) {
+export function PublicBookingForm({ slug, procedimentos, profissionais, query, timeZone = "America/Bahia" }) {
   const firstProcedure = procedimentos[0]?.id || "";
+  const initialDate = nextDate(timeZone);
   const [procedimentoIds, setProcedimentoIds] = useState(firstProcedure ? [firstProcedure] : []);
   const [profissionalId, setProfissionalId] = useState("");
   const [proceduresOpen, setProceduresOpen] = useState(false);
   const [procedureSearch, setProcedureSearch] = useState("");
-  const [date, setDate] = useState(nextDate());
+  const [date, setDate] = useState(initialDate);
+  const [dateText, setDateText] = useState(isoToBrazilianDate(initialDate));
   const [slots, setSlots] = useState([]);
   const [selectedSlot, setSelectedSlot] = useState("");
   const [selectedSlotProfessional, setSelectedSlotProfessional] = useState("");
@@ -56,7 +88,13 @@ export function PublicBookingForm({ slug, procedimentos, profissionais, query })
     let cancelled = false;
 
     async function loadSlots() {
-      if (!slug || !procedimentoIds.length || !date) return;
+      if (!slug || !procedimentoIds.length || !date) {
+        setSlots([]);
+        setSelectedSlot("");
+        setSelectedSlotProfessional("");
+        if (dateText.length === 10) setSlotsMessage("Informe uma data válida no formato DD/MM/AAAA.");
+        return;
+      }
       setLoadingSlots(true);
       setSlotsMessage("");
 
@@ -92,7 +130,7 @@ export function PublicBookingForm({ slug, procedimentos, profissionais, query })
     return () => {
       cancelled = true;
     };
-  }, [date, procedimentoIds, profissionalId, slug]);
+  }, [date, dateText.length, procedimentoIds, profissionalId, slug]);
 
   function toggleProcedure(id) {
     setProcedimentoIds((current) => {
@@ -109,10 +147,17 @@ export function PublicBookingForm({ slug, procedimentos, profissionais, query })
     setSelectedSlotProfessional(slot?.profissional_id || profissionalId || "");
   }
 
+  function handleDateChange(value) {
+    const masked = maskBrazilianDate(value);
+    setDateText(masked);
+    setDate(brazilianDateToIso(masked));
+  }
+
   return (
     <form action={createPublicBookingAction} className="rounded-[1.75rem] border border-white/70 bg-[#15120f] p-7 text-white shadow-[0_32px_90px_rgba(20,18,15,0.26)]">
       <input type="hidden" name="slug" value={slug} />
       <input type="hidden" name="data_hora" value={selectedSlot} />
+      <input type="hidden" name="data_agenda" value={date} />
       <input type="hidden" name="profissional_disponivel_id" value={selectedSlotProfessional} />
 
       {query?.erro ? <div className="mb-5 rounded-2xl border border-red-300/30 bg-red-500/10 px-4 py-3 text-sm text-red-100">{query.mensagem || "Não foi possível concluir o agendamento."}</div> : null}
@@ -172,7 +217,18 @@ export function PublicBookingForm({ slug, procedimentos, profissionais, query })
 
         <label className="block">
           <span className="text-sm font-semibold text-white/75">Data</span>
-          <input name="data_agenda" type="date" min={new Date().toISOString().slice(0, 10)} value={date} onChange={(event) => setDate(event.target.value)} required className="mt-2 h-12 w-full rounded-2xl border border-white/10 bg-white/10 px-4 text-sm text-white outline-none" />
+          <input
+            type="text"
+            inputMode="numeric"
+            autoComplete="off"
+            placeholder="DD/MM/AAAA"
+            value={dateText}
+            onChange={(event) => handleDateChange(event.target.value)}
+            pattern="\d{2}/\d{2}/\d{4}"
+            maxLength={10}
+            required
+            className="mt-2 h-12 w-full rounded-2xl border border-white/10 bg-white/10 px-4 text-sm text-white outline-none placeholder:text-white/35"
+          />
         </label>
 
         <label className="block md:col-span-2">

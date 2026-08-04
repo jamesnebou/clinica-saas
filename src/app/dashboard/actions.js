@@ -15,6 +15,7 @@ import {
   buildScheduleFromForm,
   clinicDateTimeValue,
   clinicTimeZone,
+  dateKeyInTimeZone,
   dateFromClinicLocal,
   isWithinWorkingPeriods,
 } from "@/lib/clinic/schedule";
@@ -557,7 +558,7 @@ function parseDateTime(value, timeZone) {
   return dateFromClinicLocal(value, timeZone);
 }
 
-async function assertHorarioDisponivel({ supabase, clinicaId, profissionalId, inicioISO, fimISO, ignoreId = "", formData }) {
+async function assertHorarioDisponivel({ supabase, clinicaId, profissionalId, inicioISO, fimISO, ignoreId = "", formData, timeZone }) {
   if (!profissionalId) return;
 
   let query = supabase
@@ -579,7 +580,7 @@ async function assertHorarioDisponivel({ supabase, clinicaId, profissionalId, in
   if (error) throw error;
 
   if (data?.length) {
-    redirectAgendaError(formData, "Este profissional já possui atendimento nesse horario.", inicioISO.slice(0, 10));
+    redirectAgendaError(formData, "Este profissional já possui atendimento nesse horário.", dateKeyInTimeZone(new Date(inicioISO), timeZone));
   }
 }
 
@@ -605,7 +606,7 @@ async function buildAgendaPayload({ supabase, formData, clinicaId, activeClinic,
   }
 
   if (fim <= inicio) {
-    redirectAgendaError(formData, "O horário final precisa ser maior que o horário inicial.", inicio.toISOString().slice(0, 10));
+    redirectAgendaError(formData, "O horário final precisa ser maior que o horário inicial.", dateKeyInTimeZone(inicio, timeZone));
   }
 
   assertWithinWorkingHours({ clinic: activeClinic, inicioRaw, fimRaw, inicio, fim, formData, timeZone });
@@ -636,6 +637,7 @@ export async function createAgendamentoAction(formData) {
     inicioISO: payload.inicio,
     fimISO: payload.fim,
     formData,
+    timeZone: clinicTimeZone(activeClinic),
   });
 
   const { error } = await supabase.from("agendamentos").insert({
@@ -646,7 +648,7 @@ export async function createAgendamentoAction(formData) {
   if (error) throw error;
   revalidatePath("/dashboard/agenda");
   revalidatePath("/dashboard");
-  redirect(agendaRedirectUrl(formData, payload.inicio.slice(0, 10)));
+  redirect(agendaRedirectUrl(formData, dateKeyInTimeZone(new Date(payload.inicio), clinicTimeZone(activeClinic))));
 }
 
 export async function updateAgendamentoAction(formData) {
@@ -663,6 +665,7 @@ export async function updateAgendamentoAction(formData) {
     fimISO: payload.fim,
     ignoreId: id,
     formData,
+    timeZone: clinicTimeZone(activeClinic),
   });
 
   const { error } = await supabase
@@ -683,7 +686,7 @@ export async function updateAgendamentoAction(formData) {
   if (error) throw error;
   revalidatePath("/dashboard/agenda");
   revalidatePath("/dashboard");
-  redirect(agendaRedirectUrl(formData, payload.inicio.slice(0, 10)));
+  redirect(agendaRedirectUrl(formData, dateKeyInTimeZone(new Date(payload.inicio), clinicTimeZone(activeClinic))));
 }
 
 export async function updateAgendamentoStatusAction(formData) {

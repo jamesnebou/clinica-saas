@@ -1,5 +1,6 @@
 ﻿import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { clinicTimeZone } from "@/lib/clinic/schedule";
 import { requireClinicSection } from "@/lib/auth/session";
 import { EmptyClinicState, EmptyState, Field, PageHeader, SubmitButton, TextArea } from "@/components/app-shell/ui";
 import { createProfissionalAction, deleteProfissionalAction, toggleProfissionalAction } from "../actions";
@@ -40,6 +41,8 @@ export default async function ProfissionaisPage({ searchParams }) {
   if (!activeClinic) {
     return <main className="px-5 py-8 sm:px-8 lg:px-10"><EmptyClinicState /></main>;
   }
+
+  const timeZone = clinicTimeZone(activeClinic);
 
   const supabase = await createClient();
   const ranges = periodRanges();
@@ -165,7 +168,7 @@ export default async function ProfissionaisPage({ searchParams }) {
                             <div key={agendamento.id} className="grid gap-2 px-4 py-3 text-sm md:grid-cols-[1fr_150px_150px_150px] md:items-center">
                               <div>
                                 <p className="font-semibold text-neutral-950">{agendamento.clientes?.nome || "Cliente"}</p>
-                                <p className="mt-1 text-xs text-neutral-500">{agendamento.procedimentos?.nome || "Procedimento"} - {new Date(agendamento.inicio).toLocaleDateString("pt-BR")}</p>
+                                <p className="mt-1 text-xs text-neutral-500">{agendamento.procedimentos?.nome || "Procedimento"} - {new Date(agendamento.inicio).toLocaleDateString("pt-BR", { timeZone })}</p>
                               </div>
                               <p className="text-neutral-600">Previsto: <strong className="text-neutral-950">{money(agendamento.valor)}</strong></p>
                               <p className="text-neutral-600">Pago: <strong className="text-neutral-950">{money(pago)}</strong></p>

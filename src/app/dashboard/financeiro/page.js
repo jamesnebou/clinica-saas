@@ -1,5 +1,6 @@
 import { CreditCard, Package, TrendingUp, Wallet } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { clinicTimeZone } from "@/lib/clinic/schedule";
 import { requireClinicSection } from "@/lib/auth/session";
 import { EmptyClinicState, Field, PageHeader, SubmitButton, TextArea } from "@/components/app-shell/ui";
 import { createPacoteAction, sellClientePacoteAction, updateAgendamentoFinanceiroAction } from "../actions";
@@ -37,6 +38,8 @@ export default async function FinanceiroPage({ searchParams }) {
   if (!activeClinic) {
     return <main className="px-5 py-8 sm:px-8 lg:px-10"><EmptyClinicState /></main>;
   }
+
+  const timeZone = clinicTimeZone(activeClinic);
 
   const supabase = await createClient();
   const [agendamentosResult, pagamentosResult, clientesResult, procedimentosResult, pacotesResult, clientePacotesResult] = await Promise.all([
@@ -115,7 +118,7 @@ export default async function FinanceiroPage({ searchParams }) {
                     <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
                       <div>
                         <p className="font-semibold">{item.clientes?.nome || "Cliente"}</p>
-                        <p className="mt-1 text-sm text-neutral-600">{item.procedimentos?.nome || "Procedimento"} · {new Date(item.inicio).toLocaleDateString("pt-BR")}</p>
+                        <p className="mt-1 text-sm text-neutral-600">{item.procedimentos?.nome || "Procedimento"} · {new Date(item.inicio).toLocaleDateString("pt-BR", { timeZone })}</p>
                       </div>
                       <div className="text-sm font-semibold text-neutral-700">{formatMoney(item.valor_pago)} / {formatMoney(item.valor)} · {item.status === "cancelado" || item.status === "faltou" ? `${item.status} · ` : ""}{item.pagamento_status}</div>
                     </div>

@@ -11,6 +11,7 @@ import { PublicServicesSection } from "./services-section";
 import { PublicStorefront } from "./store-cart";
 import { availableProductStock } from "@/lib/store/config";
 import { publicImageSrcSet, publicImageUrl } from "@/lib/public-image";
+import { clinicTimeZone } from "@/lib/clinic/schedule";
 
 export const dynamic = "force-dynamic";
 
@@ -483,7 +484,7 @@ export default async function PublicClinicPage({ params, searchParams }) {
         </div>
 
         <div className="public-card-reveal public-reveal-right">
-          <PublicBookingForm slug={clinic.slug} procedimentos={procedimentos} profissionais={profissionais} query={query} />
+          <PublicBookingForm slug={clinic.slug} procedimentos={procedimentos} profissionais={profissionais} query={query} timeZone={clinicTimeZone(clinic)} />
         </div>
       </section>
 
@@ -559,5 +560,4 @@ export default async function PublicClinicPage({ params, searchParams }) {
     </main>
   );
 }
-
 

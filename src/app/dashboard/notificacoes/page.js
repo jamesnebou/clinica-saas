@@ -3,6 +3,7 @@ import { requireClinicSection } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { Card, EmptyClinicState, EmptyState, PageHeader } from "@/components/app-shell/ui";
 import { markAllNotificationsViewedAction, markNotificationViewedAction } from "./actions";
+import { clinicTimeZone } from "@/lib/clinic/schedule";
 
 export const metadata = { title: "Notificações | Clínica SaaS" };
 
@@ -10,9 +11,9 @@ function formatMoney(value) {
   return Number(value || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
-function formatDateTime(value) {
+function formatDateTime(value, timeZone) {
   if (!value) return "-";
-  return new Date(value).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
+  return new Date(value).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short", timeZone });
 }
 
 function paymentLabel(status) {
@@ -66,6 +67,7 @@ export default async function NotificacoesPage() {
   }
 
   const supabase = await createClient();
+  const timeZone = clinicTimeZone(activeClinic);
   const since = new Date();
   since.setDate(since.getDate() - 30);
 
@@ -144,7 +146,7 @@ export default async function NotificacoesPage() {
                       {item.procedimentos?.nome || "Procedimento"} com {item.profissionais?.nome || "profissional"}
                     </p>
                     <p className="mt-1 text-xs text-neutral-500">
-                      Agendado para {formatDateTime(item.data_hora)} · recebido em {formatDateTime(item.created_at)}
+                      Agendado para {formatDateTime(item.data_hora, timeZone)} · recebido em {formatDateTime(item.created_at, timeZone)}
                     </p>
                     <p className="mt-1 text-xs text-neutral-500">
                       {item.telefone || "Sem telefone"}{item.email ? ` · ${item.email}` : ""}
