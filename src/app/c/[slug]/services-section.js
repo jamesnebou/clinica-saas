@@ -1,5 +1,6 @@
 "use client";
 
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { publicImageSrcSet, publicImageUrl } from "@/lib/public-image";
@@ -34,6 +35,7 @@ export function PublicServicesSection({ procedimentos = [] }) {
   const trackRef = useRef(null);
   const pointerRef = useRef({ active: false, captured: false, pointerId: null, startX: 0, startScrollLeft: 0 });
   const draggedRef = useRef(false);
+  const navigationTimerRef = useRef(null);
   const repeatCount = 2;
   const servicesLoop = useMemo(
     () => Array.from({ length: repeatCount }).flatMap(() => procedimentos),
@@ -74,6 +76,10 @@ export function PublicServicesSection({ procedimentos = [] }) {
       window.removeEventListener("resize", setInitialPosition);
     };
   }, [procedimentos, repeatCount]);
+
+  useEffect(() => () => {
+    if (navigationTimerRef.current) window.clearTimeout(navigationTimerRef.current);
+  }, []);
 
   function handlePointerDown(event) {
     const viewport = viewportRef.current;
@@ -133,6 +139,34 @@ export function PublicServicesSection({ procedimentos = [] }) {
     }, 120);
   }
 
+  function navigateServices(direction) {
+    const viewport = viewportRef.current;
+    const track = trackRef.current;
+    const firstCard = track?.querySelector(".public-service-card");
+    if (!viewport || !track || !firstCard) return;
+
+    const trackStyles = window.getComputedStyle(track);
+    const gap = Number.parseFloat(trackStyles.columnGap || trackStyles.gap || "0") || 0;
+    const step = firstCard.getBoundingClientRect().width + gap;
+    const segment = track.scrollWidth / repeatCount;
+
+    if (direction < 0 && viewport.scrollLeft < step) {
+      viewport.scrollLeft += segment;
+    } else if (direction > 0 && viewport.scrollLeft >= segment) {
+      viewport.scrollLeft -= segment;
+    }
+
+    viewport.classList.add("is-navigating");
+    viewport.scrollBy({ left: direction * step, behavior: "smooth" });
+
+    if (navigationTimerRef.current) window.clearTimeout(navigationTimerRef.current);
+    navigationTimerRef.current = window.setTimeout(() => {
+      normalizeViewportPosition();
+      viewport.classList.remove("is-navigating");
+      navigationTimerRef.current = null;
+    }, 650);
+  }
+
   function handleBookingClick(event) {
     event.preventDefault();
     setSelected(null);
@@ -156,18 +190,19 @@ export function PublicServicesSection({ procedimentos = [] }) {
         </div>
       </div>
 
-      <div
-        ref={viewportRef}
-        className="public-services-viewport relative z-10 mt-6 overflow-x-auto py-23"
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerUp}
-        onPointerCancel={handlePointerUp}
-        onMouseLeave={(event) => {
-          if (pointerRef.current.active) handlePointerUp(event);
-        }}
-      >
-        <div ref={trackRef} className="public-services-track flex w-max items-start gap-5 px-16 sm:px-24">
+      <div className="public-services-carousel relative z-10 mt-6">
+        <div
+          ref={viewportRef}
+          className="public-services-viewport relative overflow-x-auto py-23"
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+          onPointerCancel={handlePointerUp}
+          onMouseLeave={(event) => {
+            if (pointerRef.current.active) handlePointerUp(event);
+          }}
+        >
+          <div ref={trackRef} className="public-services-track flex w-max items-start gap-5 px-16 sm:px-24">
           {servicesLoop.map((item, index) => (
             <button
               key={`${item.id}-${index}`}
@@ -229,8 +264,30 @@ export function PublicServicesSection({ procedimentos = [] }) {
                 </div>
               </div>
             </button>
-          ))}
+            ))}
+          </div>
         </div>
+
+        {procedimentos.length > 1 ? (
+          <div className="pointer-events-none absolute inset-x-0 top-1/2 z-30 flex -translate-y-1/2 items-center justify-between px-2 sm:px-5">
+            <button
+              type="button"
+              onClick={() => navigateServices(-1)}
+              className="public-services-arrow pointer-events-auto grid size-12 place-items-center rounded-full border border-white/15 bg-black/72 text-white shadow-[0_16px_42px_rgba(0,0,0,0.42)] backdrop-blur-xl sm:size-14"
+              aria-label="Ver procedimento anterior"
+            >
+              <ChevronLeft className="size-6" aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              onClick={() => navigateServices(1)}
+              className="public-services-arrow pointer-events-auto grid size-12 place-items-center rounded-full border border-white/15 bg-black/72 text-white shadow-[0_16px_42px_rgba(0,0,0,0.42)] backdrop-blur-xl sm:size-14"
+              aria-label="Ver próximo procedimento"
+            >
+              <ChevronRight className="size-6" aria-hidden="true" />
+            </button>
+          </div>
+        ) : null}
       </div>
 
       {selected && canUsePortal ? createPortal(

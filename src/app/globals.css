@@ -51,6 +51,25 @@ textarea {
   font: inherit;
 }
 
+button:not(:disabled),
+[role="button"]:not([aria-disabled="true"]),
+a[href][class*="rounded"] {
+  -webkit-tap-highlight-color: transparent;
+  transform-origin: center;
+}
+
+button:not(:disabled):active,
+[role="button"]:not([aria-disabled="true"]):active,
+a[href][class*="rounded"]:active {
+  filter: brightness(0.9) saturate(1.08);
+  scale: 0.965;
+  translate: 0 1px;
+  transition:
+    scale 70ms ease-out,
+    translate 70ms ease-out,
+    filter 70ms ease-out !important;
+}
+
 ::selection {
   background: color-mix(in srgb, var(--clinic-accent, #10b981) 28%, white);
   color: var(--foreground);
@@ -631,8 +650,30 @@ textarea {
 
 .public-services-viewport:hover .public-services-track,
 .public-services-viewport:focus-within .public-services-track,
-.public-services-viewport.is-dragging .public-services-track {
+.public-services-viewport.is-dragging .public-services-track,
+.public-services-viewport.is-navigating .public-services-track {
   animation-play-state: paused;
+}
+
+.public-services-arrow {
+  transition:
+    transform 180ms ease,
+    border-color 180ms ease,
+    background-color 180ms ease,
+    box-shadow 180ms ease;
+}
+
+.public-services-arrow:hover,
+.public-services-arrow:focus-visible {
+  border-color: color-mix(in srgb, var(--clinic-accent) 62%, white);
+  background: color-mix(in srgb, var(--clinic-primary) 72%, black);
+  box-shadow:
+    0 18px 46px rgba(0, 0, 0, 0.48),
+    0 0 30px color-mix(in srgb, var(--clinic-accent) 34%, transparent);
+}
+
+.public-services-arrow:active {
+  transform: translateY(1px) scale(0.9) !important;
 }
 
 .public-service-card {
