@@ -55,7 +55,24 @@ export default async function DashboardAdminMetricasPage() {
           </div>
         </article>
       </section>
+
+      <section className="rounded-[1.75rem] border border-neutral-200 bg-white p-5 shadow-sm">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="text-xs font-black uppercase tracking-[0.18em] text-[#ed7009]">Aquisição NexaWi</p>
+            <h2 className="mt-2 text-xl font-black">Desempenho do site comercial</h2>
+          </div>
+          <strong className="text-sm font-black text-neutral-700">Conversão em lead: {stats.leadConversionRate.toFixed(1)}%</strong>
+        </div>
+        <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          <MetricRow label="Visitas na landing" value={stats.landingViews} detail="Visualizações rastreadas do site NexaWi Clínicas." />
+          <MetricRow label="Interessados captados" value={stats.marketingLeads} detail="Formulários comerciais enviados." />
+          <MetricRow label="Leads qualificados" value={stats.marketingQualified} detail="Contatos qualificados ou convertidos." />
+          <MetricRow label="Acessos à demonstração" value={stats.demoAccesses} detail="Entradas rastreadas na conta demo." />
+          <MetricRow label="Cliques em planos" value={stats.pricingClicks} detail="Interesse demonstrado em oferta e preço." />
+          <MetricRow label="Cliques no WhatsApp" value={stats.whatsappClicks} detail="Conversas comerciais iniciadas." />
+        </div>
+      </section>
     </div>
   );
 }
-

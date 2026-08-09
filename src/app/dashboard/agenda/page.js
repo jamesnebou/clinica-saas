@@ -12,7 +12,7 @@ import {
 import { EmptyClinicState, EmptyState, Field, PageHeader, SubmitButton, TextArea } from "@/components/app-shell/ui";
 import { createAgendamentoAction, deleteAgendamentoAction, updateAgendamentoAction, updateAgendamentoStatusAction } from "../actions";
 
-export const metadata = { title: "Agenda | Clinica SaaS" };
+export const metadata = { title: "Agenda | Clínica SaaS" };
 
 const statusConfig = {
   agendado: { label: "Agendado", className: "border-blue-200 bg-blue-50 text-blue-700", icon: Clock },
@@ -70,7 +70,7 @@ function formatClinicDateTime(value, timeZone, options = {}) {
 }
 
 function fillWhatsAppTemplate(template, { cliente, data, procedimento }) {
-  return String(template || "Ola, {cliente}. Passando para confirmar seu horario na clinica em {data}.")
+  return String(template || "Olá, {cliente}. Passando para confirmar seu horário na clínica em {data}.")
     .replaceAll("{cliente}", cliente || "tudo bem")
     .replaceAll("{data}", data || "")
     .replaceAll("{procedimento}", procedimento || "procedimento");
@@ -222,7 +222,7 @@ export default async function AgendaPage({ searchParams }) {
         ) : null}
 
         <section className="mt-6 rounded-lg border border-neutral-200 bg-white p-4 shadow-sm">
-          <div className="flex items-center gap-2"><CalendarRange size={18} className="text-[var(--clinic-primary)]" /><h2 className="text-sm font-bold uppercase tracking-[0.16em] text-neutral-700">Visao semanal</h2></div>
+          <div className="flex items-center gap-2"><CalendarRange size={18} className="text-[var(--clinic-primary)]" /><h2 className="text-sm font-bold uppercase tracking-[0.16em] text-neutral-700">Visão semanal</h2></div>
           <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-7">
             {weekDays.map((day) => {
               const items = agendamentosSemana.filter((item) => dateKeyInTimeZone(new Date(item.inicio), timeZone) === day);
@@ -274,7 +274,7 @@ export default async function AgendaPage({ searchParams }) {
                   <article key={item.id} className="rounded-lg border border-neutral-200 p-4">
                     <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
                       <div>
-                        <div className="flex flex-wrap items-center gap-2"><h3 className="font-semibold">{item.clientes?.nome || "Cliente nao informado"}</h3><StatusBadge status={item.status} /><PaymentBadge pagamentoStatus={item.pagamento_status} valorPago={item.valor_pago} /></div>
+                        <div className="flex flex-wrap items-center gap-2"><h3 className="font-semibold">{item.clientes?.nome || "Cliente não informado"}</h3><StatusBadge status={item.status} /><PaymentBadge pagamentoStatus={item.pagamento_status} valorPago={item.valor_pago} /></div>
                         <p className="mt-1 text-sm text-neutral-600">{item.procedimentos?.nome || "Procedimento"} com {item.profissionais?.nome || "profissional"}</p>
                         <p className="mt-1 text-xs text-neutral-500">{formatClinicDateTime(item.inicio, timeZone, { hour: "2-digit", minute: "2-digit" })} - {formatClinicDateTime(item.fim, timeZone, { hour: "2-digit", minute: "2-digit" })} · {formatMoney(item.valor)} · recebido {formatMoney(item.valor_pago)}</p>
                       </div>

@@ -1,9 +1,9 @@
 export function EmptyClinicState() {
   return (
     <div className="premium-panel rounded-lg p-5 text-amber-900">
-      <h2 className="text-lg font-semibold">Nenhuma clinica vinculada</h2>
+      <h2 className="text-lg font-semibold">Nenhuma clínica vinculada</h2>
       <p className="mt-2 text-sm leading-6">
-        Seu usuario esta autenticado, mas ainda nao foi vinculado a uma clinica. Crie uma clinica e um registro em usuarios_clinica no Supabase para liberar o painel.
+        Seu usuário está autenticado, mas ainda não foi vinculado a uma clínica. Crie uma clínica e um registro em usuarios_clinica no Supabase para liberar o painel.
       </p>
     </div>
   );

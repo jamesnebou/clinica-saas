@@ -2,6 +2,7 @@ import Link from "next/link";
 import { CalendarDays, CreditCard, Scissors, ShieldCheck, TrendingUp, UsersRound, Wallet } from "lucide-react";
 import { requireClinic } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
+import { isBillableRecord, paidAmount } from "@/lib/domain/finance-core.mjs";
 import { Card, EmptyClinicState, EmptyState, Notice, PageHeader } from "@/components/app-shell/ui";
 import { getClinicBillingState, getClinicPlan } from "@/lib/saas/plans";
 import { clinicTimeZone, dateKeyInTimeZone, utcRangeForClinicDate } from "@/lib/clinic/schedule";
@@ -100,7 +101,7 @@ export default async function DashboardPage({ searchParams }) {
   const proximos = proximosResult.data || [];
   const siteBookings = siteBookingsResult.data || [];
   const pendingSiteBookings = siteBookings.filter((item) => ["pendente", "erro"].includes(item.pagamento_status));
-  const isFaturavel = (item) => !["cancelado", "faltou"].includes(item.status) && item.pagamento_status !== "cancelado";
+  const isFaturavel = isBillableRecord;
   const hojeFaturavel = hoje.filter(isFaturavel);
   const periodoFaturavel = periodo.filter(isFaturavel);
 
@@ -111,17 +112,17 @@ export default async function DashboardPage({ searchParams }) {
     if (!row) continue;
     if (isFaturavel(item)) {
       row.previsto += Number(item.valor || 0);
-      row.recebido += Number(item.valor_pago || 0);
+      row.recebido += paidAmount(item);
     }
     row.atendimentos += 1;
   }
 
   const maxChart = Math.max(1, ...days.map((item) => Math.max(item.previsto, item.recebido)));
   const faturamentoHoje = hojeFaturavel.reduce((acc, item) => acc + Number(item.valor || 0), 0);
-  const recebidoHoje = hojeFaturavel.reduce((acc, item) => acc + Number(item.valor_pago || 0), 0);
+  const recebidoHoje = hojeFaturavel.reduce((acc, item) => acc + paidAmount(item), 0);
   const pendenteHoje = Math.max(0, faturamentoHoje - recebidoHoje);
   const faltasHoje = hoje.filter((item) => item.status === "faltou").length;
-  const recebidoPeriodo = periodoFaturavel.reduce((acc, item) => acc + Number(item.valor_pago || 0), 0);
+  const recebidoPeriodo = periodoFaturavel.reduce((acc, item) => acc + paidAmount(item), 0);
   const previstoPeriodo = periodoFaturavel.reduce((acc, item) => acc + Number(item.valor || 0), 0);
   const pendentePeriodo = Math.max(0, previstoPeriodo - recebidoPeriodo);
   const statusCounts = periodo.reduce((acc, item) => {
@@ -150,7 +151,7 @@ export default async function DashboardPage({ searchParams }) {
         <PageHeader eyebrow="Dashboard" title="Operação da clínica" description={`Visão executiva de ${brandName}: faturamento, agenda, clientes, equipe e status comercial.`} />
         {params?.erro === "permissao" ? (
           <div className="mt-6">
-            <Notice type="warning" title="Acesso restrito">Seu papel atual nao tem permissao para abrir essa area. O menu mostra apenas os modulos liberados para o seu acesso.</Notice>
+            <Notice type="warning" title="Acesso restrito">Seu papel atual não tem permissão para abrir esta área. O menu mostra apenas os módulos liberados para o seu acesso.</Notice>
           </div>
         ) : null}
 

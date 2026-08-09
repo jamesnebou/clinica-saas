@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { getUserClinics, requireUser } from "@/lib/auth/session";
 import ClinicForm from "./clinic-form";
 
-export const metadata = { title: "Criar clínica | Clinica SaaS" };
+export const metadata = { title: "Criar clínica | Clínica SaaS" };
 
 export default async function OnboardingPage() {
   const user = await requireUser("/login-cliente");

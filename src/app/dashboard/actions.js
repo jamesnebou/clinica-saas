@@ -53,6 +53,13 @@ function numberValue(formData, key, fallback = 0) {
   return Number.isFinite(value) ? value : fallback;
 }
 
+function nullableNumberValue(formData, key) {
+  const raw = text(formData, key);
+  if (!raw) return null;
+  const value = Number(raw.replace(",", "."));
+  return Number.isFinite(value) ? value : null;
+}
+
 function requireValue(value, message) {
   if (!value) throw new Error(message);
   return value;
@@ -111,14 +118,14 @@ function vercelDomainObservacoes(vercelDomain) {
 function requireClinicManager(memberships, clinicaId, redirectTo) {
   const membership = currentMembership(memberships, clinicaId);
   if (!["owner", "admin"].includes(membership?.papel)) {
-    redirectWithMessage(redirectTo, "permissao", "Seu usuario nao tem permissao para administrar esta area.");
+    redirectWithMessage(redirectTo, "permissao", "Seu usuário não tem permissão para administrar esta área.");
   }
 }
 
 function requireProntuarioAccess(memberships, clinicaId, redirectTo) {
   const membership = currentMembership(memberships, clinicaId);
   if (!["owner", "admin", "profissional"].includes(membership?.papel)) {
-    redirectWithMessage(redirectTo, "permissao", "Prontuario restrito a owner, admin e profissional.");
+    redirectWithMessage(redirectTo, "permissao", "Prontuário restrito a owner, admin e profissional.");
   }
 }
 
@@ -192,13 +199,13 @@ async function resolveFimByProcedimento({ supabase, clinicaId, procedimentoId, i
 
   const { data, error } = await supabase
     .from("procedimentos")
-    .select("duracao_minutos")
+    .select("duracao_minutos, intervalo_minutos")
     .eq("clinica_id", clinicaId)
     .eq("id", procedimentoId)
     .maybeSingle();
 
   if (error) throw error;
-  const duration = Math.max(1, Number(data?.duracao_minutos || 60));
+  const duration = Math.max(1, Number(data?.duracao_minutos || 60) + Math.max(0, Number(data?.intervalo_minutos || 0)));
   return new Date(inicio.getTime() + duration * 60000);
 }
 export async function createClienteAction(formData) {
@@ -266,7 +273,7 @@ export async function createProfissionalAction(formData) {
 
 export async function toggleProfissionalAction(formData) {
   const { supabase, clinicaId } = await getScopedSupabase();
-  const id = requireValue(text(formData, "id"), "Profissional nao informado.");
+  const id = requireValue(text(formData, "id"), "Profissional não informado.");
   const ativo = text(formData, "ativo") === "true";
 
   const { error } = await supabase.from("profissionais").update({ ativo }).eq("id", id).eq("clinica_id", clinicaId);
@@ -276,7 +283,7 @@ export async function toggleProfissionalAction(formData) {
 
 export async function deleteProfissionalAction(formData) {
   const { supabase, clinicaId } = await getScopedSupabase();
-  const id = requireValue(text(formData, "id"), "Profissional nao informado.");
+  const id = requireValue(text(formData, "id"), "Profissional não informado.");
 
   const { error } = await supabase.from("profissionais").delete().eq("id", id).eq("clinica_id", clinicaId);
   if (error) throw error;
@@ -293,7 +300,9 @@ export async function createProcedimentoAction(formData) {
     categoria: nullableText(formData, "categoria"),
     descricao: nullableText(formData, "descricao"),
     duracao_minutos: Math.max(1, numberValue(formData, "duracao_minutos", 60)),
+    intervalo_minutos: Math.max(0, numberValue(formData, "intervalo_minutos", 0)),
     preco: numberValue(formData, "preco", 0),
+    preco_promocional: nullableNumberValue(formData, "preco_promocional"),
     sinal_percentual: Math.min(100, Math.max(0, numberValue(formData, "sinal_percentual", 0))),
     sinal_valor: Math.max(0, numberValue(formData, "sinal_valor", 0)),
     publicado_site: formData.get("publicado_site") === "on",
@@ -330,7 +339,9 @@ export async function updateProcedimentoAction(formData) {
       categoria: nullableText(formData, "categoria"),
       descricao: nullableText(formData, "descricao"),
       duracao_minutos: Math.max(1, numberValue(formData, "duracao_minutos", 60)),
+      intervalo_minutos: Math.max(0, numberValue(formData, "intervalo_minutos", 0)),
       preco: numberValue(formData, "preco", 0),
+      preco_promocional: nullableNumberValue(formData, "preco_promocional"),
       sinal_percentual: Math.min(100, Math.max(0, numberValue(formData, "sinal_percentual", 0))),
       sinal_valor: Math.max(0, numberValue(formData, "sinal_valor", 0)),
       publicado_site: formData.get("publicado_site") === "on",
@@ -653,9 +664,9 @@ export async function createAgendamentoAction(formData) {
 
 export async function updateAgendamentoAction(formData) {
   const { supabase, clinicaId, activeClinic } = await getScopedSupabase();
-  const id = requireValue(text(formData, "id"), "Agendamento nao informado.");
+  const id = requireValue(text(formData, "id"), "Agendamento não informado.");
   const payload = await buildAgendaPayload({ supabase, formData, clinicaId, activeClinic, userId: null });
-  const status = requireValue(text(formData, "status"), "Status nao informado.");
+  const status = requireValue(text(formData, "status"), "Status não informado.");
 
   await assertHorarioDisponivel({
     supabase,
@@ -691,8 +702,8 @@ export async function updateAgendamentoAction(formData) {
 
 export async function updateAgendamentoStatusAction(formData) {
   const { supabase, clinicaId } = await getScopedSupabase();
-  const id = requireValue(text(formData, "id"), "Agendamento nao informado.");
-  const status = requireValue(text(formData, "status"), "Status nao informado.");
+  const id = requireValue(text(formData, "id"), "Agendamento não informado.");
+  const status = requireValue(text(formData, "status"), "Status não informado.");
 
   const { error } = await supabase.from("agendamentos").update({ status }).eq("id", id).eq("clinica_id", clinicaId);
   if (error) throw error;
@@ -703,7 +714,7 @@ export async function updateAgendamentoStatusAction(formData) {
 
 export async function deleteAgendamentoAction(formData) {
   const { supabase, clinicaId } = await getScopedSupabase();
-  const id = requireValue(text(formData, "id"), "Agendamento nao informado.");
+  const id = requireValue(text(formData, "id"), "Agendamento não informado.");
 
   const { error } = await supabase.from("agendamentos").delete().eq("id", id).eq("clinica_id", clinicaId);
   if (error) throw error;
@@ -1068,7 +1079,7 @@ export async function updateClinicUserAction(formData) {
   const redirectTo = userRedirectPath(formData);
   requireClinicManager(memberships, clinicaId, redirectTo);
 
-  const id = requireValue(text(formData, "id"), "Usuario nao informado.");
+  const id = requireValue(text(formData, "id"), "Usuário não informado.");
   const papel = requireValue(text(formData, "papel"), "Informe o papel do usuario.");
   const ativo = text(formData, "ativo") === "true";
 
@@ -1084,7 +1095,7 @@ export async function updateClinicUserAction(formData) {
     .maybeSingle();
 
   if (existingError) throw existingError;
-  if (!existing) redirectWithMessage("/dashboard/usuarios", "usuario", "Usuario nao encontrado nesta clinica.");
+  if (!existing) redirectWithMessage("/dashboard/usuarios", "usuario", "Usuário não encontrado nesta clínica.");
 
   if (existing.papel === "owner" && (!ativo || papel !== "owner")) {
     const { count, error } = await supabase
@@ -1252,7 +1263,7 @@ export async function updateClinicAccountAction(formData) {
   const currentMembershipRow = currentMembership(memberships, clinicaId);
 
   if (!user?.id) {
-    redirectWithMessage("/dashboard/configuracoes", "conta", "Usuario autenticado nao encontrado.");
+    redirectWithMessage("/dashboard/configuracoes", "conta", "Usuário autenticado não encontrado.");
   }
 
   if (!email) {
@@ -1265,7 +1276,7 @@ export async function updateClinicAccountAction(formData) {
     }
 
     if (password !== passwordConfirmation) {
-      redirectWithMessage("/dashboard/configuracoes", "conta", "A confirmacao da senha nao confere.");
+      redirectWithMessage("/dashboard/configuracoes", "conta", "A confirmação da senha não confere.");
     }
   }
 
@@ -1284,7 +1295,7 @@ export async function updateClinicAccountAction(formData) {
 
   const { error: authError } = await supabaseAdmin.auth.admin.updateUserById(user.id, authPayload);
   if (authError) {
-    redirectWithMessage("/dashboard/configuracoes", "conta", authError.message || "Nao foi possivel atualizar o acesso.");
+    redirectWithMessage("/dashboard/configuracoes", "conta", authError.message || "Não foi possível atualizar o acesso.");
   }
 
   const { error: membershipError } = await supabaseAdmin
@@ -1296,7 +1307,7 @@ export async function updateClinicAccountAction(formData) {
     .eq("user_id", user.id);
 
   if (membershipError) {
-    redirectWithMessage("/dashboard/configuracoes", "conta", membershipError.message || "Nao foi possivel atualizar o usuario da clinica.");
+    redirectWithMessage("/dashboard/configuracoes", "conta", membershipError.message || "Não foi possível atualizar o usuário da clínica.");
   }
 
   revalidatePath("/dashboard");
@@ -1308,7 +1319,7 @@ export async function updateClinicAccountAction(formData) {
 export async function syncClinicDomainAction(formData) {
   const { clinicaId, memberships } = await getScopedSupabase();
   requireClinicManager(memberships, clinicaId, "/dashboard/configuracoes");
-  const domain = normalizeCustomDomain(requireValue(text(formData, "dominio"), "Dominio nao informado."));
+  const domain = normalizeCustomDomain(requireValue(text(formData, "dominio"), "Domínio não informado."));
 
   const { data: existingDomain, error: existingDomainError } = await supabaseAdmin
     .from("clinica_dominios")
@@ -1319,7 +1330,7 @@ export async function syncClinicDomainAction(formData) {
   if (existingDomainError) throw existingDomainError;
 
   if (!existingDomain || existingDomain.clinica_id !== clinicaId) {
-    redirectWithMessage("/dashboard/configuracoes", "dominio", "Dominio nao encontrado nesta clinica.");
+    redirectWithMessage("/dashboard/configuracoes", "dominio", "Domínio não encontrado nesta clínica.");
   }
 
   const vercelDomain = await getVercelProjectDomain(domain);
@@ -1342,7 +1353,7 @@ export async function syncClinicDomainAction(formData) {
 export async function removeClinicDomainAction(formData) {
   const { clinicaId, memberships } = await getScopedSupabase();
   requireClinicManager(memberships, clinicaId, "/dashboard/configuracoes");
-  const domain = normalizeCustomDomain(requireValue(text(formData, "dominio"), "Dominio nao informado."));
+  const domain = normalizeCustomDomain(requireValue(text(formData, "dominio"), "Domínio não informado."));
 
   await removeVercelProjectDomain(domain);
 
@@ -1382,7 +1393,7 @@ export async function updateClinicSettingsAction(formData) {
       if (uploaded?.publicUrl) siteUploads[field] = uploaded;
     }
   } catch (error) {
-    redirectWithMessage("/dashboard/configuracoes", "upload", error.message || "Nao foi possivel enviar a imagem.");
+    redirectWithMessage("/dashboard/configuracoes", "upload", error.message || "Não foi possível enviar a imagem.");
   }
 
   const { data: currentIntegration, error: currentIntegrationError } = await supabaseAdmin
@@ -1480,7 +1491,7 @@ export async function updateClinicSettingsAction(formData) {
 
   if (error) throw error;
   if (!updatedClinic?.id) {
-    redirectWithMessage("/dashboard/configuracoes", "salvar", "As configuracoes nao foram gravadas. Tente novamente.");
+    redirectWithMessage("/dashboard/configuracoes", "salvar", "As configurações não foram gravadas. Tente novamente.");
   }
 
   const { error: integrationError } = await supabaseAdmin
@@ -1510,7 +1521,7 @@ export async function updateClinicSettingsAction(formData) {
     if (existingDomainError) throw existingDomainError;
 
     if (existingDomain?.clinica_id && existingDomain.clinica_id !== clinicaId) {
-      redirectWithMessage("/dashboard/configuracoes", "dominio", "Este dominio ja esta vinculado a outra clinica.");
+      redirectWithMessage("/dashboard/configuracoes", "dominio", "Este domínio já está vinculado a outra clínica.");
     }
 
     let vercelDomain;
@@ -1522,7 +1533,7 @@ export async function updateClinicSettingsAction(formData) {
         ok: false,
         status: "erro",
         verified: false,
-        message: error.message || "Nao foi possivel conectar na Vercel para adicionar o dominio.",
+        message: error.message || "Não foi possível conectar à Vercel para adicionar o domínio.",
       };
     }
     const now = new Date().toISOString();
@@ -1710,7 +1721,7 @@ export async function testClinicWhatsappIntegrationAction() {
   if (error) throw error;
 
   if (!integration?.whatsapp_ativo) {
-    redirectWithMessage("/dashboard/configuracoes", "whatsapp", "Ative a notificacao por WhatsApp e salve as configuracoes antes do teste.");
+    redirectWithMessage("/dashboard/configuracoes", "whatsapp", "Ative a notificação por WhatsApp e salve as configurações antes do teste.");
   }
 
   if (!integration?.whatsapp_webhook_url || !integration?.whatsapp_token || !integration?.whatsapp_numero_destino) {
@@ -1720,7 +1731,7 @@ export async function testClinicWhatsappIntegrationAction() {
   try {
     await sendWhatsAppIntegrationTest({ clinic: activeClinic, integration });
   } catch (error) {
-    redirectWithMessage("/dashboard/configuracoes", "whatsapp", error.message || "Nao foi possivel enviar o teste de WhatsApp.");
+    redirectWithMessage("/dashboard/configuracoes", "whatsapp", error.message || "Não foi possível enviar o teste de WhatsApp.");
   }
 
   redirect("/dashboard/configuracoes?ok=whatsapp");

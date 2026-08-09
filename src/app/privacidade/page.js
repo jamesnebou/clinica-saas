@@ -7,19 +7,19 @@ const company = {
   legalName: "NexaWi",
   document: "54.954.915/0001-65",
   contactEmail: "contato@nexawi.com.br",
-  contactEmail: "contato@nexawi.com.br",
+  commercialEmail: "contato@nexawi.com.br",
   whatsapp: "(77) 9 8865-6394",
 };
 
 const sections = [
-  ["Controlador e operador", `${company.productName} atua como plataforma de apoio operacional para clinicas de estetica. A clinica contratante normalmente atua como controladora dos dados dos seus clientes, enquanto a plataforma pode atuar como operadora, conforme contrato e configuracao do servico.`],
-  ["Dados tratados", "Podemos tratar dados cadastrais da clinica, usuarios autorizados, clientes, agendamentos, prontuario, anamnese, fotos de evolucao, pagamentos, logs operacionais e registros de consentimento."],
-  ["Dados sensiveis", "Dados de saude, anamnese, alergias, contraindicacoes, fotos antes/depois e informacoes clinicas devem ser acessados apenas por usuarios autorizados pela clinica e usados exclusivamente para atendimento, acompanhamento, obrigacoes legais e defesa de direitos."],
-  ["Finalidade", "Os dados sao utilizados para operar agenda, atendimento, relacionamento com clientes, controle financeiro, cumprimento de obrigacoes legais, suporte tecnico, seguranca e melhoria do servico."],
-  ["Base legal", "O tratamento pode ocorrer por execucao de contrato, legitimo interesse, obrigacao legal e consentimento, especialmente para dados sensiveis, fotos, anamnese e termos de autorizacao."],
-  ["Seguranca", "O sistema usa autenticacao, segregacao por clinica, controles de acesso por papel e armazenamento privado para fotos clinicas. Usuarios da clinica devem manter senhas protegidas e conceder acesso apenas a pessoas autorizadas."],
-  ["Direitos dos titulares", "Clientes podem solicitar confirmacao de tratamento, acesso, correcao, exclusao, portabilidade, informacao sobre compartilhamento e revisao de consentimento diretamente a clinica responsavel pelos dados."],
-  ["Retencao", "Os dados sao mantidos enquanto necessarios para a prestacao do servico, obrigacoes legais, defesa de direitos ou conforme orientacao da clinica controladora."],
+  ["Controlador e operador", `${company.productName} atua como plataforma de apoio operacional para clínicas de estética. A clínica contratante normalmente atua como controladora dos dados dos seus clientes, enquanto a plataforma pode atuar como operadora, conforme contrato e configuração do serviço.`],
+  ["Dados tratados", "Podemos tratar dados cadastrais da clínica, usuários autorizados, clientes, agendamentos, prontuário, anamnese, fotos de evolução, pagamentos, logs operacionais e registros de consentimento."],
+  ["Dados sensíveis", "Dados de saúde, anamnese, alergias, contraindicações, fotos antes/depois e informações clínicas devem ser acessados apenas por usuários autorizados pela clínica e usados exclusivamente para atendimento, acompanhamento, obrigações legais e defesa de direitos."],
+  ["Finalidade", "Os dados são utilizados para operar agenda, atendimento, relacionamento com clientes, controle financeiro, cumprimento de obrigações legais, suporte técnico, segurança e melhoria do serviço."],
+  ["Base legal", "O tratamento pode ocorrer por execução de contrato, legítimo interesse, obrigação legal e consentimento, especialmente para dados sensíveis, fotos, anamnese e termos de autorização."],
+  ["Segurança", "O sistema usa autenticação, segregação por clínica, controles de acesso por papel e armazenamento privado para fotos clínicas. Usuários da clínica devem manter senhas protegidas e conceder acesso apenas a pessoas autorizadas."],
+  ["Direitos dos titulares", "Clientes podem solicitar confirmação de tratamento, acesso, correção, exclusão, portabilidade, informação sobre compartilhamento e revisão de consentimento diretamente à clínica responsável pelos dados."],
+  ["Retenção", "Os dados são mantidos enquanto necessários para a prestação do serviço, obrigações legais, defesa de direitos ou conforme orientação da clínica controladora."],
 ];
 
 export default function PrivacidadePage() {

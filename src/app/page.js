@@ -19,6 +19,11 @@ import {
   WalletCards,
 } from "lucide-react";
 import { getMarketingHomeConfig } from "@/lib/marketing/home-config";
+import { ConversionTracker } from "@/components/marketing/conversion-tracker";
+import { LeadCaptureForm } from "@/components/marketing/lead-capture-form";
+import { PlanCta } from "@/components/marketing/plan-cta";
+import { RoiCalculator } from "@/components/marketing/roi-calculator";
+import { TrackedAnchor, TrackedLink } from "@/components/marketing/tracked-link";
 
 const modules = [
   {
@@ -164,6 +169,7 @@ export default async function Home() {
 
   return (
     <main className="min-h-screen overflow-hidden bg-[#f4f2ed] text-[#09110f]">
+      <ConversionTracker />
       <header className="sticky top-0 z-50 border-b border-white/10 bg-[#1c1c1c]/95 text-white shadow-[0_18px_60px_rgba(28,28,28,0.22)] backdrop-blur-xl">
         <div className="mx-auto flex h-[72px] max-w-7xl items-center justify-between px-5 sm:px-8 lg:px-10">
           <Link href="/" className="flex items-center gap-3">
@@ -181,9 +187,9 @@ export default async function Home() {
             <Link href="/login-cliente" className="hidden rounded-full border border-white/15 bg-white/8 px-4 py-2.5 text-sm font-bold text-white/78 shadow-sm transition hover:bg-white/14 hover:text-white sm:inline-flex">
               Entrar
             </Link>
-            <a href="#demo" className="inline-flex items-center gap-2 rounded-full bg-[#1c1c1c] px-5 py-3 text-sm font-black text-white shadow-[0_18px_42px_rgba(28,28,28,0.24)]">
+            <TrackedAnchor href="#demo" eventName="demo_click" eventData={{ location: "header" }} className="inline-flex items-center gap-2 rounded-full bg-[#ed7009] px-5 py-3 text-sm font-black text-white shadow-[0_18px_42px_rgba(237,112,9,0.26)]">
               Quero vender mais <ArrowRight size={16} />
-            </a>
+            </TrackedAnchor>
           </div>
         </div>
       </header>
@@ -202,9 +208,9 @@ export default async function Home() {
               {hero.subtitle}
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-              <a href="#demo" className="inline-flex h-13 items-center justify-center gap-2 rounded-full bg-[#1c1c1c] px-6 text-sm font-black text-white shadow-[0_22px_56px_rgba(28,28,28,0.26)]">
+              <TrackedAnchor href="#demo" eventName="demo_click" eventData={{ location: "hero" }} className="inline-flex h-13 items-center justify-center gap-2 rounded-full bg-[#1c1c1c] px-6 text-sm font-black text-white shadow-[0_22px_56px_rgba(28,28,28,0.26)]">
                 {hero.primaryCtaLabel} <ArrowRight size={17} />
-              </a>
+              </TrackedAnchor>
               <a href="#produto" className="inline-flex h-13 items-center justify-center rounded-full border border-black/10 bg-white/70 px-6 text-sm font-black text-neutral-800 shadow-sm backdrop-blur">
                 {hero.secondaryCtaLabel}
               </a>
@@ -354,6 +360,8 @@ export default async function Home() {
         </div>
       </section>
 
+      <RoiCalculator />
+
       <section id="planos" className="mx-auto max-w-7xl px-5 py-20 sm:px-8 lg:px-10">
         <SectionTitle eyebrow="Planos" title="Planos simples para começar, vender e escalar." description="A clínica entra com uma estrutura pronta e você controla limites, trial, inadimplência e cobrança." align="center" />
         <div className="mt-12 grid gap-5 lg:grid-cols-3">
@@ -372,6 +380,7 @@ export default async function Home() {
                 <Sparkles size={17} className="mb-2 text-[#ed7009]" />
                 {plan.differentiator}
               </div>
+              <PlanCta plan={plan.name.toLowerCase()} featured={plan.highlight} />
             </article>
           ))}
         </div>
@@ -442,12 +451,12 @@ export default async function Home() {
               Use a demo para mostrar agenda, cliente, prontuário, CRM, financeiro, assinatura e site público da clínica em um roteiro comercial claro.
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-              <Link href="/login-cliente" className="inline-flex h-13 items-center justify-center gap-2 rounded-full bg-white px-6 text-sm font-black text-[#1c1c1c]">
+              <TrackedLink href="/demo" eventName="demo_click" eventData={{ location: "demo_section" }} className="inline-flex h-13 items-center justify-center gap-2 rounded-full bg-white px-6 text-sm font-black text-[#1c1c1c]">
                 Acessar demonstração <ArrowRight size={17} />
-              </Link>
-              <a href="https://wa.me/5577999911911" target="_blank" className="inline-flex h-13 items-center justify-center gap-2 rounded-full border border-white/16 px-6 text-sm font-black text-white">
+              </TrackedLink>
+              <TrackedAnchor href="https://wa.me/5577999911911" target="_blank" eventName="whatsapp_click" eventData={{ location: "demo_section" }} className="inline-flex h-13 items-center justify-center gap-2 rounded-full border border-white/16 px-6 text-sm font-black text-white">
                 Falar com a NexaWi <MessageCircle size={17} />
-              </a>
+              </TrackedAnchor>
             </div>
           </div>
           <div className="grid gap-3">
@@ -464,6 +473,8 @@ export default async function Home() {
           </div>
         </div>
       </section>
+
+      <LeadCaptureForm />
 
       <footer className="border-t border-white/10 bg-[#1c1c1c] px-5 py-8 text-sm text-white/58 shadow-[0_-24px_70px_rgba(28,28,28,0.14)] sm:px-8 lg:px-10">
         <div className="mx-auto flex max-w-7xl flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">

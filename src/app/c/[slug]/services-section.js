@@ -9,8 +9,12 @@ function money(value) {
   return Number(value || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
+function displayPrice(procedimento) {
+  return procedimento?.preco_promocional ?? procedimento?.preco ?? 0;
+}
+
 function depositValue(procedimento) {
-  const price = Number(procedimento?.preco || 0);
+  const price = Number(displayPrice(procedimento));
   const fixed = Number(procedimento?.sinal_valor || 0);
   const percent = Number(procedimento?.sinal_percentual || 0);
   const value = fixed > 0 ? fixed : percent > 0 ? price * (percent / 100) : 0;
@@ -258,7 +262,7 @@ export function PublicServicesSection({ procedimentos = [] }) {
                 <div className="mt-auto flex items-end justify-between gap-4 border-t border-white/10 pt-5">
                   <div>
                     <p className="text-xs text-white/42">Valor</p>
-                    <strong className="text-2xl text-white">{money(item.preco)}</strong>
+                    <strong className="text-2xl text-white">{money(displayPrice(item))}</strong>
                   </div>
                   <p className="max-w-36 text-right text-xs font-semibold text-white/50">{serviceLabel(item)}</p>
                 </div>
@@ -332,7 +336,7 @@ export function PublicServicesSection({ procedimentos = [] }) {
                   </div>
                 </div>
                 <div className="mt-6 flex flex-wrap items-center justify-between gap-4 border-t border-white/10 pt-5">
-                  <strong className="text-2xl">{money(selected.preco)}</strong>
+                  <strong className="text-2xl">{money(displayPrice(selected))}</strong>
                   <a href="#agendar" onClick={handleBookingClick} className="public-modal-booking-cta relative z-20 inline-flex items-center justify-center rounded-full border border-white/15 bg-[var(--clinic-accent)] px-6 py-3 text-sm font-black text-white shadow-[0_18px_42px_color-mix(in_srgb,var(--clinic-accent)_38%,transparent)] transition duration-300">Agendar este procedimento</a>
                 </div>
               </div>

@@ -50,7 +50,7 @@ function serviceLabel(procedimento) {
 }
 
 function depositValue(procedimento) {
-  const price = Number(procedimento?.preco || 0);
+  const price = Number(procedimento?.preco_promocional ?? procedimento?.preco ?? 0);
   const fixed = Number(procedimento?.sinal_valor || 0);
   const percent = Number(procedimento?.sinal_percentual || 0);
   const signal = fixed > 0 ? fixed : percent > 0 ? price * (percent / 100) : 0;
@@ -79,8 +79,8 @@ export function PublicBookingForm({ slug, procedimentos, profissionais, query, t
     return procedimentos.filter((item) => [item.nome, item.categoria, item.descricao].filter(Boolean).join(" ").toLowerCase().includes(search));
   }, [procedimentos, procedureSearch]);
   const totals = useMemo(() => selectedProcedures.reduce((acc, item) => ({
-    duration: acc.duration + Number(item.duracao_minutos || 60),
-    price: acc.price + Number(item.preco || 0),
+    duration: acc.duration + Number(item.duracao_minutos || 60) + Number(item.intervalo_minutos || 0),
+    price: acc.price + Number(item.preco_promocional ?? item.preco ?? 0),
     deposit: acc.deposit + depositValue(item),
   }), { duration: 0, price: 0, deposit: 0 }), [selectedProcedures]);
 
@@ -195,7 +195,7 @@ export function PublicBookingForm({ slug, procedimentos, profissionais, query, t
                     <button key={item.id} type="button" onClick={() => toggleProcedure(item.id)} className={["flex w-full items-start justify-between gap-3 rounded-2xl border px-4 py-3 text-left text-sm transition", checked ? "border-[var(--clinic-accent)] bg-[var(--clinic-accent)]/18 text-white" : "border-white/10 bg-white/8 text-white/75 hover:border-white/25 hover:bg-white/12"].join(" ")}>
                       <span>
                         <strong className="block text-white">{item.nome}</strong>
-                        <span className="mt-1 block text-xs text-white/55">{money(item.preco)} - {item.duracao_minutos || 60} min - {serviceLabel(item)}</span>
+                        <span className="mt-1 block text-xs text-white/55">{money(item.preco_promocional ?? item.preco)} - {item.duracao_minutos || 60} min - {serviceLabel(item)}</span>
                       </span>
                       <span className={["mt-1 h-5 w-5 shrink-0 rounded-full border", checked ? "border-[var(--clinic-accent)] bg-[var(--clinic-accent)]" : "border-white/25"].join(" ")} />
                     </button>

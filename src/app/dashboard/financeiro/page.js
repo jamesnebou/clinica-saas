@@ -1,6 +1,7 @@
 import { CreditCard, Package, TrendingUp, Wallet } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { clinicTimeZone } from "@/lib/clinic/schedule";
+import { isBillableRecord, paidAmount, summarizeFinancialRecords } from "@/lib/domain/finance-core.mjs";
 import { requireClinicSection } from "@/lib/auth/session";
 import { EmptyClinicState, Field, PageHeader, SubmitButton, TextArea } from "@/components/app-shell/ui";
 import { createPacoteAction, sellClientePacoteAction, updateAgendamentoFinanceiroAction } from "../actions";
@@ -69,14 +70,15 @@ export default async function FinanceiroPage({ searchParams }) {
   const procedimentos = procedimentosResult.data || [];
   const pacotes = pacotesResult.data || [];
   const clientePacotes = clientePacotesResult.data || [];
-  const agendamentosFaturaveis = agendamentos.filter((item) => !["cancelado", "faltou"].includes(item.status) && item.pagamento_status !== "cancelado");
-  const faturamentoPrevisto = agendamentosFaturaveis.reduce((acc, item) => acc + Number(item.valor || 0), 0);
-  const recebidoAgendamentos = agendamentosFaturaveis.reduce((acc, item) => acc + Number(item.valor_pago || 0), 0);
-  const recebido = recebidoAgendamentos + pagamentos.filter((item) => !item.agendamento_id).reduce((acc, item) => acc + Number(item.valor_pago || 0), 0);
-  const pendente = Math.max(0, faturamentoPrevisto - recebidoAgendamentos);
-  const comissoes = agendamentosFaturaveis.reduce((acc, item) => {
-    if (item.pagamento_status !== "pago") return acc;
-    return acc + (Number(item.valor_pago || item.valor || 0) * Number(item.profissionais?.comissao_percentual || 0)) / 100;
+  const financialSummary = summarizeFinancialRecords(agendamentos);
+  const faturamentoPrevisto = financialSummary.expected;
+  const recebidoAgendamentos = financialSummary.received;
+  const recebido = recebidoAgendamentos + pagamentos.filter((item) => !item.agendamento_id).reduce((acc, item) => acc + paidAmount(item), 0);
+  const pendente = financialSummary.pending;
+  const comissoes = agendamentos.reduce((acc, item) => {
+    const paid = paidAmount(item);
+    if (!isBillableRecord(item) || paid <= 0) return acc;
+    return acc + (paid * Number(item.profissionais?.comissao_percentual || 0)) / 100;
   }, 0);
 
   const cards = [

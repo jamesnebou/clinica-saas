@@ -9,6 +9,7 @@ import { createInfinitePayCheckout } from "@/lib/infinitepay/client";
 import { resolveClinicPaymentProvider } from "@/lib/payments/provider";
 import { notifyClinicPublicBooking } from "@/lib/notifications/booking";
 import { clinicTimeZone, dateFromClinicLocal, isWithinWorkingPeriods } from "@/lib/clinic/schedule";
+import { totalAppointmentMinutes } from "@/lib/domain/schedule-core.mjs";
 import { decryptClinicSecrets } from "@/lib/security/clinic-secrets";
 
 function text(formData, key) {
@@ -56,7 +57,7 @@ function publicLeadRedirect(slug, params) {
 }
 
 function calculateDeposit(procedimento) {
-  const price = Number(procedimento?.preco || 0);
+  const price = Number(procedimento?.preco_promocional ?? procedimento?.preco ?? 0);
   const fixed = Number(procedimento?.sinal_valor || 0);
   const percent = Number(procedimento?.sinal_percentual || 0);
   const value = fixed > 0 ? fixed : percent > 0 ? price * (percent / 100) : 0;
@@ -139,7 +140,7 @@ export async function createPublicBookingAction(formData) {
   const selectedIds = procedimentoIds.length ? procedimentoIds : [procedimentoId];
   const { data: procedimentosSelecionados = [], error: procedimentoError } = await supabaseAdmin
     .from("procedimentos")
-    .select("id, nome, descricao, duracao_minutos, preco, sinal_percentual, sinal_valor, publicado_site, ativo")
+    .select("id, nome, descricao, duracao_minutos, intervalo_minutos, preco, preco_promocional, sinal_percentual, sinal_valor, publicado_site, ativo")
     .eq("clinica_id", clinic.id)
     .in("id", selectedIds)
     .eq("ativo", true)
@@ -161,7 +162,7 @@ export async function createPublicBookingAction(formData) {
     publicRedirect(slug, { erro: "agenda", mensagem: "Escolha uma data futura válida." });
   }
 
-  const duracaoTotal = procedimentos.reduce((total, item) => total + Number(item.duracao_minutos || 60), 0);
+  const duracaoTotal = totalAppointmentMinutes(procedimentos, { defaultDuration: 60, includeIntervals: true });
   const end = new Date(start.getTime() + duracaoTotal * 60000);
   assertWorkingHours({ clinic, start, end, slug, timeZone });
 
@@ -211,7 +212,7 @@ export async function createPublicBookingAction(formData) {
     clienteId = cliente.id;
   }
 
-  const valorTotal = Number(procedimentos.reduce((total, item) => total + Number(item.preco || 0), 0).toFixed(2));
+  const valorTotal = Number(procedimentos.reduce((total, item) => total + Number(item.preco_promocional ?? item.preco ?? 0), 0).toFixed(2));
   const valorSinal = calculateTotalDeposit(procedimentos);
   const pagamentoStatus = valorSinal > 0 ? "pendente" : "sem_sinal";
 
@@ -281,7 +282,7 @@ export async function createPublicBookingAction(formData) {
       }
     } catch (error) {
       await supabaseAdmin.from("agendamentos").delete().eq("id", agendamento.id).eq("clinica_id", clinic.id);
-      publicRedirect(slug, { erro: "pagamento", mensagem: error.message || "Nao foi possivel gerar o checkout do sinal. Tente novamente." });
+      publicRedirect(slug, { erro: "pagamento", mensagem: error.message || "Não foi possível gerar o checkout do sinal. Tente novamente." });
     }
   }
 
@@ -308,8 +309,9 @@ export async function createPublicBookingAction(formData) {
       procedimentos: procedimentos.map((item) => ({
         id: item.id,
         nome: item.nome,
-        preco: Number(item.preco || 0),
+        preco: Number(item.preco_promocional ?? item.preco ?? 0),
         duracao_minutos: Number(item.duracao_minutos || 60),
+        intervalo_minutos: Number(item.intervalo_minutos || 0),
         sinal: calculateDeposit(item),
       })),
       duracao_total_minutos: duracaoTotal,

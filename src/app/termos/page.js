@@ -11,13 +11,13 @@ const company = {
 };
 
 const sections = [
-  ["Uso do sistema", `${company.productName} e uma plataforma SaaS para gestao de clinicas de estetica, incluindo agenda, clientes, prontuario, anamnese, fotos antes/depois, financeiro, pacotes, usuarios e indicadores operacionais.`],
-  ["Responsabilidade da clinica", "A clinica contratante e responsavel pela veracidade dos dados inseridos, pela autorizacao dos seus usuarios, pela definicao de papeis de acesso e pela obtencao de consentimentos necessarios de clientes e pacientes."],
-  ["Prontuario, fotos e dados sensiveis", "Informacoes sensiveis, anamnese, fotos antes/depois e termos de consentimento devem ser coletados e armazenados pela clinica conforme a legislacao aplicavel. O sistema fornece controles tecnicos, mas a avaliacao clinica e a regularidade dos procedimentos sao responsabilidade da clinica."],
-  ["Acesso e seguranca", "Cada usuario deve usar credenciais proprias. E proibido compartilhar senha, acessar dados sem autorizacao, exportar informacoes indevidamente ou utilizar o sistema para finalidade ilicita."],
-  ["Planos e cobranca", "O uso pode estar sujeito a planos, limites, periodo de teste, cobranca recorrente, bloqueio por inadimplencia e cancelamento conforme condicoes comerciais acordadas."],
-  ["Disponibilidade", "A plataforma busca operar com estabilidade, mas pode passar por manutencoes, indisponibilidades de terceiros, instabilidades de internet, falhas de provedores ou ajustes tecnicos necessarios a evolucao do produto."],
-  ["Suporte e contato", `Canais oficiais: ${company.contactEmail} e ${company.whatsapp}. Substitua estes dados antes da publicacao comercial.`],
+  ["Uso do sistema", `${company.productName} é uma plataforma SaaS para gestão de clínicas de estética, incluindo agenda, clientes, prontuário, anamnese, fotos antes/depois, financeiro, pacotes, usuários e indicadores operacionais.`],
+  ["Responsabilidade da clínica", "A clínica contratante é responsável pela veracidade dos dados inseridos, pela autorização dos seus usuários, pela definição de papéis de acesso e pela obtenção de consentimentos necessários de clientes e pacientes."],
+  ["Prontuário, fotos e dados sensíveis", "Informações sensíveis, anamnese, fotos antes/depois e termos de consentimento devem ser coletados e armazenados pela clínica conforme a legislação aplicável. O sistema fornece controles técnicos, mas a avaliação clínica e a regularidade dos procedimentos são responsabilidade da clínica."],
+  ["Acesso e segurança", "Cada usuário deve usar credenciais próprias. É proibido compartilhar senha, acessar dados sem autorização, exportar informações indevidamente ou utilizar o sistema para finalidade ilícita."],
+  ["Planos e cobrança", "O uso pode estar sujeito a planos, limites, período de teste, cobrança recorrente, bloqueio por inadimplência e cancelamento conforme condições comerciais acordadas."],
+  ["Disponibilidade", "A plataforma busca operar com estabilidade, mas pode passar por manutenções, indisponibilidades de terceiros, instabilidades de internet, falhas de provedores ou ajustes técnicos necessários à evolução do produto."],
+  ["Suporte e contato", `Canais oficiais: ${company.contactEmail} e ${company.whatsapp}. Substitua estes dados antes da publicação comercial.`],
 ];
 
 export default function TermosPage() {

@@ -276,6 +276,27 @@ export async function deleteClinicTutorialAction(formData) {
   redirect("/dashboard-admin/tutoriais?ok=excluido");
 }
 
+export async function updateMarketingLeadStatusAction(formData) {
+  await requireInternalAdmin();
+  const id = requireValue(text(formData, "id"), "Lead não informado.");
+  const status = text(formData, "status");
+  const allowed = new Set(["novo", "contatado", "qualificado", "convertido", "perdido"]);
+  if (!allowed.has(status)) throw new Error("Status comercial inválido.");
+
+  const { error } = await supabaseAdmin
+    .from("clinica_marketing_leads")
+    .update({
+      status,
+      observacoes: nullableText(formData, "observacoes"),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", id);
+
+  if (error) throw error;
+  revalidatePath("/dashboard-admin");
+  revalidatePath("/dashboard-admin/funil");
+}
+
 export async function updateInternalAdminCredentialsAction(formData) {
   const user = await requireInternalAdmin();
   const email = normalizeEmail(text(formData, "new_email"));

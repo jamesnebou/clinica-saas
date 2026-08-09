@@ -10,6 +10,7 @@ import {
   utcRangeForClinicDate,
   weekdayFromDateKey,
 } from "@/lib/clinic/schedule";
+import { intervalsOverlap, totalAppointmentMinutes } from "@/lib/domain/schedule-core.mjs";
 
 function pad(value) {
   return String(value).padStart(2, "0");
@@ -29,7 +30,7 @@ function overlaps(startMinutes, endMinutes, booking, date, timeZone) {
   const bookingEnd = dateKeyInTimeZone(end, timeZone) === date
     ? localTimeFromDate(end, timeZone)
     : 24 * 60;
-  return startMinutes < bookingEnd && endMinutes > bookingStart;
+  return intervalsOverlap(startMinutes, endMinutes, bookingStart, bookingEnd);
 }
 
 export async function GET(request) {
@@ -55,12 +56,12 @@ export async function GET(request) {
 
   if (clinicError) throw clinicError;
   if (!clinic || clinic.metadata?.site_publico?.publicado === false) {
-    return NextResponse.json({ slots: [], message: "Clinica indisponivel." }, { status: 404 });
+    return NextResponse.json({ slots: [], message: "Clínica indisponível." }, { status: 404 });
   }
 
   const { data: procedimentos = [], error: procedimentoError } = await supabaseAdmin
     .from("procedimentos")
-    .select("id, duracao_minutos")
+    .select("id, duracao_minutos, intervalo_minutos")
     .eq("clinica_id", clinic.id)
     .in("id", procedimentoIds)
     .eq("ativo", true)
@@ -96,7 +97,7 @@ export async function GET(request) {
     return NextResponse.json({ slots: [], message: "A clínica não atende nesta data." });
   }
 
-  const duration = Math.max(1, procedimentos.reduce((total, item) => total + Number(item.duracao_minutos || 60), 0));
+  const duration = totalAppointmentMinutes(procedimentos, { defaultDuration: 60, includeIntervals: true });
 
   if (!periods.some((period) => period.end >= period.start + duration)) {
     return NextResponse.json({ slots: [], message: "Expediente insuficiente para os procedimentos selecionados." });

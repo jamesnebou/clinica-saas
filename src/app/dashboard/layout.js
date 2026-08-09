@@ -6,6 +6,10 @@ import { getClinicBillingState } from "@/lib/saas/plans";
 import { MobileSidebarMenu, SidebarNav } from "@/components/app-shell/sidebar-nav";
 import { canAccessSection, getCurrentMembership } from "@/lib/auth/permissions";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import { isDemoLoginEmail } from "@/lib/demo/demo-account";
+import { DemoSessionLifecycle } from "@/components/demo/demo-session-lifecycle";
+import { DemoGuidedTour } from "@/components/demo/demo-guided-tour";
+import { DemoConversionCta } from "@/components/demo/demo-conversion-cta";
 
 
 export async function generateMetadata() {
@@ -123,6 +127,7 @@ export default async function DashboardLayout({ children }) {
   const billingState = getClinicBillingState(activeClinic);
   const membership = getCurrentMembership(context.memberships, activeClinic.id);
   const role = membership?.papel || "recepcao";
+  const isDemo = isDemoLoginEmail(user?.email);
   const [openCharge, notificationCount] = await Promise.all([
     getOpenCharge(activeClinic),
     getNotificationBadgeCount(activeClinic),
@@ -141,6 +146,7 @@ export default async function DashboardLayout({ children }) {
         background: "radial-gradient(circle at 10% 0%, color-mix(in srgb, var(--clinic-accent) 16%, transparent), transparent 30rem), radial-gradient(circle at 100% 10%, color-mix(in srgb, var(--clinic-primary) 13%, transparent), transparent 28rem), radial-gradient(circle at 82% 80%, rgba(18,18,16,0.055), transparent 30rem), linear-gradient(145deg, #f9f8f4 0%, #f1eee7 48%, #ebefeb 100%)",
       }}
     >
+      {isDemo ? <><DemoSessionLifecycle /><DemoGuidedTour /><DemoConversionCta /></> : null}
       <MobileSidebarMenu items={allowedNavItems} brandName={brandName} logoUrl={logoUrl} />
 
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-[260px] flex-col border-r border-neutral-200 bg-white/95 px-4 py-4 shadow-sm backdrop-blur-xl md:flex">
@@ -181,6 +187,11 @@ export default async function DashboardLayout({ children }) {
         </form>
       </aside>
       <section className="min-w-0">
+        {isDemo ? (
+          <div className="border-b border-orange-400/25 bg-[#1c1c1c] px-5 py-3 text-sm text-orange-100 shadow-sm backdrop-blur sm:px-8 lg:px-10">
+            <strong>Ambiente demonstrativo.</strong> Explore à vontade: as alterações são temporárias e a base original é restaurada ao atualizar, sair ou fechar a aba.
+          </div>
+        ) : null}
         {billingState.level !== "ok" ? (
           <div className={`border-b px-5 py-3 text-sm shadow-sm backdrop-blur sm:px-8 lg:px-10 ${billingState.level === "danger" ? "border-red-200 bg-red-50/90 text-red-800" : billingState.level === "warning" ? "border-amber-200 bg-amber-50/90 text-amber-900" : "border-sky-200 bg-sky-50/90 text-sky-900"}`}>
             <strong>{billingState.title}.</strong> {billingState.message}
@@ -188,7 +199,7 @@ export default async function DashboardLayout({ children }) {
         ) : null}
         {openCharge ? (
           <div className="border-b border-amber-200 bg-amber-50/90 px-5 py-3 text-sm text-amber-900 shadow-sm backdrop-blur sm:px-8 lg:px-10">
-            <strong>Pagamento pendente.</strong> Existe uma cobranca com vencimento em {formatDate(openCharge.vencimento)}. Se nao for regularizada, o sistema pode ser bloqueado automaticamente.
+            <strong>Pagamento pendente.</strong> Existe uma cobrança com vencimento em {formatDate(openCharge.vencimento)}. Se não for regularizada, o sistema pode ser bloqueado automaticamente.
             {openCharge.invoice_url ? <a href={openCharge.invoice_url} target="_blank" className="ml-2 font-bold underline">Abrir fatura</a> : null}
           </div>
         ) : null}

@@ -40,7 +40,7 @@ function commercialStatusFromPayment(status) {
   const normalized = normalizePaymentStatus(status);
   if (normalized === "pago") return { status: "ativa", assinatura_status: "ativa", bloqueada_em: null, bloqueio_motivo: null };
   if (normalized === "vencido") return { status: "inadimplente", assinatura_status: "atrasada", bloqueada_em: new Date().toISOString(), bloqueio_motivo: "Pagamento Asaas vencido." };
-  if (normalized === "cancelado") return { status: "cancelada", assinatura_status: "cancelada", bloqueada_em: new Date().toISOString(), bloqueio_motivo: "Cobranca/assinatura Asaas cancelada." };
+  if (normalized === "cancelado") return { status: "cancelada", assinatura_status: "cancelada", bloqueada_em: new Date().toISOString(), bloqueio_motivo: "Cobrança/assinatura Asaas cancelada." };
   return null;
 }
 

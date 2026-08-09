@@ -240,7 +240,7 @@ export default async function PublicClinicPage({ params, searchParams }) {
   const [{ data: procedimentos = [] }, { data: profissionais = [] }, { data: produtos = [] }] = await Promise.all([
     supabaseAdmin
       .from("procedimentos")
-      .select("id, nome, categoria, descricao, duracao_minutos, preco, cuidados_antes, cuidados_depois, sinal_percentual, sinal_valor, destaque_site, ordem_site, imagem_url")
+      .select("id, nome, categoria, descricao, duracao_minutos, intervalo_minutos, preco, preco_promocional, cuidados_antes, cuidados_depois, sinal_percentual, sinal_valor, destaque_site, ordem_site, imagem_url")
       .eq("clinica_id", clinic.id)
       .eq("ativo", true)
       .eq("publicado_site", true)
@@ -560,4 +560,3 @@ export default async function PublicClinicPage({ params, searchParams }) {
     </main>
   );
 }
-

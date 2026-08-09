@@ -120,7 +120,7 @@ export function getClinicBillingState(clinic) {
   }
 
   if (status === "cancelada" || status === "bloqueada") {
-    return { blocked: true, level: "danger", title: "Clinica bloqueada", message: clinic?.bloqueio_motivo || "A assinatura desta clinica esta cancelada ou bloqueada." };
+    return { blocked: true, level: "danger", title: "Clínica bloqueada", message: clinic?.bloqueio_motivo || "A assinatura desta clínica está cancelada ou bloqueada." };
   }
 
   if (status === "inadimplente") {
@@ -132,7 +132,7 @@ export function getClinicBillingState(clinic) {
   }
 
   if (status === "trial") {
-    return { blocked: false, level: "info", title: "Clinica em trial", message: trialEndsAt ? `Teste valido ate ${trialEndsAt.toLocaleDateString("pt-BR")}.` : "Clinica em periodo de teste." };
+    return { blocked: false, level: "info", title: "Clínica em trial", message: trialEndsAt ? `Teste válido até ${trialEndsAt.toLocaleDateString("pt-BR")}.` : "Clínica em período de teste." };
   }
 
   return { blocked: false, level: "ok", title: "Assinatura ativa", message: "Plano comercial ativo." };
@@ -140,7 +140,7 @@ export function getClinicBillingState(clinic) {
 
 export function getLimitRows({ plan, usage }) {
   return [
-    { label: "Usuarios", used: usage.usuarios, limit: plan.limite_usuarios },
+    { label: "Usuários", used: usage.usuarios, limit: plan.limite_usuarios },
     { label: "Profissionais", used: usage.profissionais, limit: plan.limite_profissionais },
     { label: "Clientes", used: usage.clientes, limit: plan.limite_clientes },
     { label: "Agendamentos no mes", used: usage.agendamentos_mes, limit: plan.limite_agendamentos_mes },

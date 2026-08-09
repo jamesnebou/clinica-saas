@@ -2,6 +2,7 @@
 import { Field, SubmitButton, TextArea } from "@/components/app-shell/ui";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { getClinicUsage, getSystemPlans } from "@/lib/saas/plans";
+import { expectedAmount, paidAmount, summarizeFinancialRecords } from "@/lib/domain/finance-core.mjs";
 import { createClinicWithOwnerAction, updateClinicCommercialAction, upsertSystemPlanAction } from "../admin/actions";
 
 export function formatMoney(value) {
@@ -118,7 +119,7 @@ export async function loadAdminAnalytics() {
   const nextMonthStart = nextMonthStartISO();
   const last30Days = daysAgoISO(30);
 
-  const [siteBookings, crm, appointments, asaasCharges, users, payments, clients] = await Promise.all([
+  const [siteBookings, crm, appointments, asaasCharges, users, payments, clients, marketingLeads, marketingEvents] = await Promise.all([
     supabaseAdmin
       .from("site_agendamentos_publicos")
       .select("id, clinica_id, nome, telefone, pagamento_status, valor_total, valor_sinal, invoice_url, created_at")
@@ -147,9 +148,11 @@ export async function loadAdminAnalytics() {
     supabaseAdmin.from("usuarios_clinica").select("id, clinica_id, email, ativo, accepted_at, created_at").order("created_at", { ascending: false }).limit(1200),
     supabaseAdmin.from("pagamentos_clinica").select("id, clinica_id, status, valor, valor_pago, created_at, data_pagamento").gte("created_at", last30Days).order("created_at", { ascending: false }).limit(1200),
     supabaseAdmin.from("clientes").select("id, clinica_id, status, origem, created_at").gte("created_at", last30Days).order("created_at", { ascending: false }).limit(1200),
+    supabaseAdmin.from("clinica_marketing_leads").select("id, nome, whatsapp, email, clinica_nome, profissionais_qtd, plano_interesse, origem, status, observacoes, utm_source, utm_medium, utm_campaign, pagina, created_at").order("created_at", { ascending: false }).limit(1200),
+    supabaseAdmin.from("clinica_marketing_eventos").select("id, event_name, session_id, lead_id, pagina, utm_source, utm_medium, utm_campaign, metadata, created_at").gte("created_at", last30Days).order("created_at", { ascending: false }).limit(3000),
   ]);
 
-  for (const result of [siteBookings, crm, appointments, asaasCharges, users, payments, clients]) {
+  for (const result of [siteBookings, crm, appointments, asaasCharges, users, payments, clients, marketingLeads, marketingEvents]) {
     if (result.error) throw result.error;
   }
 
@@ -161,6 +164,8 @@ export async function loadAdminAnalytics() {
     users: users.data || [],
     payments: payments.data || [],
     clients: clients.data || [],
+    marketingLeads: marketingLeads.data || [],
+    marketingEvents: marketingEvents.data || [],
   };
 }
 
@@ -180,9 +185,8 @@ export function buildClinicInsights({ clinics, plans, analytics }) {
   for (const item of analytics.appointments) {
     const row = byClinic.get(item.clinica_id);
     if (!row) continue;
-    const faturavel = !["cancelado", "faltou"].includes(item.status) && item.pagamento_status !== "cancelado";
-    if (faturavel) row.monthExpected += Number(item.valor || 0);
-    if (item.pagamento_status === "pago" || Number(item.valor_pago || 0) > 0) row.monthPaid += Number(item.valor_pago || 0);
+    row.monthExpected += expectedAmount(item);
+    row.monthPaid += paidAmount(item);
     row.appointments += 1;
   }
 
@@ -222,13 +226,16 @@ export function getOverviewStats({ clinics, plans, analytics }) {
   const mrrCobravel = clinics
     .filter((clinic) => clinic.assinatura_status !== "isenta" && clinic.status !== "cancelada")
     .reduce((acc, clinic) => acc + Number(planMap.get(clinic.plano)?.preco_mensal || 0), 0);
-  const monthExpected = analytics.appointments
-    .filter((item) => !["cancelado", "faltou"].includes(item.status) && item.pagamento_status !== "cancelado")
-    .reduce((acc, item) => acc + Number(item.valor || 0), 0);
-  const monthReceived = analytics.appointments.reduce((acc, item) => acc + Number(item.valor_pago || 0), 0);
+  const financialSummary = summarizeFinancialRecords(analytics.appointments);
+  const monthExpected = financialSummary.expected;
+  const monthReceived = financialSummary.received;
   const openCharges = analytics.asaasCharges.filter((item) => !["RECEIVED", "CONFIRMED", "RECEIVED_IN_CASH", "pago"].includes(String(item.status || "")));
   const usersWithAccess = analytics.users.filter((item) => item.ativo && item.accepted_at).length;
   const usersPendingAccess = analytics.users.filter((item) => item.ativo && !item.accepted_at).length;
+  const landingViews = analytics.marketingEvents.filter((item) => item.event_name === "landing_view").length;
+  const demoAccesses = analytics.marketingEvents.filter((item) => item.event_name === "demo_access").length;
+  const pricingClicks = analytics.marketingEvents.filter((item) => item.event_name === "pricing_click").length;
+  const whatsappClicks = analytics.marketingEvents.filter((item) => item.event_name === "whatsapp_click").length;
 
   return {
     totalAtivas,
@@ -246,6 +253,14 @@ export function getOverviewStats({ clinics, plans, analytics }) {
     sitePaidSignals: analytics.siteBookings.filter((item) => item.pagamento_status === "pago").length,
     crmLeads: analytics.crm.length,
     crmConverted: analytics.crm.filter((item) => item.status === "convertido").length,
+    marketingLeads: analytics.marketingLeads.length,
+    marketingQualified: analytics.marketingLeads.filter((item) => ["qualificado", "convertido"].includes(item.status)).length,
+    marketingConverted: analytics.marketingLeads.filter((item) => item.status === "convertido").length,
+    landingViews,
+    demoAccesses,
+    pricingClicks,
+    whatsappClicks,
+    leadConversionRate: landingViews > 0 ? (analytics.marketingLeads.length / landingViews) * 100 : 0,
   };
 }
 
@@ -258,6 +273,7 @@ export function getRecentActivity(analytics) {
     ...analytics.siteBookings.slice(0, 8).map((item) => ({ type: "Site", title: item.nome, detail: `Agendamento público: ${item.pagamento_status}`, created_at: item.created_at })),
     ...analytics.crm.slice(0, 8).map((item) => ({ type: "CRM", title: item.nome, detail: `Etapa: ${item.status}`, created_at: item.created_at })),
     ...analytics.asaasCharges.slice(0, 8).map((item) => ({ type: "Cobrança", title: formatMoney(item.valor), detail: `Status: ${item.status}`, created_at: item.created_at })),
+    ...analytics.marketingLeads.slice(0, 8).map((item) => ({ type: "Marketing", title: item.nome, detail: `Novo interesse: ${item.plano_interesse}`, created_at: item.created_at })),
   ]
     .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
     .slice(0, 14);

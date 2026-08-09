@@ -1,32 +1,33 @@
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { ACCESS_SECTIONS } from "@/lib/auth/permissions";
+import { matchesDemoEmail, normalizeDemoEmail } from "@/lib/domain/demo-core.mjs";
 
-export const DEMO_EMAIL = "demo@nexawi.com.br";
-export const DEMO_PASSWORD = "demo1234";
+export const DEMO_EMAIL = String(process.env.DEMO_EMAIL || "demo@nexawi.com.br").toLowerCase();
+export const DEMO_PASSWORD = String(process.env.DEMO_PASSWORD || "demo1234");
 
-const DEMO_SLUG = "demo-nexawi-clinicas";
+export const DEMO_SLUG = "demo-nexawi-clinicas";
 const DEMO_CLINIC_NAME = "NexaWi Clínicas Demo";
 
-function normalizeEmail(email) {
-  return String(email || "").trim().toLowerCase();
-}
-
 export function isDemoLoginEmail(email) {
-  return normalizeEmail(email) === DEMO_EMAIL;
+  return matchesDemoEmail(email, DEMO_EMAIL);
 }
 
 export function isDemoPassword(password) {
   return String(password || "") === DEMO_PASSWORD;
 }
 
+export function isDemoClinic(clinic) {
+  return String(clinic?.slug || clinic || "").trim().toLowerCase() === DEMO_SLUG;
+}
+
 async function findAuthUserByEmail(email) {
-  const targetEmail = normalizeEmail(email);
+  const targetEmail = normalizeDemoEmail(email);
 
   for (let page = 1; page <= 20; page += 1) {
     const { data, error } = await supabaseAdmin.auth.admin.listUsers({ page, perPage: 100 });
     if (error) throw error;
 
-    const found = data?.users?.find((user) => normalizeEmail(user.email) === targetEmail);
+    const found = data?.users?.find((user) => normalizeDemoEmail(user.email) === targetEmail);
     if (found) return found;
     if (!data?.users?.length || data.users.length < 100) break;
   }
@@ -377,11 +378,50 @@ async function seedDemoData(clinic, user) {
   }
 }
 
+function isMissingSnapshotMigration(error) {
+  const message = String(error?.message || "").toLowerCase();
+  return error?.code === "PGRST202" || message.includes("clinica_demo_snapshot");
+}
+
+async function captureDemoBaseline(clinicId) {
+  const { data, error } = await supabaseAdmin.rpc("capture_clinica_demo_snapshot", {
+    p_clinica_id: clinicId,
+  });
+  if (error) throw error;
+  return data === true;
+}
+
+async function restoreDemoBaseline(clinicId) {
+  const { data, error } = await supabaseAdmin.rpc("restore_clinica_demo_snapshot", {
+    p_clinica_id: clinicId,
+  });
+  if (error) throw error;
+  return data === true;
+}
+
+async function rebaseDemoTimeline(clinicId) {
+  const { error } = await supabaseAdmin.rpc("rebase_clinica_demo_timeline", {
+    p_clinica_id: clinicId,
+  });
+  if (error) throw error;
+}
+
 export async function resetDemoClinicData(userOverride = null) {
   const user = userOverride || (await findAuthUserByEmail(DEMO_EMAIL));
   if (!user?.id) return null;
 
   const clinic = await ensureDemoClinic();
+
+  try {
+    const restored = await restoreDemoBaseline(clinic.id);
+    if (restored) {
+      await rebaseDemoTimeline(clinic.id);
+      return clinic;
+    }
+  } catch (error) {
+    if (!isMissingSnapshotMigration(error)) throw error;
+    throw new Error("A migration do ambiente demonstrativo ainda não foi aplicada no Supabase.");
+  }
 
   const tables = [
     "site_agendamentos_publicos",
@@ -404,11 +444,35 @@ export async function resetDemoClinicData(userOverride = null) {
   }
 
   await seedDemoData(clinic, user);
+  await captureDemoBaseline(clinic.id);
+  await rebaseDemoTimeline(clinic.id);
   return clinic;
 }
 
 export async function ensureDemoAccountAndReset() {
   const user = await ensureDemoAuthUser();
-  await resetDemoClinicData(user);
-  return user;
+  const clinic = await ensureDemoClinic();
+
+  try {
+    const captured = await captureDemoBaseline(clinic.id);
+    if (captured) {
+      const { count, error } = await supabaseAdmin
+        .from("procedimentos")
+        .select("id", { count: "exact", head: true })
+        .eq("clinica_id", clinic.id);
+      if (error) throw error;
+      if ((count || 0) === 0) {
+        await supabaseAdmin.from("clinica_demo_snapshots").delete().eq("clinica_id", clinic.id);
+        await resetDemoClinicData(user);
+      }
+    } else {
+      await restoreDemoBaseline(clinic.id);
+      await rebaseDemoTimeline(clinic.id);
+    }
+  } catch (error) {
+    if (!isMissingSnapshotMigration(error)) throw error;
+    throw new Error("A migration do ambiente demonstrativo ainda não foi aplicada no Supabase.");
+  }
+
+  return { user, clinic };
 }

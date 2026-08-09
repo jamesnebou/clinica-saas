@@ -57,7 +57,7 @@ function notificationHtml({ clinic, booking, procedimento, invoiceUrl }) {
 async function sendEmailNotification({ clinic, booking, procedimento, invoiceUrl, integration }) {
   const apiKey = process.env.RESEND_API_KEY;
   const to = integration?.email_ativo ? integration.email_destino || clinic.email : null;
-  const from = integration?.email_remetente || process.env.RESEND_FROM_EMAIL || "Clinica SaaS <onboarding@resend.dev>";
+  const from = integration?.email_remetente || process.env.RESEND_FROM_EMAIL || "Clínica SaaS <onboarding@resend.dev>";
 
   if (!apiKey || !to) return { skipped: true };
 
@@ -80,7 +80,7 @@ async function sendEmailNotification({ clinic, booking, procedimento, invoiceUrl
 
   if (!response.ok) {
     const payload = await response.json().catch(() => ({}));
-    throw new Error(payload?.message || payload?.error || "Nao foi possivel enviar e-mail de notificacao.");
+    throw new Error(payload?.message || payload?.error || "Não foi possível enviar e-mail de notificação.");
   }
 
   return response.json().catch(() => ({ ok: true }));
@@ -115,7 +115,7 @@ async function sendWhatsAppNotification({ clinic, booking, procedimento, invoice
 
   if (!response.ok) {
     const payload = await response.json().catch(() => ({}));
-    throw new Error(payload?.message || payload?.error || payload?.errorMessage || "Nao foi possivel enviar WhatsApp de notificacao.");
+    throw new Error(payload?.message || payload?.error || payload?.errorMessage || "Não foi possível enviar WhatsApp de notificação.");
   }
 
   return response.json().catch(() => ({ ok: true }));
@@ -133,7 +133,7 @@ export async function sendWhatsAppIntegrationTest({ clinic, integration }) {
     },
     booking: {
       id: `test-${now}`,
-      nome: "Teste Clinica SaaS",
+      nome: "Teste Clínica SaaS",
       telefone: integration?.whatsapp_numero_destino || clinic.telefone || "-",
       email: clinic.email || "-",
       data_hora: now,

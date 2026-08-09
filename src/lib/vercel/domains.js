@@ -36,7 +36,7 @@ function domainResultFromPayload(payload, fallbackMessage = "") {
     status: verified ? "ativo" : "pendente",
     verified,
     payload,
-    message: verified ? "Dominio encontrado e verificado na Vercel." : fallbackMessage || "Dominio encontrado na Vercel. Aguarde ou configure o DNS para verificar.",
+    message: verified ? "Domínio encontrado e verificado na Vercel." : fallbackMessage || "Domínio encontrado na Vercel. Aguarde ou configure o DNS para verificar.",
   };
 }
 
@@ -90,7 +90,7 @@ export async function addVercelProjectDomain(domain) {
   const payload = await response.json().catch(() => null);
 
   if (!response.ok) {
-    const message = responseMessage(payload, "Nao foi possivel adicionar o dominio na Vercel.");
+    const message = responseMessage(payload, "Não foi possível adicionar o domínio na Vercel.");
     const alreadyExists = /already|exists|ja existe|já existe/i.test(message);
 
     return {
@@ -111,7 +111,7 @@ export async function addVercelProjectDomain(domain) {
     status: verified ? "ativo" : "pendente",
     verified,
     payload,
-    message: verified ? "Dominio adicionado e verificado na Vercel." : "Dominio adicionado na Vercel. Aguarde ou configure o DNS para verificar.",
+    message: verified ? "Domínio adicionado e verificado na Vercel." : "Domínio adicionado na Vercel. Aguarde ou configure o DNS para verificar.",
   };
 }
 
@@ -158,7 +158,7 @@ export async function getVercelProjectDomain(domain) {
       status: "inativo",
       verified: false,
       payload,
-      message: "Dominio nao esta mais vinculado ao projeto na Vercel.",
+      message: "Domínio não está mais vinculado ao projeto na Vercel.",
     };
   }
 
@@ -170,7 +170,7 @@ export async function getVercelProjectDomain(domain) {
       status: "erro",
       verified: false,
       payload,
-      message: responseMessage(payload, "Nao foi possivel consultar o dominio na Vercel."),
+      message: responseMessage(payload, "Não foi possível consultar o domínio na Vercel."),
     };
   }
 
@@ -219,7 +219,7 @@ export async function removeVercelProjectDomain(domain) {
     return {
       configured: true,
       ok: true,
-      message: "Dominio ja nao estava vinculado ao projeto na Vercel.",
+      message: "Domínio já não estava vinculado ao projeto na Vercel.",
     };
   }
 
@@ -229,6 +229,6 @@ export async function removeVercelProjectDomain(domain) {
     configured: true,
     ok: response.ok,
     payload,
-    message: response.ok ? "Dominio removido da Vercel." : responseMessage(payload, "Nao foi possivel remover o dominio na Vercel."),
+    message: response.ok ? "Domínio removido da Vercel." : responseMessage(payload, "Não foi possível remover o domínio na Vercel."),
   };
 }
