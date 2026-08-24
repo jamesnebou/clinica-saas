@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { decryptClinicSecrets } from "@/lib/security/clinic-secrets";
+import { notifyPublicBookingPaymentConfirmedById } from "@/lib/notifications/booking";
 
 export const runtime = "nodejs";
 
@@ -88,7 +89,7 @@ async function updatePublicBookingPayment({ payment, payload, event, paymentStat
 
   let query = supabaseAdmin
     .from("site_agendamentos_publicos")
-    .select("id, clinica_id, agendamento_id, valor_sinal")
+    .select("id, clinica_id, agendamento_id, valor_sinal, pagamento_status")
     .limit(1);
 
   if (paymentId) {
@@ -133,6 +134,12 @@ async function updatePublicBookingPayment({ payment, payload, event, paymentStat
       .eq("id", booking.agendamento_id);
 
     if (agendaError) throw agendaError;
+  }
+
+  if (paymentStatus === "pago" && booking.pagamento_status !== "pago") {
+    await notifyPublicBookingPaymentConfirmedById(booking.id).catch((notificationError) => {
+      console.error("Erro ao enviar confirmação de pagamento do Asaas:", notificationError);
+    });
   }
 
   return true;

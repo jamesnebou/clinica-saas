@@ -10,7 +10,7 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 import { uploadClientPhoto, uploadClinicLogo, uploadClinicSiteImage, uploadProcedureImage, uploadProductImage } from "@/lib/supabase/storage";
 import { assertClinicLimit, assertClinicOperational } from "@/lib/saas/plans";
 import { ensureVercelProjectDomain, getVercelProjectDomain, normalizeCustomDomain, removeVercelProjectDomain } from "@/lib/vercel/domains";
-import { sendWhatsAppIntegrationTest } from "@/lib/notifications/booking";
+import { notifyPublicBookingPaymentConfirmedById, sendEmailIntegrationTest, sendWhatsAppIntegrationTest } from "@/lib/notifications/booking";
 import {
   buildScheduleFromForm,
   clinicDateTimeValue,
@@ -924,6 +924,15 @@ export async function updateAgendamentoFinanceiroAction(formData) {
   const formaPagamento = status === "cancelado" ? null : nullableText(formData, "forma_pagamento");
   const dataPagamento = status === "cancelado" ? null : nullableText(formData, "data_pagamento") || (status === "pago" ? new Date().toISOString() : null);
 
+  const { data: publicBookingBefore, error: publicBookingError } = await supabaseAdmin
+    .from("site_agendamentos_publicos")
+    .select("id, valor_sinal, pagamento_status")
+    .eq("clinica_id", clinicaId)
+    .eq("agendamento_id", agendamentoId)
+    .maybeSingle();
+
+  if (publicBookingError) throw publicBookingError;
+
   const { error: agendaError } = await supabase
     .from("agendamentos")
     .update({
@@ -967,6 +976,24 @@ export async function updateAgendamentoFinanceiroAction(formData) {
 
   const { error: pagamentoError } = await query;
   if (pagamentoError) throw pagamentoError;
+
+  const signalValue = Number(publicBookingBefore?.valor_sinal || 0);
+  const paymentConfirmsBooking = status === "pago"
+    || (status === "parcial" && signalValue > 0 && valorPago >= signalValue);
+
+  if (publicBookingBefore?.id && publicBookingBefore.pagamento_status !== "pago" && paymentConfirmsBooking) {
+    const { error: publicPaymentError } = await supabaseAdmin
+      .from("site_agendamentos_publicos")
+      .update({ pagamento_status: "pago" })
+      .eq("id", publicBookingBefore.id)
+      .eq("clinica_id", clinicaId);
+
+    if (publicPaymentError) throw publicPaymentError;
+
+    await notifyPublicBookingPaymentConfirmedById(publicBookingBefore.id).catch((notificationError) => {
+      console.error("Erro ao enviar confirmação de pagamento manual:", notificationError);
+    });
+  }
 
   revalidatePath("/dashboard/agenda");
   revalidatePath("/dashboard/financeiro");
@@ -1520,7 +1547,6 @@ export async function updateClinicSettingsAction(formData) {
       clinica_id: clinicaId,
       email_ativo: formData.get("email_ativo") === "on",
       email_destino: nullableText(formData, "email_destino"),
-      email_remetente: nullableText(formData, "email_remetente"),
       whatsapp_ativo: formData.get("whatsapp_ativo") === "on",
       whatsapp_provider: normalizeProvider(nullableText(formData, "whatsapp_provider")) || "zapi",
       whatsapp_numero_destino: nullableText(formData, "whatsapp_numero_destino"),
@@ -1755,6 +1781,27 @@ export async function testClinicWhatsappIntegrationAction() {
   }
 
   redirect("/dashboard/configuracoes?ok=whatsapp");
+}
+
+export async function testClinicEmailIntegrationAction() {
+  const { clinicaId, activeClinic, memberships } = await getScopedSupabase();
+  requireClinicManager(memberships, clinicaId, "/dashboard/configuracoes");
+
+  const { data: integration, error } = await supabaseAdmin
+    .from("clinica_integracoes")
+    .select("email_ativo, email_destino")
+    .eq("clinica_id", clinicaId)
+    .maybeSingle();
+
+  if (error) throw error;
+
+  try {
+    await sendEmailIntegrationTest({ clinic: activeClinic, integration });
+  } catch (emailError) {
+    redirectWithMessage("/dashboard/configuracoes", "email", emailError.message || "Não foi possível enviar o e-mail de teste.");
+  }
+
+  redirect("/dashboard/configuracoes?ok=email");
 }
 
 

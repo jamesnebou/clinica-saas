@@ -255,7 +255,7 @@ export function PublicBookingForm({ slug, procedimentos, profissionais, query, t
         </label>
         <label className="block">
           <span className="text-sm font-semibold text-white/75">E-mail</span>
-          <input name="email" type="email" className="mt-2 h-12 w-full rounded-2xl border border-white/10 bg-white/10 px-4 text-sm text-white outline-none" />
+          <input name="email" type="email" required autoComplete="email" className="mt-2 h-12 w-full rounded-2xl border border-white/10 bg-white/10 px-4 text-sm text-white outline-none" />
         </label>
         <label className="block">
           <span className="text-sm font-semibold text-white/75">CPF</span>

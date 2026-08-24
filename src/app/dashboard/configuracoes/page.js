@@ -1,7 +1,7 @@
 import { Clock, CreditCard, Mail, MessageCircle, Palette, Settings, ShieldCheck, UsersRound } from "lucide-react";
 import { requireClinicSection } from "@/lib/auth/session";
 import { EmptyClinicState, Field, PageHeader, SubmitButton, TextArea } from "@/components/app-shell/ui";
-import { connectClinicAsaasAction, connectClinicInfinitePayAction, disconnectClinicAsaasAction, disconnectClinicInfinitePayAction, removeClinicDomainAction, syncClinicDomainAction, testClinicWhatsappIntegrationAction, updateClinicAccountAction, updateClinicSettingsAction, updateClinicUserAction } from "../actions";
+import { connectClinicAsaasAction, connectClinicInfinitePayAction, disconnectClinicAsaasAction, disconnectClinicInfinitePayAction, removeClinicDomainAction, syncClinicDomainAction, testClinicEmailIntegrationAction, testClinicWhatsappIntegrationAction, updateClinicAccountAction, updateClinicSettingsAction, updateClinicUserAction } from "../actions";
 import { ConfigTabs } from "./config-tabs";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { normalizeSchedule } from "@/lib/clinic/schedule";
@@ -146,6 +146,7 @@ export default async function ConfiguracoesPage({ searchParams }) {
   const asaasConnected = Boolean(integration?.asaas_ativo && (integration?.asaas_segredos_criptografados || integration?.asaas_api_key));
   const infinitePayConnected = Boolean(integration?.infinitepay_ativo && integration?.infinitepay_handle);
   const paymentGateway = integration?.pagamento_gateway || (asaasConnected ? "asaas" : infinitePayConnected ? "infinitepay" : "");
+  const transactionalSender = process.env.RESEND_FROM_EMAIL || "Não configurado na Vercel";
   const { data: usuarios = [] } = await supabaseAdmin
     .from("usuarios_clinica")
     .select("id, nome, email, papel, ativo, permissoes, accepted_at, created_at")
@@ -158,6 +159,7 @@ export default async function ConfiguracoesPage({ searchParams }) {
         <PageHeader eyebrow="Clínica" title="Configurações da clínica" description="Ajuste dados comerciais, identidade visual, expediente, política de cancelamento e WhatsApp padrão." />
 
         {params?.ok === "configuracoes" ? <Notice>Configurações atualizadas com sucesso.</Notice> : null}
+        {params?.ok === "email" ? <Notice>E-mail de teste enviado para a clínica.</Notice> : null}
         {params?.ok === "whatsapp" ? <Notice>Mensagem de teste enviada pelo WhatsApp.</Notice> : null}
         {params?.ok === "infinitepay" ? <Notice>InfinitePay conectada e definida como gateway principal da clínica.</Notice> : null}
         {params?.ok === "infinitepay_desconectado" ? <Notice>InfinitePay desconectada desta clínica.</Notice> : null}
@@ -509,11 +511,26 @@ export default async function ConfiguracoesPage({ searchParams }) {
                 <div className="flex items-center gap-2"><Mail size={18} className="text-[var(--clinic-primary)]" /><strong>Notificação por e-mail</strong></div>
                 <label className="mt-3 inline-flex items-center gap-2 text-sm font-bold text-neutral-800">
                   <input type="checkbox" name="email_ativo" defaultChecked={Boolean(integration?.email_ativo)} />
-                  Enviar e-mail para novos agendamentos
+                  Enviar e-mails para a clínica e para o cliente da reserva
                 </label>
                 <div className="mt-4 grid gap-4 lg:grid-cols-2">
-                  <Field label="E-mail que recebe os avisos" name="email_destino" type="email" defaultValue={integration?.email_destino || activeClinic.email || ""} />
-                  <Field label="Remetente" name="email_remetente" defaultValue={integration?.email_remetente || ""} placeholder="Clínica <avisos@seudominio.com.br>" />
+                  <Field label="E-mail operacional da clínica" name="email_destino" type="email" defaultValue={integration?.email_destino || activeClinic.email || ""} />
+                  <div>
+                    <p className="text-sm font-medium text-neutral-700">Remetente verificado da NexaWi</p>
+                    <p className="mt-2 min-h-11 break-all rounded-lg border border-neutral-200 bg-white px-3 py-3 text-sm text-neutral-600">{transactionalSender}</p>
+                  </div>
+                </div>
+                <p className="mt-3 text-xs leading-5 text-neutral-500">As respostas do cliente serão direcionadas ao e-mail operacional da clínica. A chave Resend permanece protegida na NexaWi.</p>
+                <div className="mt-4 flex flex-wrap items-center gap-3">
+                  <button
+                    type="submit"
+                    formAction={testClinicEmailIntegrationAction}
+                    formNoValidate
+                    className="h-10 rounded-lg border border-[color-mix(in_srgb,var(--clinic-primary)_24%,#d4d4d4)] bg-white px-4 text-sm font-bold text-[var(--clinic-primary)] shadow-sm transition hover:bg-[color-mix(in_srgb,var(--clinic-accent)_8%,white)]"
+                  >
+                    Enviar e-mail de teste
+                  </button>
+                  <span className="text-xs leading-5 text-neutral-500">Salve as configurações antes de testar.</span>
                 </div>
               </div>
 

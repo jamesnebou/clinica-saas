@@ -103,8 +103,8 @@ export async function createPublicBookingAction(formData) {
   const dataHora = text(formData, "data_hora");
   const consentimento = formData.get("consentimento_lgpd") === "on";
 
-  if (!slug || !procedimentoId || !nome || !dataHora) {
-    publicRedirect(slug || "", { erro: "dados", mensagem: "Preencha os dados obrigatórios para agendar." });
+  if (!slug || !procedimentoId || !nome || !telefone || !email || !dataHora) {
+    publicRedirect(slug || "", { erro: "dados", mensagem: "Preencha nome, WhatsApp e e-mail para concluir o agendamento." });
   }
 
   if (!consentimento) {
@@ -316,7 +316,7 @@ export async function createPublicBookingAction(formData) {
       })),
       duracao_total_minutos: duracaoTotal,
     },
-  }).select("id, nome, telefone, email, data_hora, valor_total, valor_sinal").single();
+  }).select("id, nome, telefone, email, data_hora, valor_total, valor_sinal, pagamento_status, payload").single();
 
   if (publicError) throw publicError;
 

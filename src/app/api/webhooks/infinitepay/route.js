@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { checkInfinitePayPayment } from "@/lib/infinitepay/client";
+import { notifyPublicBookingPaymentConfirmedById } from "@/lib/notifications/booking";
 
 export const runtime = "nodejs";
 
@@ -120,6 +121,9 @@ async function updateBooking({ id, payload }) {
     .eq("id", booking.agendamento_id)
     .eq("clinica_id", booking.clinica_id);
   if (agendaError) throw agendaError;
+  await notifyPublicBookingPaymentConfirmedById(booking.id).catch((notificationError) => {
+    console.error("Erro ao enviar confirmação de pagamento da InfinitePay:", notificationError);
+  });
   return true;
 }
 
