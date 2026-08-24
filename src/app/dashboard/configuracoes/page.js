@@ -7,6 +7,7 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 import { normalizeSchedule } from "@/lib/clinic/schedule";
 import { ACCESS_SECTION_LABELS, ROLE_ACCESS } from "@/lib/auth/permissions";
 import { BioEditor } from "./bio-editor";
+import { SiteFaqEditor } from "./site-faq-editor";
 
 export const metadata = { title: "Configurações | Clínica SaaS" };
 export const dynamic = "force-dynamic";
@@ -305,6 +306,17 @@ export default async function ConfiguracoesPage({ searchParams }) {
               <div className="lg:col-span-2">
                 <BioEditor label="Bio/apresentação da profissional" name="site_bio_profissional" defaultValue={site.bio_profissional || ""} placeholder="Conte a história, especialidade, abordagem e autoridade da profissional." />
               </div>
+            </div>
+            <div className="mt-6 rounded-xl border border-[color-mix(in_srgb,var(--clinic-primary)_20%,#e5e5e5)] bg-white p-4 sm:p-5">
+              <label className="inline-flex items-center gap-2 text-sm font-bold text-neutral-800">
+                <input type="checkbox" name="site_faq_ativo" defaultChecked={site.faq_ativo !== false} />
+                Exibir perguntas frequentes no site
+              </label>
+              <div className="mt-4 grid gap-4 lg:grid-cols-2">
+                <Field label="Título do FAQ" name="site_faq_titulo" defaultValue={site.faq_titulo || ""} placeholder="Dúvidas frequentes" />
+                <Field label="Subtítulo do FAQ" name="site_faq_subtitulo" defaultValue={site.faq_subtitulo || ""} placeholder="Encontre respostas para as perguntas mais comuns." />
+              </div>
+              <SiteFaqEditor defaultItems={site.faq_items || []} />
             </div>
             {domains.length ? (
               <div className="mt-5 grid gap-2">

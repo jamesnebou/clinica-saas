@@ -48,6 +48,22 @@ function nullableText(formData, key) {
   return value || null;
 }
 
+function faqItemsFromForm(formData) {
+  try {
+    const parsed = JSON.parse(String(formData.get("site_faq_items") || "[]"));
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .map((item) => ({
+        pergunta: String(item?.pergunta || "").trim().slice(0, 180),
+        resposta: String(item?.resposta || "").trim().slice(0, 1200),
+      }))
+      .filter((item) => item.pergunta && item.resposta)
+      .slice(0, 20);
+  } catch {
+    return [];
+  }
+}
+
 function numberValue(formData, key, fallback = 0) {
   const value = Number(String(formData.get(key) || "").replace(",", "."));
   return Number.isFinite(value) ? value : fallback;
@@ -1453,6 +1469,10 @@ export async function updateClinicSettingsAction(formData) {
       google_reviews_ativo: formData.get("site_google_reviews_ativo") === "on",
       google_place_id: nullableText(formData, "site_google_place_id"),
       depoimentos,
+      faq_ativo: formData.get("site_faq_ativo") === "on",
+      faq_titulo: nullableText(formData, "site_faq_titulo"),
+      faq_subtitulo: nullableText(formData, "site_faq_subtitulo"),
+      faq_items: faqItemsFromForm(formData),
       campanha_ativa: formData.get("site_campanha_ativa") === "on",
       campanha_titulo: nullableText(formData, "site_campanha_titulo"),
       campanha_subtitulo: nullableText(formData, "site_campanha_subtitulo"),

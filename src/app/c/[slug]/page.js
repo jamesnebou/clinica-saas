@@ -1,5 +1,5 @@
 ﻿import { Fragment } from "react";
-import { CheckCircle2, Clock, CreditCard, MapPin, MessageCircle, Quote, ShieldCheck, Sparkles, Star } from "lucide-react";
+import { CheckCircle2, ChevronDown, Clock, CreditCard, MapPin, MessageCircle, Quote, ShieldCheck, Sparkles, Star } from "lucide-react";
 import { notFound } from "next/navigation";
 import { getGooglePlaceReviews } from "@/lib/google/places";
 import { supabaseAdmin } from "@/lib/supabase/admin";
@@ -295,6 +295,9 @@ export default async function PublicClinicPage({ params, searchParams }) {
     ? await getGooglePlaceReviews({ placeId: site.google_place_id, limit: 4 })
     : { reviews: [], rating: null, userRatingCount: null, googleMapsUri: null };
   const testimonials = googleReviews.reviews.length ? googleReviews.reviews : manualTestimonials;
+  const faqItems = Array.isArray(site.faq_items)
+    ? site.faq_items.filter((item) => String(item?.pergunta || "").trim() && String(item?.resposta || "").trim()).slice(0, 20)
+    : [];
   const googleReviewsUrl = site.google_reviews_url || googleReviews.googleMapsUri;
   const videoCtaUrl = String(site.video_cta_url || "").trim();
   const campaignCtaUrl = String(site.campanha_cta_url || "").trim();
@@ -472,6 +475,30 @@ export default async function PublicClinicPage({ params, searchParams }) {
         </section>
       ) : null}
 
+      {site.faq_ativo !== false && faqItems.length ? (
+        <section id="faq" className="public-section-warm px-5 py-24 sm:px-8">
+          <div className="mx-auto max-w-4xl">
+            <SectionHeading
+              eyebrow="FAQ"
+              title={site.faq_titulo || "Dúvidas frequentes"}
+              description={site.faq_subtitulo || "Encontre respostas para as perguntas mais comuns antes de reservar seu atendimento."}
+              center
+            />
+            <div className="mt-10 grid gap-3">
+              {faqItems.map((item, index) => (
+                <details key={`${item.pergunta}-${index}`} className="public-card-reveal public-reveal-up group rounded-[1.35rem] border border-white/75 bg-white/75 px-5 shadow-[0_16px_40px_rgba(23,19,15,0.07)] backdrop-blur sm:px-6">
+                  <summary className="flex min-h-20 cursor-pointer list-none items-center justify-between gap-5 py-5 text-left font-black text-neutral-950 marker:hidden">
+                    <span>{item.pergunta}</span>
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[color-mix(in_srgb,var(--clinic-primary)_10%,white)] text-[var(--clinic-primary)] transition duration-300 group-open:rotate-180"><ChevronDown size={18} /></span>
+                  </summary>
+                  <p className="whitespace-pre-line border-t border-neutral-200 pb-6 pt-5 text-sm leading-7 text-neutral-600">{item.resposta}</p>
+                </details>
+              ))}
+            </div>
+          </div>
+        </section>
+      ) : null}
+
       <section id="agendar" className="public-booking-section mx-auto grid max-w-7xl gap-8 px-5 py-24 sm:px-8 lg:grid-cols-[0.9fr_1.1fr]">
         <div className="public-card-reveal public-reveal-left public-hover-card rounded-[1.75rem] border border-white/70 bg-white/72 p-7 shadow-[0_20px_54px_rgba(20,18,15,0.09)] backdrop-blur">
           <SectionHeading eyebrow="Agendamento" title="Reserve seu horário" description="Escolha procedimento, profissional e horário. A disponibilidade é validada com a agenda real da clínica." />
@@ -525,6 +552,7 @@ export default async function PublicClinicPage({ params, searchParams }) {
               <a href="#servicos">Serviços</a>
               {lojinhaAtiva ? <a href="#loja">Lojinha</a> : null}
               <a href="#depoimentos">Depoimentos</a>
+              {site.faq_ativo !== false && faqItems.length ? <a href="#faq">Dúvidas frequentes</a> : null}
               <a href="#agendar">Agendamento</a>
               <a href="#localizacao">Localização</a>
               <a href="/termos">Termos de uso</a>

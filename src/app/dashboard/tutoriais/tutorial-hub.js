@@ -93,7 +93,7 @@ function TutorialCard({ tutorial, completed, onOpen, featured = false }) {
   );
 }
 
-function TutorialModal({ tutorial, completed, onClose, onToggleComplete }) {
+function TutorialModal({ tutorial, completed, nextTutorial, onClose, onNext, onToggleComplete }) {
   const info = videoInfo(tutorial.video_url);
   const steps = safeSteps(tutorial.passos);
 
@@ -129,7 +129,10 @@ function TutorialModal({ tutorial, completed, onClose, onToggleComplete }) {
               <div className="flex flex-wrap items-center gap-2 text-xs font-bold text-white/58"><span className="inline-flex items-center gap-1.5 rounded-full bg-white/[0.07] px-3 py-1.5"><Clock3 size={13} /> {tutorial.duracao_minutos} minutos</span>{completed ? <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-400/15 px-3 py-1.5 text-emerald-300"><CheckCircle2 size={13} /> Concluído</span> : null}</div>
               <h3 className="mt-5 text-2xl font-black tracking-tight">O que você vai aprender</h3>
               <p className="mt-3 whitespace-pre-line text-sm leading-7 text-white/68">{tutorial.descricao || tutorial.descricao_curta || "Acompanhe o vídeo e aplique o conteúdo diretamente na rotina da clínica."}</p>
-              <button type="button" onClick={() => onToggleComplete(tutorial.id)} className={`mt-6 inline-flex min-h-12 items-center justify-center gap-2 rounded-xl px-5 text-sm font-black transition ${completed ? "border border-emerald-400/35 bg-emerald-400/12 text-emerald-300" : "bg-[var(--clinic-primary)] text-white shadow-[0_18px_40px_color-mix(in_srgb,var(--clinic-primary)_32%,transparent)] hover:brightness-110"}`}><CheckCircle2 size={18} /> {completed ? "Marcar como não concluído" : "Marcar como concluído"}</button>
+              <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+                <button type="button" onClick={() => onToggleComplete(tutorial.id)} className={`inline-flex min-h-12 items-center justify-center gap-2 rounded-xl px-5 text-sm font-black transition ${completed ? "border border-emerald-400/35 bg-emerald-400/12 text-emerald-300" : "bg-[var(--clinic-primary)] text-white shadow-[0_18px_40px_color-mix(in_srgb,var(--clinic-primary)_32%,transparent)] hover:brightness-110"}`}><CheckCircle2 size={18} /> {completed ? "Marcar como não concluído" : "Marcar como concluído"}</button>
+                {nextTutorial ? <button type="button" onClick={onNext} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-white/15 bg-white/[0.08] px-5 text-sm font-black text-white transition hover:border-[var(--clinic-accent)] hover:bg-white/[0.14]"><Play size={17} /> Assistir próximo <ArrowRight size={17} /></button> : null}
+              </div>
             </div>
 
             <div className="rounded-[1.5rem] border border-white/10 bg-white/[0.05] p-5">
@@ -173,6 +176,8 @@ export function TutorialHub({ tutorials, brandName }) {
 
   const completedCount = tutorials.filter((item) => completedIds.includes(item.id)).length;
   const progress = tutorials.length ? Math.round((completedCount / tutorials.length) * 100) : 0;
+  const selectedIndex = selected ? tutorials.findIndex((item) => item.id === selected.id) : -1;
+  const nextTutorial = selectedIndex >= 0 && selectedIndex < tutorials.length - 1 ? tutorials[selectedIndex + 1] : null;
 
   function toggleComplete(id) {
     setCompletedIds((current) => {
@@ -218,7 +223,7 @@ export function TutorialHub({ tutorials, brandName }) {
         <section className="rounded-[1.75rem] border border-dashed border-neutral-300 bg-white/70 px-6 py-16 text-center shadow-sm backdrop-blur"><BookOpenCheck className="mx-auto text-[var(--clinic-primary)]" size={42} /><h2 className="mt-5 text-2xl font-black">A central de tutoriais está sendo preparada</h2><p className="mx-auto mt-3 max-w-xl text-sm leading-7 text-neutral-600">Em breve você encontrará aqui vídeos curtos para dominar todas as áreas do sistema.</p></section>
       )}
 
-      {selected ? <TutorialModal tutorial={selected} completed={completedIds.includes(selected.id)} onClose={() => setSelected(null)} onToggleComplete={toggleComplete} /> : null}
+      {selected ? <TutorialModal key={selected.id} tutorial={selected} completed={completedIds.includes(selected.id)} nextTutorial={nextTutorial} onClose={() => setSelected(null)} onNext={() => nextTutorial && setSelected(nextTutorial)} onToggleComplete={toggleComplete} /> : null}
     </div>
   );
 }
