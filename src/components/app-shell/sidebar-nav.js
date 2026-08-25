@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Bell, BookOpenCheck, CalendarDays, CreditCard, KanbanSquare, LayoutDashboard, Menu, ReceiptText, Scissors, ShoppingBag, PackageCheck, Settings, Stethoscope, UserCog, UsersRound, X } from "lucide-react";
+import { BarChart3, Bell, BookOpenCheck, CalendarDays, CreditCard, KanbanSquare, LayoutDashboard, Menu, ReceiptText, Scissors, ShoppingBag, PackageCheck, Settings, Stethoscope, UserCog, UsersRound, X } from "lucide-react";
 import { useState } from "react";
 
 const iconMap = {
   dashboard: LayoutDashboard,
+  bi: BarChart3,
   agenda: CalendarDays,
   notificacoes: Bell,
   clientes: UsersRound,

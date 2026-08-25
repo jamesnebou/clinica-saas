@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/session";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import { SEGMENT_OPTIONS } from "@/lib/segments/registry";
 
 function text(formData, key) {
   return String(formData.get(key) || "").trim();
@@ -28,6 +29,9 @@ export async function createClinicAction(_prevState, formData) {
 
   const nome = text(formData, "nome");
   const email = text(formData, "email") || user.email;
+  const validSegments = new Set(SEGMENT_OPTIONS.map((item) => item.slug));
+  const primarySegment = validSegments.has(text(formData, "segmento_principal")) ? text(formData, "segmento_principal") : "estetica";
+  const additionalSegments = [...new Set(formData.getAll("segmentos_adicionais").map(String).filter((slug) => validSegments.has(slug) && slug !== primarySegment))];
 
   if (!nome) {
     return { ok: false, message: "Informe o nome da clínica." };
@@ -82,7 +86,24 @@ export async function createClinicAction(_prevState, formData) {
     });
 
   if (membershipError) {
+    await supabaseAdmin.from("clinicas").delete().eq("id", clinica.id);
     return { ok: false, message: membershipError.message || "Clínica criada, mas não foi possível vincular usuário." };
+  }
+
+  const selectedSlugs = [primarySegment, ...additionalSegments];
+  const { data: segmentRows, error: segmentQueryError } = await supabaseAdmin
+    .from("segmentos")
+    .select("id, slug")
+    .in("slug", selectedSlugs);
+
+  if (!segmentQueryError && segmentRows?.length) {
+    const { error: segmentInsertError } = await supabaseAdmin.from("clinica_segmentos").insert(
+      segmentRows.map((segment) => ({ clinica_id: clinica.id, segmento_id: segment.id, principal: segment.slug === primarySegment })),
+    );
+    if (segmentInsertError) {
+      await supabaseAdmin.from("clinicas").delete().eq("id", clinica.id);
+      return { ok: false, message: "Não foi possível salvar os segmentos da clínica." };
+    }
   }
 
   revalidatePath("/dashboard");

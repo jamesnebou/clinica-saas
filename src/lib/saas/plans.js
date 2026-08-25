@@ -62,7 +62,7 @@ export function isInternalAdminEmail(email) {
 export async function getSystemPlans() {
   const { data, error } = await supabaseAdmin
     .from("planos_sistema")
-    .select("slug, nome, descricao, preco_mensal, limite_usuarios, limite_profissionais, limite_clientes, limite_agendamentos_mes, ativo, ordem")
+    .select("slug, nome, descricao, preco_mensal, limite_usuarios, limite_profissionais, limite_clientes, limite_agendamentos_mes, ativo, ordem, metadata")
     .eq("ativo", true)
     .order("ordem", { ascending: true });
 
@@ -78,7 +78,7 @@ export async function getClinicPlan(clinic) {
   const slug = clinic?.plano || "starter";
   const { data, error } = await supabaseAdmin
     .from("planos_sistema")
-    .select("slug, nome, descricao, preco_mensal, limite_usuarios, limite_profissionais, limite_clientes, limite_agendamentos_mes, ativo, ordem")
+    .select("slug, nome, descricao, preco_mensal, limite_usuarios, limite_profissionais, limite_clientes, limite_agendamentos_mes, ativo, ordem, metadata")
     .eq("slug", slug)
     .maybeSingle();
 

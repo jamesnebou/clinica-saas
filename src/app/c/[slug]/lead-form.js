@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { MessageCircle, X } from "lucide-react";
 import { createPublicLeadAction } from "./actions";
+import { AttributionFields } from "@/components/public-site/attribution-fields";
 
 export function PublicLeadForm({ slug, query }) {
   const [open, setOpen] = useState(Boolean(query?.lead || query?.lead_erro));
@@ -80,6 +81,7 @@ export function PublicLeadForm({ slug, query }) {
 
               <form action={createPublicLeadAction} className="mt-5 grid gap-3 sm:mt-7 sm:gap-4">
                 <input type="hidden" name="slug" value={slug} />
+                <AttributionFields />
                 <input name="nome" required aria-label="Nome completo" placeholder="Nome completo" className="h-12 w-full rounded-2xl border border-white/10 bg-white/10 px-4 text-sm text-white outline-none transition placeholder:text-white/42 focus:border-[var(--clinic-accent)] focus:bg-white/[0.14]" />
                 <div className="grid gap-3 sm:grid-cols-2 sm:gap-4">
                   <input name="telefone" required aria-label="Telefone" placeholder="Telefone" className="h-12 w-full rounded-2xl border border-white/10 bg-white/10 px-4 text-sm text-white outline-none transition placeholder:text-white/42 focus:border-[var(--clinic-accent)] focus:bg-white/[0.14]" />

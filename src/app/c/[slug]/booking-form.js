@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { createPublicBookingAction } from "./actions";
+import { AttributionFields } from "@/components/public-site/attribution-fields";
 
 function nextDate(timeZone) {
   const parts = Object.fromEntries(new Intl.DateTimeFormat("en", {
@@ -156,6 +157,7 @@ export function PublicBookingForm({ slug, procedimentos, profissionais, query, t
   return (
     <form action={createPublicBookingAction} className="rounded-[1.75rem] border border-white/70 bg-[#15120f] p-7 text-white shadow-[0_32px_90px_rgba(20,18,15,0.26)]">
       <input type="hidden" name="slug" value={slug} />
+      <AttributionFields />
       <input type="hidden" name="data_hora" value={selectedSlot} />
       <input type="hidden" name="data_agenda" value={date} />
       <input type="hidden" name="profissional_disponivel_id" value={selectedSlotProfessional} />

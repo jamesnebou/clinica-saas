@@ -2,6 +2,9 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { isInternalAdminEmail } from "@/lib/saas/plans";
 import { canAccessSection, getCurrentMembership } from "@/lib/auth/permissions";
+import { sectionHasCapability } from "@/lib/auth/permissions";
+import { getClinicCapabilities } from "@/lib/segments/service";
+import { getClinicPlan } from "@/lib/saas/plans";
 
 export function isInternalAdminUser(user) {
   return (
@@ -75,6 +78,13 @@ export async function requireClinicSection(section) {
   const membership = getCurrentMembership(context.memberships, activeClinic.id);
   if (!canAccessSection(membership?.papel, section, membership)) {
     redirect("/dashboard?erro=permissao");
+  }
+
+  const supabase = await createClient();
+  const plan = await getClinicPlan(activeClinic);
+  const capabilities = await getClinicCapabilities({ clinic: activeClinic, plan, client: supabase });
+  if (!sectionHasCapability(section, capabilities.effective)) {
+    redirect("/dashboard?erro=recurso_indisponivel");
   }
 
   return context;

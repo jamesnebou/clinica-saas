@@ -2,9 +2,11 @@ import { redirect } from "next/navigation";
 import { LogOut, Sparkles } from "lucide-react";
 import { requireClinic } from "@/lib/auth/session";
 import { signOutAction } from "@/app/login/actions";
-import { getClinicBillingState } from "@/lib/saas/plans";
+import { getClinicBillingState, getClinicPlan } from "@/lib/saas/plans";
 import { MobileSidebarMenu, SidebarNav } from "@/components/app-shell/sidebar-nav";
-import { canAccessSection, getCurrentMembership } from "@/lib/auth/permissions";
+import { canAccessSection, getCurrentMembership, sectionHasCapability } from "@/lib/auth/permissions";
+import { getClinicCapabilities } from "@/lib/segments/service";
+import { createClient } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { isDemoLoginEmail } from "@/lib/demo/demo-account";
 import { DemoSessionLifecycle } from "@/components/demo/demo-session-lifecycle";
@@ -35,6 +37,7 @@ export async function generateMetadata() {
 
 const navItems = [
   { href: "/dashboard", label: "Visão geral", icon: "dashboard", section: "dashboard" },
+  { href: "/dashboard/bi", label: "Inteligência / BI", icon: "bi", section: "bi" },
   { href: "/dashboard/agenda", label: "Agenda", icon: "agenda", section: "agenda" },
   { href: "/dashboard/notificacoes", label: "Notificações", icon: "notificacoes", section: "notificacoes" },
   { href: "/dashboard/clientes", label: "Clientes", icon: "clientes", section: "clientes" },
@@ -128,12 +131,15 @@ export default async function DashboardLayout({ children }) {
   const membership = getCurrentMembership(context.memberships, activeClinic.id);
   const role = membership?.papel || "recepcao";
   const isDemo = isDemoLoginEmail(user?.email);
-  const [openCharge, notificationCount] = await Promise.all([
+  const supabase = await createClient();
+  const [openCharge, notificationCount, plan] = await Promise.all([
     getOpenCharge(activeClinic),
     getNotificationBadgeCount(activeClinic),
+    getClinicPlan(activeClinic),
   ]);
+  const capabilities = await getClinicCapabilities({ clinic: activeClinic, plan, client: supabase });
   const allowedNavItems = navItems
-    .filter((item) => canAccessSection(role, item.section, membership))
+    .filter((item) => canAccessSection(role, item.section, membership) && sectionHasCapability(item.section, capabilities.effective))
     .map((item) => item.section === "notificacoes" && notificationCount > 0 ? { ...item, badge: notificationCount } : item);
 
   return (

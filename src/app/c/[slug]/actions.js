@@ -37,6 +37,38 @@ function normalizePhone(value) {
   return String(value || "").replace(/\D/g, "");
 }
 
+function attributionFromForm(formData) {
+  return {
+    source: nullableText(formData, "source"),
+    medium: nullableText(formData, "medium"),
+    campaign: nullableText(formData, "campaign"),
+    content: nullableText(formData, "content"),
+    term: nullableText(formData, "term"),
+    referrer: nullableText(formData, "referrer"),
+    landing_page: nullableText(formData, "landing_page"),
+  };
+}
+
+async function insertAttributedOpportunity(payload, attribution) {
+  const enriched = { ...payload, ...attribution, origem: attribution.source || payload.origem };
+  const { error } = await supabaseAdmin.from("crm_oportunidades").insert(enriched);
+  if (!error) return null;
+  if (!["42703", "PGRST204"].includes(error.code)) return error;
+  const { error: legacyError } = await supabaseAdmin.from("crm_oportunidades").insert(payload);
+  return legacyError;
+}
+
+async function recordPublicEvent({ clinicId, clienteId = null, eventName, attribution, metadata = {} }) {
+  const { error } = await supabaseAdmin.from("eventos_analiticos").insert({
+    clinica_id: clinicId,
+    contato_id: clienteId,
+    event_name: eventName,
+    ...attribution,
+    metadata,
+  });
+  if (error && !["42P01", "PGRST205"].includes(error.code)) console.error(`Erro ao registrar evento ${eventName}:`, error.message);
+}
+
 function publicRedirect(slug, params) {
   const query = new URLSearchParams(params).toString();
   redirect(`/c/${slug}${query ? `?${query}` : ""}#agendar`);
@@ -102,6 +134,7 @@ export async function createPublicBookingAction(formData) {
   const cpf = nullableText(formData, "cpf");
   const dataHora = text(formData, "data_hora");
   const consentimento = formData.get("consentimento_lgpd") === "on";
+  const attribution = attributionFromForm(formData);
 
   if (!slug || !procedimentoId || !nome || !telefone || !email || !dataHora) {
     publicRedirect(slug || "", { erro: "dados", mensagem: "Preencha nome, WhatsApp e e-mail para concluir o agendamento." });
@@ -320,7 +353,7 @@ export async function createPublicBookingAction(formData) {
 
   if (publicError) throw publicError;
 
-  await supabaseAdmin.from("crm_oportunidades").insert({
+  await insertAttributedOpportunity({
     clinica_id: clinic.id,
     cliente_id: clienteId,
     nome,
@@ -332,6 +365,14 @@ export async function createPublicBookingAction(formData) {
     proxima_acao_em: start.toISOString(),
     proxima_acao: `Atendimento agendado: ${procedimentosTexto}`,
     observacoes: invoiceUrl ? `Criado automaticamente pelo site público com checkout de sinal via ${paymentProvider === "infinitepay" ? "InfinitePay" : "Asaas"}. Procedimentos: ${procedimentosTexto}.` : `Criado automaticamente pelo site público. Procedimentos: ${procedimentosTexto}.`,
+  }, attribution);
+
+  await recordPublicEvent({
+    clinicId: clinic.id,
+    clienteId,
+    eventName: "booking_created",
+    attribution,
+    metadata: { agendamento_id: agendamento.id, valor_total: valorTotal, valor_sinal: valorSinal, gateway: paymentProvider, quantidade_procedimentos: procedimentos.length },
   });
 
   revalidatePath(`/c/${slug}`);
@@ -359,6 +400,7 @@ export async function createPublicLeadAction(formData) {
   const telefone = nullableText(formData, "telefone");
   const email = nullableText(formData, "email");
   const mensagem = nullableText(formData, "mensagem");
+  const attribution = attributionFromForm(formData);
 
   if (!slug || !nome || !telefone) {
     publicLeadRedirect(slug || "", { lead_erro: "dados", mensagem: "Informe nome completo e telefone para enviar sua solicitação." });
@@ -379,7 +421,7 @@ export async function createPublicLeadAction(formData) {
     publicLeadRedirect(slug, { lead_erro: "site", mensagem: "O site desta clínica ainda não está publicado." });
   }
 
-  const { error } = await supabaseAdmin.from("crm_oportunidades").insert({
+  const error = await insertAttributedOpportunity({
     clinica_id: clinic.id,
     nome,
     telefone,
@@ -388,11 +430,13 @@ export async function createPublicLeadAction(formData) {
     status: "lead",
     proxima_acao: "Responder solicitação enviada pelo site.",
     observacoes: mensagem || "Lead solicitou mais informações pelo site público.",
-  });
+  }, attribution);
 
   if (error) {
     publicLeadRedirect(slug, { lead_erro: "crm", mensagem: "Não foi possível enviar sua solicitação agora. Tente novamente." });
   }
+
+  await recordPublicEvent({ clinicId: clinic.id, eventName: "lead_created", attribution, metadata: { channel: "public_site_form" } });
 
   revalidatePath("/dashboard/crm");
   revalidatePath(`/c/${slug}`);

@@ -18,7 +18,7 @@ export default async function OnboardingPage() {
         <p className="text-xs font-bold uppercase tracking-[0.22em] text-emerald-700">Onboarding</p>
         <h1 className="mt-2 text-3xl font-semibold tracking-tight">Crie a primeira clínica</h1>
         <p className="mt-3 max-w-2xl text-sm leading-6 text-neutral-600">
-          Este fluxo substitui o bootstrap manual por SQL para novos clientes. O usuário logado será vinculado como owner da clínica.
+          Cadastre a operação, escolha o segmento principal e adicione especialidades complementares. O usuário logado será vinculado como owner da clínica.
         </p>
         <ClinicForm userEmail={user.email} />
       </section>

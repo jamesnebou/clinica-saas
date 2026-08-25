@@ -5,6 +5,7 @@ import { getGooglePlaceReviews } from "@/lib/google/places";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { PublicBookingForm } from "./booking-form";
 import { PublicLeadForm } from "./lead-form";
+import { PublicAnalyticsTracker } from "@/components/public-site/attribution-fields";
 import { PublicMobileMenu } from "./mobile-menu";
 import { PublicScrollEffects } from "./scroll-effects";
 import { PublicServicesSection } from "./services-section";
@@ -584,6 +585,7 @@ export default async function PublicClinicPage({ params, searchParams }) {
       ) : null}
 
       <PublicLeadForm slug={clinic.slug} query={query} />
+      <PublicAnalyticsTracker slug={clinic.slug} />
       <PublicMobileMenu lojinhaAtiva={lojinhaAtiva} />
     </main>
   );

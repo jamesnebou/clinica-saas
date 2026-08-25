@@ -21,13 +21,32 @@ export const ACCESS_SECTION_LABELS = [
   ["financeiro", "Financeiro"],
   ["assinatura", "Assinatura"],
   ["tutoriais", "Tutoriais"],
+  ["bi", "Inteligência / BI"],
+  ["marketing", "Marketing"],
+  ["automacoes", "Automações"],
+  ["integracoes", "Integrações"],
 ];
 
 export const ACCESS_SECTIONS = ACCESS_SECTION_LABELS.map(([section]) => section);
 
+export const SECTION_CAPABILITY = Object.freeze({
+  agenda: "agenda",
+  clientes: "clientes",
+  crm: "crm",
+  profissionais: "profissionais",
+  procedimentos: "procedimentos",
+  produtos: "ecommerce",
+  pedidos: "ecommerce",
+  financeiro: "financeiro",
+  bi: "bi",
+  marketing: "marketing",
+  automacoes: "automacoes",
+  integracoes: "integracoes",
+});
+
 export const ROLE_ACCESS = {
-  owner: ["dashboard", "agenda", "notificacoes", "clientes", "crm", "profissionais", "procedimentos", "produtos", "pedidos", "usuarios", "configuracoes", "financeiro", "assinatura", "tutoriais"],
-  admin: ["dashboard", "agenda", "notificacoes", "clientes", "crm", "profissionais", "procedimentos", "produtos", "pedidos", "usuarios", "configuracoes", "financeiro", "assinatura", "tutoriais"],
+  owner: ["dashboard", "agenda", "notificacoes", "clientes", "crm", "profissionais", "procedimentos", "produtos", "pedidos", "usuarios", "configuracoes", "financeiro", "assinatura", "tutoriais", "bi", "marketing", "automacoes", "integracoes"],
+  admin: ["dashboard", "agenda", "notificacoes", "clientes", "crm", "profissionais", "procedimentos", "produtos", "pedidos", "usuarios", "configuracoes", "financeiro", "assinatura", "tutoriais", "bi", "marketing", "automacoes", "integracoes"],
   recepcao: ["dashboard", "agenda", "notificacoes", "clientes", "crm", "profissionais", "procedimentos", "produtos", "pedidos", "tutoriais"],
   financeiro: ["dashboard", "notificacoes", "clientes", "crm", "pedidos", "financeiro", "assinatura", "tutoriais"],
   profissional: ["dashboard", "agenda", "notificacoes", "clientes", "crm", "procedimentos", "produtos", "tutoriais"],
@@ -43,6 +62,11 @@ export function getCustomAccessSections(membership) {
 
 export function canAccessSection(role, section, membership = null) {
   return canAccessByPolicy({ role, section, membership, validSections: ACCESS_SECTIONS, roleAccess: ROLE_ACCESS });
+}
+
+export function sectionHasCapability(section, capabilities) {
+  const required = SECTION_CAPABILITY[section];
+  return !required || Boolean(capabilities?.includes(required));
 }
 
 export function assertSectionAccess(role, section, membership = null) {
