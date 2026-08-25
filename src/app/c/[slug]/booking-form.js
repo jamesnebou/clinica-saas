@@ -268,6 +268,10 @@ export function PublicBookingForm({ slug, procedimentos, profissionais, query, t
         <input type="checkbox" name="consentimento_lgpd" required className="mt-1" />
         Aceito que meus dados sejam usados para contato, agendamento e atendimento, conforme política de privacidade da clínica.
       </label>
+      <label className="mt-3 flex items-start gap-3 text-sm text-white/70">
+        <input type="checkbox" name="whatsapp_transactional_opt_in" className="mt-1" />
+        Quero receber pelo WhatsApp atualizações transacionais deste agendamento, como reserva, pagamento, lembretes e alterações. Posso cancelar quando quiser.
+      </label>
       <button type="submit" disabled={!selectedSlot || loadingSlots} className="mt-6 w-full rounded-full bg-[var(--clinic-accent)] px-6 py-4 text-sm font-bold text-[#15120f] shadow-[0_18px_44px_color-mix(in_srgb,var(--clinic-accent)_26%,transparent)] disabled:cursor-not-allowed disabled:opacity-60">
         Confirmar e seguir para pagamento
       </button>

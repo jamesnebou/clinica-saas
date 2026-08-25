@@ -25,6 +25,7 @@ export const ACCESS_SECTION_LABELS = [
   ["marketing", "Marketing"],
   ["automacoes", "Automações"],
   ["integracoes", "Integrações"],
+  ["whatsapp", "WhatsApp"],
 ];
 
 export const ACCESS_SECTIONS = ACCESS_SECTION_LABELS.map(([section]) => section);
@@ -42,11 +43,12 @@ export const SECTION_CAPABILITY = Object.freeze({
   marketing: "marketing",
   automacoes: "automacoes",
   integracoes: "integracoes",
+  whatsapp: "whatsapp",
 });
 
 export const ROLE_ACCESS = {
-  owner: ["dashboard", "agenda", "notificacoes", "clientes", "crm", "profissionais", "procedimentos", "produtos", "pedidos", "usuarios", "configuracoes", "financeiro", "assinatura", "tutoriais", "bi", "marketing", "automacoes", "integracoes"],
-  admin: ["dashboard", "agenda", "notificacoes", "clientes", "crm", "profissionais", "procedimentos", "produtos", "pedidos", "usuarios", "configuracoes", "financeiro", "assinatura", "tutoriais", "bi", "marketing", "automacoes", "integracoes"],
+  owner: ["dashboard", "agenda", "notificacoes", "clientes", "crm", "profissionais", "procedimentos", "produtos", "pedidos", "usuarios", "configuracoes", "financeiro", "assinatura", "tutoriais", "bi", "marketing", "automacoes", "integracoes", "whatsapp"],
+  admin: ["dashboard", "agenda", "notificacoes", "clientes", "crm", "profissionais", "procedimentos", "produtos", "pedidos", "usuarios", "configuracoes", "financeiro", "assinatura", "tutoriais", "bi", "marketing", "automacoes", "integracoes", "whatsapp"],
   recepcao: ["dashboard", "agenda", "notificacoes", "clientes", "crm", "profissionais", "procedimentos", "produtos", "pedidos", "tutoriais"],
   financeiro: ["dashboard", "notificacoes", "clientes", "crm", "pedidos", "financeiro", "assinatura", "tutoriais"],
   profissional: ["dashboard", "agenda", "notificacoes", "clientes", "crm", "procedimentos", "produtos", "tutoriais"],

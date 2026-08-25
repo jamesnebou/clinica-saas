@@ -23,6 +23,7 @@ import { ACCESS_SECTIONS } from "@/lib/auth/permissions";
 import { decryptClinicSecrets, encryptClinicSecrets } from "@/lib/security/clinic-secrets";
 import { getAsaasBaseUrl, removeAsaasWebhook, upsertAsaasWebhook, validateAsaasConnection } from "@/lib/asaas/client";
 import { normalizeInfinitePayHandle } from "@/lib/infinitepay/client";
+import { emitDomainEvent } from "@/lib/whatsapp/events";
 
 async function getScopedSupabase() {
   const context = await requireClinic();
@@ -79,6 +80,16 @@ function nullableNumberValue(formData, key) {
 function requireValue(value, message) {
   if (!value) throw new Error(message);
   return value;
+}
+
+async function emitWhatsAppDomainEvent(input) {
+  await emitDomainEvent(input).catch((error) => {
+    console.error("whatsapp_domain_event_failed", {
+      clinicId: input.clinicId,
+      eventName: input.eventName,
+      code: error?.code || "unknown",
+    });
+  });
 }
 
 async function redirectLimitError({ clinic, resource, redirectTo }) {
@@ -667,12 +678,19 @@ export async function createAgendamentoAction(formData) {
     timeZone: clinicTimeZone(activeClinic),
   });
 
-  const { error } = await supabase.from("agendamentos").insert({
+  const { data: created, error } = await supabase.from("agendamentos").insert({
     ...payload,
     status: "agendado",
-  });
+  }).select("id").single();
 
   if (error) throw error;
+  await emitWhatsAppDomainEvent({
+    clinicId: clinicaId,
+    eventName: "booking.created",
+    aggregateId: created.id,
+    payload: { source: "dashboard" },
+    idempotencyKey: `booking.created:${created.id}:v1`,
+  });
   revalidatePath("/dashboard/agenda");
   revalidatePath("/dashboard");
   redirect(agendaRedirectUrl(formData, dateKeyInTimeZone(new Date(payload.inicio), clinicTimeZone(activeClinic))));
@@ -683,6 +701,13 @@ export async function updateAgendamentoAction(formData) {
   const id = requireValue(text(formData, "id"), "Agendamento não informado.");
   const payload = await buildAgendaPayload({ supabase, formData, clinicaId, activeClinic, userId: null });
   const status = requireValue(text(formData, "status"), "Status não informado.");
+  const { data: previous, error: previousError } = await supabase
+    .from("agendamentos")
+    .select("inicio,fim,status")
+    .eq("id", id)
+    .eq("clinica_id", clinicaId)
+    .single();
+  if (previousError) throw previousError;
 
   await assertHorarioDisponivel({
     supabase,
@@ -711,6 +736,24 @@ export async function updateAgendamentoAction(formData) {
     .eq("clinica_id", clinicaId);
 
   if (error) throw error;
+  if (previous.inicio !== payload.inicio || previous.fim !== payload.fim) {
+    await emitWhatsAppDomainEvent({
+      clinicId: clinicaId,
+      eventName: "booking.rescheduled",
+      aggregateId: id,
+      payload: { previous_start: previous.inicio, new_start: payload.inicio, source: "dashboard" },
+      idempotencyKey: `booking.rescheduled:${id}:${payload.inicio}`,
+    });
+  }
+  if (status === "cancelado" && previous.status !== "cancelado") {
+    await emitWhatsAppDomainEvent({
+      clinicId: clinicaId,
+      eventName: "booking.cancelled",
+      aggregateId: id,
+      payload: { source: "dashboard" },
+      idempotencyKey: `booking.cancelled:${id}:v1`,
+    });
+  }
   revalidatePath("/dashboard/agenda");
   revalidatePath("/dashboard");
   redirect(agendaRedirectUrl(formData, dateKeyInTimeZone(new Date(payload.inicio), clinicTimeZone(activeClinic))));
@@ -721,8 +764,19 @@ export async function updateAgendamentoStatusAction(formData) {
   const id = requireValue(text(formData, "id"), "Agendamento não informado.");
   const status = requireValue(text(formData, "status"), "Status não informado.");
 
+  const { data: previous, error: previousError } = await supabase.from("agendamentos").select("status").eq("id", id).eq("clinica_id", clinicaId).single();
+  if (previousError) throw previousError;
   const { error } = await supabase.from("agendamentos").update({ status }).eq("id", id).eq("clinica_id", clinicaId);
   if (error) throw error;
+  if (status === "cancelado" && previous.status !== "cancelado") {
+    await emitWhatsAppDomainEvent({
+      clinicId: clinicaId,
+      eventName: "booking.cancelled",
+      aggregateId: id,
+      payload: { source: "dashboard" },
+      idempotencyKey: `booking.cancelled:${id}:v1`,
+    });
+  }
   revalidatePath("/dashboard/agenda");
   revalidatePath("/dashboard");
   redirect(agendaRedirectUrl(formData));
@@ -992,6 +1046,13 @@ export async function updateAgendamentoFinanceiroAction(formData) {
 
     await notifyPublicBookingPaymentConfirmedById(publicBookingBefore.id).catch((notificationError) => {
       console.error("Erro ao enviar confirmação de pagamento manual:", notificationError);
+    });
+    await emitWhatsAppDomainEvent({
+      clinicId: clinicaId,
+      eventName: "payment.confirmed",
+      aggregateId: agendamentoId,
+      payload: { source: "dashboard", public_booking_id: publicBookingBefore.id },
+      idempotencyKey: `payment.confirmed:${agendamentoId}:manual:${dataPagamento || valorPago}`,
     });
   }
 

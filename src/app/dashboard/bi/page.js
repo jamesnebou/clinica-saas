@@ -5,7 +5,7 @@ import { EmptyClinicState, Notice, PageHeader } from "@/components/app-shell/ui"
 import { requireClinicSection } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { resolveBIPeriod } from "@/lib/bi/periods";
-import { getBIData, getBIFilterOptions } from "@/lib/bi/service";
+import { getBIData, getBIFilterOptions, getWhatsAppBI } from "@/lib/bi/service";
 import { getClinicTerminology } from "@/lib/segments/service";
 import { createBIGoalAction, deleteBIGoalAction } from "./actions";
 import { getCurrentMembership } from "@/lib/auth/permissions";
@@ -49,10 +49,11 @@ export default async function BIPage({ searchParams }) {
   const supabase = await createClient();
   const membership = getCurrentMembership(clinicContext.memberships, activeClinic.id);
   const canManageGoals = ["owner", "admin"].includes(membership?.papel);
-  const [biResult, options, terminology] = await Promise.all([
+  const [biResult, options, terminology, whatsappBI] = await Promise.all([
     getBIData({ supabase, clinic: activeClinic, period, filters }),
     getBIFilterOptions({ supabase, clinicId: activeClinic.id }),
     getClinicTerminology(activeClinic.id, supabase),
+    getWhatsAppBI({ supabase, clinicId: activeClinic.id, period }),
   ]);
 
   const exportParams = new URLSearchParams();
@@ -85,6 +86,7 @@ export default async function BIPage({ searchParams }) {
 
         {biResult.error ? <div className="mt-6"><Notice type="warning" title="BI aguardando ativação"><p>Não foi possível carregar as agregações. Aplique as migrations <strong>20260825100000</strong> e <strong>20260825103000</strong> no Supabase. Detalhe técnico: {biResult.error.message}</p></Notice></div> : <>
           <BIDashboard data={biResult.data} terminology={terminology} />
+          {whatsappBI.data ? <section className="premium-panel mt-6 rounded-lg p-5"><div><h2 className="text-lg font-black">WhatsApp transacional</h2><p className="mt-1 text-sm text-neutral-500">Entrega oficial e interações no período selecionado.</p></div><div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-6">{[["Enviadas",whatsappBI.data.enviadas],["Entregues",whatsappBI.data.entregues],["Lidas",whatsappBI.data.lidas],["Falhas",whatsappBI.data.falhas],["Recebidas",whatsappBI.data.recebidas],["Cliques em pagamento",whatsappBI.data.cliques_pagamento]].map(([label,total]) => <div key={label} className="rounded-lg border border-neutral-200 bg-white p-4"><p className="text-xs font-bold text-neutral-500">{label}</p><p className="mt-2 text-2xl font-black">{total}</p></div>)}</div></section> : null}
           <section className="premium-panel mt-6 rounded-lg p-5">
             <div><h2 className="text-lg font-black">Metas da clínica</h2><p className="mt-1 text-sm text-neutral-500">Defina objetivos por período. A meta fica isolada por clínica e pode ser associada a um profissional.</p></div>
             <div className="mt-5 grid gap-3 lg:grid-cols-2">{(biResult.data.metas || []).map((goal) => {

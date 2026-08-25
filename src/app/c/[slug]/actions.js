@@ -11,6 +11,7 @@ import { notifyClinicPublicBooking } from "@/lib/notifications/booking";
 import { clinicTimeZone, dateFromClinicLocal, isWithinWorkingPeriods } from "@/lib/clinic/schedule";
 import { totalAppointmentMinutes } from "@/lib/domain/schedule-core.mjs";
 import { decryptClinicSecrets } from "@/lib/security/clinic-secrets";
+import { emitDomainEvent, upsertTransactionalConsent } from "@/lib/whatsapp/events";
 
 function text(formData, key) {
   return String(formData.get(key) || "").trim();
@@ -134,6 +135,7 @@ export async function createPublicBookingAction(formData) {
   const cpf = nullableText(formData, "cpf");
   const dataHora = text(formData, "data_hora");
   const consentimento = formData.get("consentimento_lgpd") === "on";
+  const whatsappTransactionalOptIn = formData.get("whatsapp_transactional_opt_in") === "on";
   const attribution = attributionFromForm(formData);
 
   if (!slug || !procedimentoId || !nome || !telefone || !email || !dataHora) {
@@ -243,6 +245,18 @@ export async function createPublicBookingAction(formData) {
 
     if (clienteError) throw clienteError;
     clienteId = cliente.id;
+  }
+
+  if (whatsappTransactionalOptIn) {
+    await upsertTransactionalConsent({
+      clinicId: clinic.id,
+      clientId: clienteId,
+      phone: telefone,
+      accepted: true,
+      source: "public_booking",
+    }).catch((error) => {
+      console.error("whatsapp_consent_registration_failed", { clinicId: clinic.id, code: error?.code || "unknown" });
+    });
   }
 
   const valorTotal = Number(procedimentos.reduce((total, item) => total + Number(item.preco_promocional ?? item.preco ?? 0), 0).toFixed(2));
@@ -374,6 +388,28 @@ export async function createPublicBookingAction(formData) {
     attribution,
     metadata: { agendamento_id: agendamento.id, valor_total: valorTotal, valor_sinal: valorSinal, gateway: paymentProvider, quantidade_procedimentos: procedimentos.length },
   });
+
+  await emitDomainEvent({
+    clinicId: clinic.id,
+    eventName: "booking.created",
+    aggregateId: agendamento.id,
+    payload: { source: "public_site", public_booking_id: publicBooking.id },
+    idempotencyKey: `booking.created:${agendamento.id}:v1`,
+  }).catch((error) => {
+    console.error("whatsapp_booking_event_failed", { clinicId: clinic.id, code: error?.code || "unknown" });
+  });
+
+  if (invoiceUrl) {
+    await emitDomainEvent({
+      clinicId: clinic.id,
+      eventName: "payment.pending",
+      aggregateId: agendamento.id,
+      payload: { source: paymentProvider, public_booking_id: publicBooking.id },
+      idempotencyKey: `payment.pending:${agendamento.id}:${paymentExternalId || publicBooking.id}`,
+    }).catch((error) => {
+      console.error("whatsapp_payment_pending_event_failed", { clinicId: clinic.id, code: error?.code || "unknown" });
+    });
+  }
 
   revalidatePath(`/c/${slug}`);
   revalidatePath("/dashboard");

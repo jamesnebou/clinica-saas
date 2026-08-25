@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { decryptClinicSecrets } from "@/lib/security/clinic-secrets";
 import { notifyPublicBookingPaymentConfirmedById } from "@/lib/notifications/booking";
+import { emitDomainEvent } from "@/lib/whatsapp/events";
 
 export const runtime = "nodejs";
 
@@ -139,6 +140,15 @@ async function updatePublicBookingPayment({ payment, payload, event, paymentStat
   if (paymentStatus === "pago" && booking.pagamento_status !== "pago") {
     await notifyPublicBookingPaymentConfirmedById(booking.id).catch((notificationError) => {
       console.error("Erro ao enviar confirmação de pagamento do Asaas:", notificationError);
+    });
+    await emitDomainEvent({
+      clinicId: booking.clinica_id,
+      eventName: "payment.confirmed",
+      aggregateId: booking.agendamento_id,
+      payload: { source: "asaas", public_booking_id: booking.id },
+      idempotencyKey: `payment.confirmed:${booking.agendamento_id}:asaas:${paymentId || event}`,
+    }).catch((eventError) => {
+      console.error("whatsapp_payment_confirmed_event_failed", { clinicId: booking.clinica_id, code: eventError?.code || "unknown" });
     });
   }
 

@@ -65,6 +65,28 @@ export async function getBIFilterOptions({ supabase, clinicId }) {
   };
 }
 
+export async function getWhatsAppBI({ supabase, clinicId, period }) {
+  const [messagesResult, clicksResult] = await Promise.all([
+    supabase.from("whatsapp_messages").select("status,direction").eq("clinica_id", clinicId).gte("created_at", period.current.start.toISOString()).lt("created_at", period.current.end.toISOString()).limit(10000),
+    supabase.from("eventos_analiticos").select("id", { count: "exact", head: true }).eq("clinica_id", clinicId).eq("event_name", "payment_link_clicked").gte("occurred_at", period.current.start.toISOString()).lt("occurred_at", period.current.end.toISOString()),
+  ]);
+  if (messagesResult.error && !["42P01", "PGRST205"].includes(messagesResult.error.code)) return { data: null, error: messagesResult.error };
+  const messages = messagesResult.data || [];
+  const outbound = messages.filter((item) => item.direction === "outbound");
+  const count = (status) => outbound.filter((item) => item.status === status).length;
+  return {
+    data: {
+      enviadas: outbound.length,
+      entregues: count("delivered") + count("read"),
+      lidas: count("read"),
+      falhas: count("failed"),
+      recebidas: messages.filter((item) => item.direction === "inbound").length,
+      cliques_pagamento: clicksResult.count || 0,
+    },
+    error: null,
+  };
+}
+
 export function serializeBIExport(data) {
   return {
     resumo: [

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { checkInfinitePayPayment } from "@/lib/infinitepay/client";
 import { notifyPublicBookingPaymentConfirmedById } from "@/lib/notifications/booking";
+import { emitDomainEvent } from "@/lib/whatsapp/events";
 
 export const runtime = "nodejs";
 
@@ -123,6 +124,15 @@ async function updateBooking({ id, payload }) {
   if (agendaError) throw agendaError;
   await notifyPublicBookingPaymentConfirmedById(booking.id).catch((notificationError) => {
     console.error("Erro ao enviar confirmação de pagamento da InfinitePay:", notificationError);
+  });
+  await emitDomainEvent({
+    clinicId: booking.clinica_id,
+    eventName: "payment.confirmed",
+    aggregateId: booking.agendamento_id,
+    payload: { source: "infinitepay", public_booking_id: booking.id },
+    idempotencyKey: `payment.confirmed:${booking.agendamento_id}:infinitepay:${verified.transactionNsu}`,
+  }).catch((eventError) => {
+    console.error("whatsapp_payment_confirmed_event_failed", { clinicId: booking.clinica_id, code: eventError?.code || "unknown" });
   });
   return true;
 }
