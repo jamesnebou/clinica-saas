@@ -8,6 +8,7 @@ import {
   syncCanonicalAppointmentPayment,
   syncCanonicalOrderPayment,
 } from "@/lib/finance/canonical";
+import { closeDirectSaleOpportunityFromBooking } from "@/lib/crm/payments";
 
 export const runtime = "nodejs";
 
@@ -95,7 +96,7 @@ async function updatePublicBookingPayment({ payment, payload, event, paymentStat
 
   let query = supabaseAdmin
     .from("site_agendamentos_publicos")
-    .select("id, clinica_id, cliente_id, profissional_id, procedimento_id, agendamento_id, valor_total, valor_sinal, pagamento_status")
+    .select("id, clinica_id, cliente_id, profissional_id, procedimento_id, agendamento_id, crm_oportunidade_id, valor_total, valor_sinal, pagamento_status")
     .limit(1);
 
   if (paymentId) {
@@ -166,6 +167,9 @@ async function updatePublicBookingPayment({ payment, payload, event, paymentStat
       idempotencyKey: `payment.confirmed:${booking.agendamento_id}:asaas:${paymentId || event}`,
     }).catch((eventError) => {
       console.error("whatsapp_payment_confirmed_event_failed", { clinicId: booking.clinica_id, code: eventError?.code || "unknown" });
+    });
+    await closeDirectSaleOpportunityFromBooking(booking).catch((crmError) => {
+      console.error("crm_direct_sale_close_failed", { clinicId: booking.clinica_id, code: crmError?.code || "unknown" });
     });
   }
 

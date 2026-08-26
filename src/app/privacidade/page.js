@@ -1,9 +1,9 @@
 ﻿import Link from "next/link";
 
-export const metadata = { title: "Política de Privacidade | Clínica SaaS" };
+export const metadata = { title: "Política de Privacidade | Sistema de Gestão para Clínicas" };
 
 const company = {
-  productName: "Clínica SaaS - NexaWi",
+  productName: "NexaWi Clínicas",
   legalName: "NexaWi",
   document: "54.954.915/0001-65",
   contactEmail: "contato@nexawi.com.br",
@@ -12,7 +12,7 @@ const company = {
 };
 
 const sections = [
-  ["Controlador e operador", `${company.productName} atua como plataforma de apoio operacional para clínicas de estética. A clínica contratante normalmente atua como controladora dos dados dos seus clientes, enquanto a plataforma pode atuar como operadora, conforme contrato e configuração do serviço.`],
+  ["Controlador e operador", `${company.productName} atua como plataforma de apoio operacional para clínicas. A clínica contratante normalmente atua como controladora dos dados dos seus clientes, enquanto a plataforma pode atuar como operadora, conforme contrato e configuração do serviço.`],
   ["Dados tratados", "Podemos tratar dados cadastrais da clínica, usuários autorizados, clientes, agendamentos, prontuário, anamnese, fotos de evolução, pagamentos, logs operacionais e registros de consentimento."],
   ["Dados sensíveis", "Dados de saúde, anamnese, alergias, contraindicações, fotos antes/depois e informações clínicas devem ser acessados apenas por usuários autorizados pela clínica e usados exclusivamente para atendimento, acompanhamento, obrigações legais e defesa de direitos."],
   ["Finalidade", "Os dados são utilizados para operar agenda, atendimento, relacionamento com clientes, controle financeiro, cumprimento de obrigações legais, suporte técnico, segurança e melhoria do serviço."],
@@ -33,8 +33,8 @@ export default function PrivacidadePage() {
 
         <section className="mt-8 rounded-lg border border-neutral-200 bg-neutral-50 p-4 text-sm leading-7 text-neutral-700">
           <h2 className="font-semibold text-neutral-950">Empresa responsável pelo produto</h2>
-          <p className="mt-2">Produto: {company.productName}</p>
-          <p>Razão social: {company.legalName}</p>
+          <p className="mt-2">Produto: Sistema de Gestão de clínicas - NexaWi</p>
+          <p>Empresa: NexaWi Clínicas</p>
           <p>CNPJ: {company.document}</p>
           <p>E-mail de privacidade: {company.contactEmail}</p>
           <p>E-mail comercial: {company.commercialEmail}</p>

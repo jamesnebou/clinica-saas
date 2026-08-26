@@ -11,7 +11,7 @@ const poppins = Poppins({
 export const metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || "https://clinicas.nexawi.com.br"),
   title: "NexaWi Clínicas",
-  description: "Sistema SaaS para gestão de clínicas de estética.",
+  description: "Sistema de gestão para clínicas.",
 };
 
 export default function RootLayout({ children }) {

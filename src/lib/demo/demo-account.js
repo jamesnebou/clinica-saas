@@ -1,6 +1,7 @@
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { ACCESS_SECTIONS } from "@/lib/auth/permissions";
 import { matchesDemoEmail, normalizeDemoEmail } from "@/lib/domain/demo-core.mjs";
+import { syncCanonicalAppointmentPayment } from "@/lib/finance/canonical";
 
 export const DEMO_EMAIL = String(process.env.DEMO_EMAIL || "demo@nexawi.com.br").toLowerCase();
 export const DEMO_PASSWORD = String(process.env.DEMO_PASSWORD || "demo1234");
@@ -308,8 +309,77 @@ async function seedDemoData(clinic, user) {
     created_by: user.id,
   }));
 
-  const { error: opportunityError } = await supabaseAdmin.from("crm_oportunidades").insert(opportunityPayload);
-  if (opportunityError) throw opportunityError;
+  const { data: demoPipelineId, error: pipelineError } = await supabaseAdmin.rpc("crm_ensure_default_pipeline", {
+    p_clinica_id: clinic.id,
+  });
+
+  if (pipelineError && ["42883", "PGRST202"].includes(pipelineError.code)) {
+    const { error: opportunityError } = await supabaseAdmin.from("crm_oportunidades").insert(opportunityPayload);
+    if (opportunityError) throw opportunityError;
+  } else {
+    if (pipelineError) throw pipelineError;
+    const { data: demoStages, error: stagesError } = await supabaseAdmin
+      .from("crm_pipeline_stages")
+      .select("id,semantic_key,tipo")
+      .eq("clinica_id", clinic.id)
+      .eq("pipeline_id", demoPipelineId);
+    if (stagesError) throw stagesError;
+    const stageBySemantic = new Map((demoStages || []).map((stage) => [stage.semantic_key, stage]));
+    const semanticByLegacy = {
+      lead: "new",
+      avaliacao_marcada: "evaluation_scheduled",
+      em_negociacao: "negotiation",
+      convertido: "won",
+      perdido: "lost",
+    };
+
+    for (const opportunity of opportunityPayload) {
+      const targetStage = stageBySemantic.get(semanticByLegacy[opportunity.status] || "new") || stageBySemantic.get("new");
+      const { data: created, error: createError } = await supabaseAdmin.rpc("crm_create_opportunity", {
+        p_clinica_id: clinic.id,
+        p_cliente_id: opportunity.cliente_id,
+        p_nome: opportunity.nome,
+        p_titulo: opportunity.proxima_acao || "Oportunidade demonstrativa",
+        p_telefone: opportunity.telefone,
+        p_email: opportunity.email,
+        p_origem: opportunity.origem,
+        p_valor: opportunity.valor_estimado,
+        p_pipeline_id: demoPipelineId,
+        p_stage_id: targetStage?.id || null,
+        p_procedimento_id: null,
+        p_responsavel_id: user.id,
+        p_temperatura: opportunity.valor_estimado >= 1000 ? "quente" : "morno",
+        p_score: opportunity.valor_estimado >= 1000 ? 80 : 55,
+        p_observacoes: opportunity.observacoes,
+        p_attribution: { source: opportunity.origem, campaign: "demo_comercial" },
+        p_identificador_externo: null,
+      });
+      if (createError) throw createError;
+      if (targetStage?.tipo === "won") {
+        const { error: moveError } = await supabaseAdmin.rpc("crm_move_opportunity", {
+          p_clinica_id: clinic.id,
+          p_opportunity_id: created.id,
+          p_stage_id: targetStage.id,
+          p_before_id: null,
+          p_after_id: null,
+          p_lost_reason_id: null,
+          p_closed_value: opportunity.valor_estimado,
+        });
+        if (moveError) throw moveError;
+      } else {
+        const { error: activityError } = await supabaseAdmin.rpc("crm_create_activity", {
+          p_clinica_id: clinic.id,
+          p_opportunity_id: created.id,
+          p_tipo: "follow_up",
+          p_titulo: opportunity.proxima_acao,
+          p_descricao: "Atividade fictícia para demonstrar o acompanhamento comercial.",
+          p_due_at: new Date(`${opportunity.proxima_acao_em}T13:00:00-03:00`).toISOString(),
+          p_owner_id: user.id,
+        });
+        if (activityError) throw activityError;
+      }
+    }
+  }
 
   const agendaSeed = [
     ["Mariana Costa", "Dra. Helena Martins", "Botox", -6, 9, "concluido", "pago", "pix", 890],
@@ -376,6 +446,67 @@ async function seedDemoData(clinic, user) {
     );
     if (paymentError) throw paymentError;
   }
+
+  await rebuildDemoFinance2(clinic.id);
+}
+
+async function rebuildDemoFinance2(clinicId) {
+  const transactionalTables = [
+    "finance_comissao_pagamento_itens", "finance_comissao_pagamentos", "finance_conciliacoes",
+    "finance_transferencias", "finance_movimentos", "finance_liquidacao_parcelas", "finance_comissoes",
+    "finance_competencias", "finance_liquidacoes",
+    "finance_recebivel_parcelas", "finance_pagavel_parcelas", "finance_recebiveis", "finance_pagaveis",
+    "finance_recorrencias", "finance_orcamentos",
+  ];
+  for (const table of transactionalTables) await safeDelete(table, clinicId);
+
+  const { data: paid, error } = await supabaseAdmin.from("agendamentos")
+    .select("id,cliente_id,profissional_id,procedimento_id,valor,valor_pago,forma_pagamento,data_pagamento")
+    .eq("clinica_id", clinicId).gt("valor_pago", 0);
+  if (error) throw error;
+  for (const appointment of paid || []) {
+    await syncCanonicalAppointmentPayment({
+      clinicId,
+      appointmentId: appointment.id,
+      value: Number(appointment.valor || 0),
+      paidValue: Number(appointment.valor_pago || 0),
+      clientId: appointment.cliente_id,
+      professionalId: appointment.profissional_id,
+      procedureId: appointment.procedimento_id,
+      description: "Atendimento demonstrativo",
+      provider: "demo",
+      providerReference: `demo:${appointment.id}`,
+      paidAt: appointment.data_pagamento || new Date().toISOString(),
+      paymentMethod: appointment.forma_pagamento || "pix",
+      metadata: { demo: true },
+    });
+  }
+}
+
+async function repairDemoCrm2(clinicId, userId) {
+  const { error: pipelineError } = await supabaseAdmin.rpc("crm_ensure_default_pipeline", { p_clinica_id: clinicId });
+  if (pipelineError && ["42883", "PGRST202"].includes(pipelineError.code)) return;
+  if (pipelineError) throw pipelineError;
+  const { data: opportunities, error } = await supabaseAdmin.from("crm_oportunidades")
+    .select("id,proxima_acao,proxima_acao_em")
+    .eq("clinica_id", clinicId);
+  if (error) throw error;
+  for (const opportunity of opportunities || []) {
+    const { count, error: countError } = await supabaseAdmin.from("crm_activities")
+      .select("id", { count: "exact", head: true })
+      .eq("clinica_id", clinicId).eq("opportunity_id", opportunity.id);
+    if (countError) throw countError;
+    if (Number(count || 0) > 0 || !opportunity.proxima_acao) continue;
+    const dueDate = opportunity.proxima_acao_em
+      ? new Date(`${opportunity.proxima_acao_em}T13:00:00-03:00`).toISOString()
+      : new Date(Date.now() + 86400000).toISOString();
+    const { error: activityError } = await supabaseAdmin.rpc("crm_create_activity", {
+      p_clinica_id: clinicId, p_opportunity_id: opportunity.id, p_tipo: "follow_up",
+      p_titulo: opportunity.proxima_acao, p_descricao: "Follow-up demonstrativo.",
+      p_due_at: dueDate, p_owner_id: userId,
+    });
+    if (activityError) throw activityError;
+  }
 }
 
 function isMissingSnapshotMigration(error) {
@@ -416,6 +547,8 @@ export async function resetDemoClinicData(userOverride = null) {
     const restored = await restoreDemoBaseline(clinic.id);
     if (restored) {
       await rebaseDemoTimeline(clinic.id);
+      await repairDemoCrm2(clinic.id, user.id);
+      await rebuildDemoFinance2(clinic.id);
       return clinic;
     }
   } catch (error) {
@@ -424,6 +557,11 @@ export async function resetDemoClinicData(userOverride = null) {
   }
 
   const tables = [
+    "crm_opportunity_tags",
+    "crm_opportunity_appointments",
+    "crm_activities",
+    "crm_opportunity_events",
+    "crm_saved_views",
     "site_agendamentos_publicos",
     "pagamentos_clinica",
     "cliente_pacotes",
@@ -433,6 +571,10 @@ export async function resetDemoClinicData(userOverride = null) {
     "cliente_consentimentos",
     "agendamentos",
     "crm_oportunidades",
+    "crm_tags",
+    "crm_lost_reasons",
+    "crm_pipeline_stages",
+    "crm_pipelines",
     "clientes",
     "profissionais",
     "procedimentos",

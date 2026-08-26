@@ -4,6 +4,7 @@ import { checkInfinitePayPayment } from "@/lib/infinitepay/client";
 import { notifyPublicBookingPaymentConfirmedById } from "@/lib/notifications/booking";
 import { emitDomainEvent } from "@/lib/whatsapp/events";
 import { syncCanonicalAppointmentPayment, syncCanonicalOrderPayment } from "@/lib/finance/canonical";
+import { closeDirectSaleOpportunityFromBooking } from "@/lib/crm/payments";
 
 export const runtime = "nodejs";
 
@@ -77,7 +78,7 @@ async function verifyPayment({ payload, clinicId, expectedCents }) {
 async function updateBooking({ id, payload }) {
   const { data: booking, error } = await supabaseAdmin
     .from("site_agendamentos_publicos")
-    .select("id, clinica_id, cliente_id, profissional_id, procedimento_id, agendamento_id, valor_total, valor_sinal, pagamento_status, payload")
+    .select("id, clinica_id, cliente_id, profissional_id, procedimento_id, agendamento_id, crm_oportunidade_id, valor_total, valor_sinal, pagamento_status, payload")
     .eq("agendamento_id", id)
     .maybeSingle();
   if (error) throw error;
@@ -138,6 +139,9 @@ async function updateBooking({ id, payload }) {
     idempotencyKey: `payment.confirmed:${booking.agendamento_id}:infinitepay:${verified.transactionNsu}`,
   }).catch((eventError) => {
     console.error("whatsapp_payment_confirmed_event_failed", { clinicId: booking.clinica_id, code: eventError?.code || "unknown" });
+  });
+  await closeDirectSaleOpportunityFromBooking(booking).catch((crmError) => {
+    console.error("crm_direct_sale_close_failed", { clinicId: booking.clinica_id, code: crmError?.code || "unknown" });
   });
   return true;
 }

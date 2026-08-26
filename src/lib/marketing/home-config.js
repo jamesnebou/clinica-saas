@@ -4,10 +4,10 @@ export const MARKETING_HOME_CONFIG_KEY = "marketing_home";
 
 export const defaultMarketingHome = {
   hero: {
-    eyebrow: "Gestão, vendas e atendimento para estética",
+    eyebrow: "Gestão, vendas e atendimento para clínicas",
     title: "A clínica organizada para vender antes, atender melhor e voltar a faturar depois.",
     subtitle:
-      "NexaWi Clínicas reúne agenda, CRM, prontuário, financeiro, site premium e checkout de sinal em uma operação simples para clínicas de estética.",
+      "NexaWi Clínicas reúne agenda, CRM, prontuário, financeiro, site premium e checkout de sinal em uma operação simples para clínicas.",
     primaryCtaLabel: "Solicitar demonstração",
     secondaryCtaLabel: "Ver como funciona",
     previewEyebrow: "Painel operacional",

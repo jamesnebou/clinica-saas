@@ -1,9 +1,9 @@
 ﻿import Link from "next/link";
 
-export const metadata = { title: "Termos de Uso | Clínica SaaS" };
+export const metadata = { title: "Termos de Uso | Sistema de Gestão para Clínicas" };
 
 const company = {
-  productName: "Clínica SaaS - NexaWi",
+  productName: "NexaWi Clínicas",
   legalName: "NexaWi",
   document: "54.954.915/0001-65",
   contactEmail: "contato@nexawi.com.br",
@@ -11,13 +11,13 @@ const company = {
 };
 
 const sections = [
-  ["Uso do sistema", `${company.productName} é uma plataforma SaaS para gestão de clínicas de estética, incluindo agenda, clientes, prontuário, anamnese, fotos antes/depois, financeiro, pacotes, usuários e indicadores operacionais.`],
+  ["Uso do sistema", `${company.productName} é uma plataforma SaaS para gestão de clínicas, incluindo agenda, clientes, prontuário, anamnese, fotos antes/depois, financeiro, pacotes, usuários e indicadores operacionais.`],
   ["Responsabilidade da clínica", "A clínica contratante é responsável pela veracidade dos dados inseridos, pela autorização dos seus usuários, pela definição de papéis de acesso e pela obtenção de consentimentos necessários de clientes e pacientes."],
   ["Prontuário, fotos e dados sensíveis", "Informações sensíveis, anamnese, fotos antes/depois e termos de consentimento devem ser coletados e armazenados pela clínica conforme a legislação aplicável. O sistema fornece controles técnicos, mas a avaliação clínica e a regularidade dos procedimentos são responsabilidade da clínica."],
   ["Acesso e segurança", "Cada usuário deve usar credenciais próprias. É proibido compartilhar senha, acessar dados sem autorização, exportar informações indevidamente ou utilizar o sistema para finalidade ilícita."],
   ["Planos e cobrança", "O uso pode estar sujeito a planos, limites, período de teste, cobrança recorrente, bloqueio por inadimplência e cancelamento conforme condições comerciais acordadas."],
   ["Disponibilidade", "A plataforma busca operar com estabilidade, mas pode passar por manutenções, indisponibilidades de terceiros, instabilidades de internet, falhas de provedores ou ajustes técnicos necessários à evolução do produto."],
-  ["Suporte e contato", `Canais oficiais: ${company.contactEmail} e ${company.whatsapp}. Substitua estes dados antes da publicação comercial.`],
+  ["Suporte e contato", `Canais oficiais: ${company.contactEmail} e ${company.whatsapp}. `],
 ];
 
 export default function TermosPage() {
@@ -31,8 +31,8 @@ export default function TermosPage() {
 
         <section className="mt-8 rounded-lg border border-neutral-200 bg-neutral-50 p-4 text-sm leading-7 text-neutral-700">
           <h2 className="font-semibold text-neutral-950">Empresa responsável pelo produto</h2>
-          <p className="mt-2">Produto: {company.productName}</p>
-          <p>Razão social: {company.legalName}</p>
+          <p className="mt-2">Produto: Sistema de Gestão de clínicas - NexaWi</p>
+          <p>Empresa: NexaWi Clínicas</p>
           <p>CNPJ: {company.document}</p>
           <p>E-mail: {company.contactEmail}</p>
           <p>WhatsApp comercial: {company.whatsapp}</p>

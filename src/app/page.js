@@ -160,8 +160,8 @@ function SectionTitle({ eyebrow, title, description, align = "left" }) {
 }
 
 export const metadata = {
-  title: "NexaWi Clínicas | SaaS para clínicas de estética",
-  description: "Sistema SaaS para clínicas de estética com agenda, site de vendas, CRM, prontuário, financeiro e checkout online.",
+  title: "NexaWi Clínicas | Sistema de Gestão para Clínicas",
+  description: "Sistema de gestão para clínicas com agenda, site de vendas, CRM, prontuário, financeiro e checkout online.",
 };
 
 export default async function Home() {
