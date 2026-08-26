@@ -3,10 +3,10 @@
 import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { DndContext, KeyboardSensor, PointerSensor, TouchSensor, closestCorners, useDroppable, useSensor, useSensors } from "@dnd-kit/core";
-import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Activity, CalendarClock, Check, ChevronRight, CircleDollarSign, Download, Flame, GripVertical, KanbanSquare, List, MessageCircle, Plus, Search, Settings2, Target, X } from "lucide-react";
-import { createCrmActivityAction, createCrmOpportunityAction, moveCrmOpportunityAction, updateCrmOpportunityAction } from "@/app/dashboard/crm/actions";
+import { completeCrmActivityAction, createCrmActivityAction, createCrmOpportunityAction, moveCrmOpportunityAction, setCrmOpportunityTagsAction, updateCrmOpportunityAction } from "@/app/dashboard/crm/actions";
 import { CRM_ACTIVITY_TYPES, CRM_ORIGINS, CRM_TEMPERATURES } from "@/lib/crm/core.mjs";
 
 const money = (value) => Number(value || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -75,7 +75,7 @@ function ModalShell({ title, children, onClose, wide = false }) {
   </div>;
 }
 
-function NewOpportunityModal({ pipelineId, stages, members, procedures, onClose }) {
+function NewOpportunityModal({ pipelineId, stages, members, procedures, tags, onClose }) {
   return <ModalShell title="Nova oportunidade" onClose={onClose} wide>
     <form action={createCrmOpportunityAction} className="mt-5 grid gap-4 sm:grid-cols-2">
       <input type="hidden" name="pipeline_id" value={pipelineId} />
@@ -91,6 +91,7 @@ function NewOpportunityModal({ pipelineId, stages, members, procedures, onClose 
       <Select label="Temperatura" name="temperatura" options={CRM_TEMPERATURES.map((item) => [item.value, item.label])} defaultValue="morno" />
       <label><span className="text-sm font-semibold">Score</span><input className="dashboard-field mt-2 h-11 w-full rounded-lg border border-neutral-200 px-3" name="score" type="number" min="0" max="100" defaultValue="50" /></label>
       <label className="sm:col-span-2"><span className="text-sm font-semibold">Observações</span><textarea className="dashboard-field mt-2 min-h-24 w-full rounded-lg border border-neutral-200 p-3" name="observacoes" /></label>
+      {tags.length ? <fieldset className="sm:col-span-2"><legend className="text-sm font-semibold">Etiquetas</legend><div className="mt-2 flex flex-wrap gap-2">{tags.map((tag) => <label key={tag.id} className="inline-flex items-center gap-2 rounded-full border border-neutral-200 px-3 py-2 text-xs font-bold"><input type="checkbox" name="tag_ids" value={tag.id} /><span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: tag.cor }} />{tag.nome}</label>)}</div></fieldset> : null}
       <div className="sm:col-span-2 flex justify-end gap-2"><button type="button" onClick={onClose} className="h-11 rounded-lg border border-neutral-300 px-4 font-bold">Cancelar</button><button className="h-11 rounded-lg bg-neutral-950 px-5 font-bold text-white">Criar oportunidade</button></div>
     </form>
   </ModalShell>;
@@ -100,11 +101,12 @@ function Select({ label, name, options, defaultValue = "", empty }) {
   return <label><span className="text-sm font-semibold">{label}</span><select className="dashboard-field mt-2 h-11 w-full rounded-lg border border-neutral-200 bg-white px-3" name={name} defaultValue={defaultValue}>{empty !== undefined ? <option value="">{empty}</option> : null}{options.map(([value, text]) => <option key={value} value={value}>{text}</option>)}</select></label>;
 }
 
-function OpportunityDrawer({ item, stages, members, procedures, activities, events, appointments, lostReasons, onClose, onMove }) {
+function OpportunityDrawer({ item, stages, members, procedures, activities, events, appointments, tags, opportunityTags, lostReasons, onClose, onMove }) {
   const stage = stages.find((entry) => entry.id === item.stage_id);
   const relatedActivities = activities.filter((entry) => entry.opportunity_id === item.id);
   const relatedEvents = events.filter((entry) => entry.opportunity_id === item.id);
   const relatedAppointments = appointments.filter((entry) => entry.opportunity_id === item.id);
+  const selectedTagIds = new Set(opportunityTags.filter((entry) => entry.opportunity_id === item.id).map((entry) => entry.tag_id));
   const [targetStage, setTargetStage] = useState(item.stage_id);
   const [lostReasonId, setLostReasonId] = useState(lostReasons[0]?.id || "");
   const target = stages.find((entry) => entry.id === targetStage);
@@ -123,10 +125,11 @@ function OpportunityDrawer({ item, stages, members, procedures, activities, even
         <label className="sm:col-span-2"><span className="text-sm font-semibold">Observações comerciais</span><textarea className="dashboard-field mt-2 min-h-24 w-full rounded-lg border border-neutral-200 p-3" name="observacoes" defaultValue={item.observacoes || ""} /></label>
         <button className="h-11 rounded-lg bg-neutral-950 px-5 font-bold text-white sm:col-span-2">Salvar alterações</button>
       </form>
+      {tags.length ? <section className="mt-7 rounded-lg border border-neutral-200 p-4"><h3 className="font-black">Etiquetas</h3><form action={setCrmOpportunityTagsAction} className="mt-3"><input type="hidden" name="opportunity_id" value={item.id} /><div className="flex flex-wrap gap-2">{tags.map((tag) => <label key={tag.id} className="inline-flex items-center gap-2 rounded-full border border-neutral-200 px-3 py-2 text-xs font-bold"><input type="checkbox" name="tag_ids" value={tag.id} defaultChecked={selectedTagIds.has(tag.id)} /><span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: tag.cor }} />{tag.nome}</label>)}</div><button className="mt-3 h-10 rounded-lg border border-neutral-300 px-4 text-sm font-bold">Salvar etiquetas</button></form></section> : null}
       <section className="mt-7 rounded-lg border border-neutral-200 p-4"><h3 className="font-black">Mover no funil</h3><div className="mt-3 grid gap-3 sm:grid-cols-2"><label><span className="text-sm font-semibold">Etapa de destino</span><select value={targetStage} onChange={(event) => setTargetStage(event.target.value)} className="dashboard-field mt-2 h-11 w-full rounded-lg border border-neutral-200 bg-white px-3">{stages.map((entry) => <option key={entry.id} value={entry.id}>{entry.nome}</option>)}</select></label><label className={target?.tipo === "lost" ? "block" : "hidden"}><span className="text-sm font-semibold">Motivo da perda</span><select value={lostReasonId} onChange={(event) => setLostReasonId(event.target.value)} className="dashboard-field mt-2 h-11 w-full rounded-lg border border-neutral-200 bg-white px-3">{lostReasons.map((reason) => <option key={reason.id} value={reason.id}>{reason.nome}</option>)}</select></label></div><button type="button" onClick={() => onMove(item.id, targetStage, target?.tipo === "lost" ? lostReasonId : null)} className="mt-3 h-11 w-full rounded-lg bg-[var(--clinic-primary)] px-4 font-bold text-white sm:w-auto">Mover oportunidade</button></section>
       <section className="mt-7"><h3 className="font-black">Nova atividade</h3><form action={createCrmActivityAction} className="mt-3 grid gap-3 sm:grid-cols-2"><input type="hidden" name="opportunity_id" value={item.id} /><Select label="Tipo" name="tipo" options={CRM_ACTIVITY_TYPES} defaultValue="follow_up" /><label><span className="text-sm font-semibold">Prazo</span><input className="dashboard-field mt-2 h-11 w-full rounded-lg border border-neutral-200 px-3" name="due_at" type="datetime-local" /></label><label className="sm:col-span-2"><span className="text-sm font-semibold">Título</span><input className="dashboard-field mt-2 h-11 w-full rounded-lg border border-neutral-200 px-3" name="titulo" required /></label><label className="sm:col-span-2"><span className="text-sm font-semibold">Descrição</span><textarea className="dashboard-field mt-2 min-h-20 w-full rounded-lg border border-neutral-200 p-3" name="descricao" /></label><button className="h-10 rounded-lg border border-neutral-300 px-4 font-bold sm:col-span-2">Adicionar atividade</button></form></section>
-      <section className="mt-7"><h3 className="font-black">Atividades</h3><div className="mt-3 space-y-2">{relatedActivities.length ? relatedActivities.map((activity) => <div key={activity.id} className="rounded-lg border border-neutral-200 p-3"><div className="flex justify-between gap-3"><strong className="text-sm">{activity.titulo}</strong><span className="text-xs text-neutral-500">{activity.status === "completed" ? "Concluída" : dateTime(activity.due_at)}</span></div><p className="mt-1 text-xs text-neutral-600">{activity.tipo} · {activity.descricao || "Sem descrição"}</p></div>) : <p className="text-sm text-neutral-500">Nenhuma atividade registrada.</p>}</div></section>
-      <section className="mt-7"><h3 className="font-black">Agendamentos vinculados</h3><div className="mt-3 space-y-2">{relatedAppointments.length ? relatedAppointments.map((link) => <div key={link.agendamento_id} className="rounded-lg border border-neutral-200 p-3 text-sm"><strong>{dateTime(link.agendamentos?.inicio)}</strong><p className="text-xs text-neutral-500">{link.agendamentos?.status} · {money(link.agendamentos?.valor)}</p></div>) : <p className="text-sm text-neutral-500">Nenhum agendamento vinculado.</p>}</div></section>
+      <section className="mt-7"><h3 className="font-black">Atividades</h3><div className="mt-3 space-y-2">{relatedActivities.length ? relatedActivities.map((activity) => <div key={activity.id} className="rounded-lg border border-neutral-200 p-3"><div className="flex justify-between gap-3"><strong className="text-sm">{activity.titulo}</strong><span className="text-xs text-neutral-500">{activity.status === "completed" ? "Concluída" : dateTime(activity.due_at)}</span></div><p className="mt-1 text-xs text-neutral-600">{activity.tipo} · {activity.descricao || "Sem descrição"}</p>{activity.status !== "completed" ? <form action={completeCrmActivityAction} className="mt-3"><input type="hidden" name="activity_id" value={activity.id} /><button className="inline-flex h-9 items-center gap-2 rounded-lg border border-neutral-200 px-3 text-xs font-bold"><Check size={14} /> Marcar como concluída</button></form> : null}</div>) : <p className="text-sm text-neutral-500">Nenhuma atividade registrada.</p>}</div></section>
+      <section className="mt-7"><div className="flex items-center justify-between gap-3"><h3 className="font-black">Agendamentos vinculados</h3><Link href={`/dashboard/agenda?cliente_id=${item.cliente_id || ""}&crm_oportunidade_id=${item.id}`} className="inline-flex h-9 items-center gap-2 rounded-lg border border-neutral-200 px-3 text-xs font-bold"><Plus size={14} /> Agendar</Link></div><div className="mt-3 space-y-2">{relatedAppointments.length ? relatedAppointments.map((link) => <div key={link.agendamento_id} className="rounded-lg border border-neutral-200 p-3 text-sm"><strong>{dateTime(link.agendamentos?.inicio)}</strong><p className="text-xs text-neutral-500">{link.agendamentos?.status} · {money(link.agendamentos?.valor)}</p></div>) : <p className="text-sm text-neutral-500">Nenhum agendamento vinculado.</p>}</div></section>
       <section className="mt-7 pb-10"><h3 className="font-black">Linha do tempo</h3><div className="mt-3 space-y-3 border-l border-neutral-200 pl-4">{relatedEvents.map((event) => <div key={event.id}><p className="text-sm font-bold">{event.event_type.replaceAll("_", " ")}</p><p className="text-xs text-neutral-500">{dateTime(event.occurred_at)}</p></div>)}</div></section>
     </aside>
   </div>;
@@ -155,6 +158,10 @@ export function CrmBoard({ workspace }) {
       && (!originFilter || item.origem === originFilter));
   }, [items, query, ownerFilter, temperatureFilter, originFilter]);
   const selected = items.find((item) => item.id === selectedId);
+  const exportParams = new URLSearchParams({ pipeline: workspace.selectedPipelineId });
+  if (ownerFilter) exportParams.set("responsavel", ownerFilter);
+  if (temperatureFilter) exportParams.set("temperatura", temperatureFilter);
+  if (originFilter) exportParams.set("origem", originFilter);
 
   function move(opportunityId, stageId, lostReasonId = null) {
     const before = items;
@@ -167,13 +174,48 @@ export function CrmBoard({ workspace }) {
   function onDragEnd({ active, over }) {
     if (!over) return;
     const target = over.data.current?.type === "stage" ? over.data.current.stageId : over.data.current?.stageId;
-    if (!target || target === active.data.current?.stageId) return;
+    const opportunityId = String(active.id);
+    const source = active.data.current?.stageId;
+    if (!target || (String(over.id) === opportunityId && target === source)) return;
     const stage = workspace.stages.find((entry) => entry.id === target);
     if (stage?.tipo === "lost") { setSelectedId(String(active.id)); setError("Abra a oportunidade e informe o motivo da perda."); return; }
-    move(String(active.id), target);
+    const moving = items.find((item) => item.id === opportunityId);
+    if (!moving) return;
+
+    const previous = items;
+    const targetItems = items.filter((item) => item.stage_id === target);
+    let ordered;
+    if (source === target) {
+      const fromIndex = targetItems.findIndex((item) => item.id === opportunityId);
+      const toIndex = targetItems.findIndex((item) => item.id === String(over.id));
+      if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) return;
+      ordered = arrayMove(targetItems, fromIndex, toIndex);
+    } else {
+      ordered = targetItems.filter((item) => item.id !== opportunityId);
+      const overIndex = over.data.current?.type === "opportunity" ? ordered.findIndex((item) => item.id === String(over.id)) : -1;
+      ordered.splice(overIndex >= 0 ? overIndex : ordered.length, 0, { ...moving, stage_id: target });
+    }
+
+    const normalized = ordered.map((item, index) => ({ ...item, stage_id: target, sort_order: (index + 1) * 1000 }));
+    const normalizedIds = new Set(normalized.map((item) => item.id));
+    const next = [...items.filter((item) => item.id !== opportunityId && !normalizedIds.has(item.id)), ...normalized];
+    const movedIndex = normalized.findIndex((item) => item.id === opportunityId);
+    const beforeId = normalized[movedIndex + 1]?.id || null;
+    const afterId = normalized[movedIndex - 1]?.id || null;
+
+    setError("");
+    setItems(next);
+    startTransition(async () => {
+      const result = await moveCrmOpportunityAction({ opportunityId, stageId: target, beforeId, afterId });
+      if (!result.ok) {
+        setItems(previous);
+        setError(result.error || "Não foi possível reordenar a oportunidade.");
+      }
+    });
   }
 
   return <>
+    {workspace.pipelines.length > 1 ? <nav className="mt-6 flex gap-2 overflow-x-auto pb-1" aria-label="Pipelines do CRM">{workspace.pipelines.map((pipeline) => <Link key={pipeline.id} href={`/dashboard/crm?pipeline=${pipeline.id}`} className={`shrink-0 rounded-full border px-4 py-2 text-xs font-black ${pipeline.id === workspace.selectedPipelineId ? "border-transparent bg-neutral-950 text-white" : "border-neutral-200 bg-white text-neutral-600"}`}>{pipeline.nome}{pipeline.padrao ? " · padrão" : ""}</Link>)}</nav> : null}
     <div className="mt-6 flex gap-3 overflow-x-auto pb-2">
       <Metric icon={Target} label="Em aberto" value={workspace.metrics.openCount} detail={money(workspace.metrics.pipelineValue)} />
       <Metric icon={CircleDollarSign} label="Valor ponderado" value={money(workspace.metrics.weightedValue)} detail="considerando probabilidade" />
@@ -183,9 +225,9 @@ export function CrmBoard({ workspace }) {
     <section className="premium-panel mt-5 rounded-lg p-4">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div className="relative min-w-0 flex-1 lg:max-w-md"><Search size={17} className="absolute left-3 top-3 text-neutral-400" /><input value={query} onChange={(event) => setQuery(event.target.value)} className="dashboard-field h-11 w-full rounded-lg border border-neutral-200 pl-10 pr-3" placeholder="Buscar contato, telefone ou oportunidade" /></div>
-        <div className="flex flex-wrap gap-2"><div className="inline-flex rounded-lg border border-neutral-200 bg-white p-1"><button onClick={() => setView("board")} className={`inline-flex h-9 items-center gap-2 rounded-md px-3 text-sm font-bold ${view === "board" ? "bg-neutral-950 text-white" : "text-neutral-600"}`}><KanbanSquare size={15} /> Kanban</button><button onClick={() => setView("list")} className={`inline-flex h-9 items-center gap-2 rounded-md px-3 text-sm font-bold ${view === "list" ? "bg-neutral-950 text-white" : "text-neutral-600"}`}><List size={15} /> Lista</button></div><Link href={`/dashboard/crm/export?pipeline=${workspace.selectedPipelineId}`} className="inline-flex h-11 items-center gap-2 rounded-lg border border-neutral-200 bg-white px-4 text-sm font-bold"><Download size={16} /> Exportar</Link><Link href="/dashboard/crm/configuracoes" className="inline-flex h-11 items-center gap-2 rounded-lg border border-neutral-200 bg-white px-4 text-sm font-bold"><Settings2 size={16} /> Configurar</Link><button onClick={() => setCreating(true)} className="inline-flex h-11 items-center gap-2 rounded-lg bg-[var(--clinic-primary)] px-4 text-sm font-bold text-white"><Plus size={16} /> Nova oportunidade</button></div>
+        <div className="flex flex-wrap gap-2"><div className="inline-flex rounded-lg border border-neutral-200 bg-white p-1"><button onClick={() => setView("board")} className={`inline-flex h-9 items-center gap-2 rounded-md px-3 text-sm font-bold ${view === "board" ? "bg-neutral-950 text-white" : "text-neutral-600"}`}><KanbanSquare size={15} /> Kanban</button><button onClick={() => setView("list")} className={`inline-flex h-9 items-center gap-2 rounded-md px-3 text-sm font-bold ${view === "list" ? "bg-neutral-950 text-white" : "text-neutral-600"}`}><List size={15} /> Lista</button></div><Link href={`/dashboard/crm/export?${exportParams.toString()}`} className="inline-flex h-11 items-center gap-2 rounded-lg border border-neutral-200 bg-white px-4 text-sm font-bold"><Download size={16} /> Exportar</Link><Link href="/dashboard/crm/configuracoes" className="inline-flex h-11 items-center gap-2 rounded-lg border border-neutral-200 bg-white px-4 text-sm font-bold"><Settings2 size={16} /> Configurar</Link><button onClick={() => setCreating(true)} className="inline-flex h-11 items-center gap-2 rounded-lg bg-[var(--clinic-primary)] px-4 text-sm font-bold text-white"><Plus size={16} /> Nova oportunidade</button></div>
       </div>
-      <div className="mt-3 grid gap-2 sm:grid-cols-3"><select value={ownerFilter} onChange={(event) => setOwnerFilter(event.target.value)} className="dashboard-field h-10 rounded-lg border border-neutral-200 bg-white px-3 text-sm"><option value="">Todos os responsáveis</option>{workspace.members.map((member) => <option key={member.user_id} value={member.user_id}>{member.nome || member.email}</option>)}</select><select value={temperatureFilter} onChange={(event) => setTemperatureFilter(event.target.value)} className="dashboard-field h-10 rounded-lg border border-neutral-200 bg-white px-3 text-sm"><option value="">Todas as temperaturas</option>{CRM_TEMPERATURES.map(([value,label]) => <option key={value} value={value}>{label}</option>)}</select><select value={originFilter} onChange={(event) => setOriginFilter(event.target.value)} className="dashboard-field h-10 rounded-lg border border-neutral-200 bg-white px-3 text-sm"><option value="">Todas as origens</option>{CRM_ORIGINS.map(([value,label]) => <option key={value} value={value}>{label}</option>)}</select></div>
+      <div className="mt-3 grid gap-2 sm:grid-cols-3"><select value={ownerFilter} onChange={(event) => setOwnerFilter(event.target.value)} className="dashboard-field h-10 rounded-lg border border-neutral-200 bg-white px-3 text-sm"><option value="">Todos os responsáveis</option>{workspace.members.map((member) => <option key={member.user_id} value={member.user_id}>{member.nome || member.email}</option>)}</select><select value={temperatureFilter} onChange={(event) => setTemperatureFilter(event.target.value)} className="dashboard-field h-10 rounded-lg border border-neutral-200 bg-white px-3 text-sm"><option value="">Todas as temperaturas</option>{CRM_TEMPERATURES.map(({ value, label }) => <option key={value} value={value}>{label}</option>)}</select><select value={originFilter} onChange={(event) => setOriginFilter(event.target.value)} className="dashboard-field h-10 rounded-lg border border-neutral-200 bg-white px-3 text-sm"><option value="">Todas as origens</option>{CRM_ORIGINS.map(([value,label]) => <option key={value} value={value}>{label}</option>)}</select></div>
       {error ? <p className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-800">{error}</p> : null}
     </section>
     {view === "board" ? <>
@@ -193,7 +235,7 @@ export function CrmBoard({ workspace }) {
       <div className="mt-4 lg:hidden">{workspace.stages.filter((stage) => stage.id === activeStage).map((stage) => <div key={stage.id} className="space-y-3">{filtered.filter((item) => item.stage_id === stage.id).map((item) => <OpportunityCard key={item.id} item={item} stage={stage} owner={workspace.members.find((member) => member.user_id === item.responsavel_id)} onOpen={setSelectedId} />)}</div>)}</div>
       <DndContext sensors={sensors} collisionDetection={closestCorners} onDragEnd={onDragEnd}><div className="mt-5 hidden w-full gap-3 overflow-x-auto pb-5 lg:flex">{workspace.stages.map((stage) => <StageColumn key={stage.id} stage={stage} items={filtered.filter((item) => item.stage_id === stage.id)} members={workspace.members} onOpen={setSelectedId} />)}</div></DndContext>
     </> : <div className="premium-panel mt-5 overflow-x-auto rounded-lg"><table className="min-w-[900px] w-full text-left text-sm"><thead className="border-b border-neutral-200 bg-neutral-50 text-xs uppercase text-neutral-500"><tr><th className="p-4">Oportunidade</th><th className="p-4">Contato</th><th className="p-4">Etapa</th><th className="p-4">Responsável</th><th className="p-4">Valor</th><th className="p-4">Próxima ação</th><th className="p-4"></th></tr></thead><tbody>{filtered.map((item) => <tr key={item.id} className="border-b border-neutral-100"><td className="p-4 font-black">{item.titulo}</td><td className="p-4">{item.nome}</td><td className="p-4">{workspace.stages.find((stage) => stage.id === item.stage_id)?.nome}</td><td className="p-4">{workspace.members.find((member) => member.user_id === item.responsavel_id)?.nome || "-"}</td><td className="p-4">{money(item.valor_estimado)}</td><td className="p-4">{dateTime(item.next_activity_at)}</td><td className="p-4"><button onClick={() => setSelectedId(item.id)} className="inline-flex items-center gap-1 font-bold text-[var(--clinic-primary)]">Abrir <ChevronRight size={15} /></button></td></tr>)}</tbody></table></div>}
-    {creating ? <NewOpportunityModal pipelineId={workspace.selectedPipelineId} stages={workspace.stages} members={workspace.members} procedures={workspace.procedures} onClose={() => setCreating(false)} /> : null}
-    {selected ? <OpportunityDrawer item={selected} stages={workspace.stages} members={workspace.members} procedures={workspace.procedures} activities={workspace.activities} events={workspace.events} appointments={workspace.appointments} lostReasons={workspace.lostReasons} onClose={() => setSelectedId(null)} onMove={move} /> : null}
+    {creating ? <NewOpportunityModal pipelineId={workspace.selectedPipelineId} stages={workspace.stages} members={workspace.members} procedures={workspace.procedures} tags={workspace.tags} onClose={() => setCreating(false)} /> : null}
+    {selected ? <OpportunityDrawer item={selected} stages={workspace.stages} members={workspace.members} procedures={workspace.procedures} activities={workspace.activities} events={workspace.events} appointments={workspace.appointments} tags={workspace.tags} opportunityTags={workspace.opportunityTags} lostReasons={workspace.lostReasons} onClose={() => setSelectedId(null)} onMove={move} /> : null}
   </>;
 }

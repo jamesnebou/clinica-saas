@@ -146,8 +146,14 @@ export default async function AdminConfiguracoesPage({ searchParams }) {
           <AdminInput label="Texto do topo" name="hero_eyebrow" defaultValue={hero.eyebrow} />
           <AdminTextarea label="Título principal" name="hero_title" defaultValue={hero.title} rows={3} />
           <AdminTextarea label="Subtítulo" name="hero_subtitle" defaultValue={hero.subtitle} rows={3} />
-          <AdminInput label="Texto do botão principal" name="hero_primary_cta_label" defaultValue={hero.primaryCtaLabel} />
-          <AdminInput label="Texto do botão secundário" name="hero_secondary_cta_label" defaultValue={hero.secondaryCtaLabel} />
+          <div className="grid gap-3 rounded-2xl border border-neutral-200 bg-neutral-50 p-4 sm:grid-cols-2">
+            <AdminInput label="Texto do botão principal" name="hero_primary_cta_label" defaultValue={hero.primaryCtaLabel} />
+            <AdminInput label="Destino do botão principal" name="hero_primary_cta_href" defaultValue={hero.primaryCtaHref} placeholder="#demo, /demo ou https://..." />
+          </div>
+          <div className="grid gap-3 rounded-2xl border border-neutral-200 bg-neutral-50 p-4 sm:grid-cols-2">
+            <AdminInput label="Texto do botão secundário" name="hero_secondary_cta_label" defaultValue={hero.secondaryCtaLabel} />
+            <AdminInput label="Destino do botão secundário" name="hero_secondary_cta_href" defaultValue={hero.secondaryCtaHref} placeholder="#produto, /demo ou https://..." />
+          </div>
           <div className="lg:col-span-2">
             <span className="text-sm font-bold text-neutral-700">Imagem real da demonstração</span>
             <div className="mt-2 grid gap-3 rounded-2xl border border-neutral-200 bg-neutral-50 p-4 lg:grid-cols-[1fr_1.2fr]">

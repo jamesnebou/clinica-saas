@@ -40,11 +40,53 @@ function withDerivedMetrics(data, clinic, period) {
   return data;
 }
 
+function crmStageMatchesFilter(stage, filter) {
+  if (!filter) return true;
+  if (filter === "convertido") return stage?.tipo === "won";
+  if (filter === "perdido") return stage?.tipo === "lost";
+  if (filter === "avaliacao_marcada") return stage?.semantic_key === "evaluation_scheduled";
+  if (filter === "em_negociacao") return stage?.semantic_key === "negotiation";
+  return stage?.tipo === "open";
+}
+
+function summarizeCrm2(rows, stages, crmStatus, origin) {
+  const stageMap = new Map(stages.map((stage) => [stage.id, stage]));
+  const scoped = rows.filter((item) => crmStageMatchesFilter(stageMap.get(item.stage_id), crmStatus)
+    && (!origin || item.origem === origin || item.source === origin));
+  const won = scoped.filter((item) => stageMap.get(item.stage_id)?.tipo === "won");
+  const lost = scoped.filter((item) => stageMap.get(item.stage_id)?.tipo === "lost");
+  const open = scoped.filter((item) => stageMap.get(item.stage_id)?.tipo === "open");
+  const closed = won.length + lost.length;
+  return {
+    oportunidades: scoped.length,
+    oportunidades_abertas: open.length,
+    oportunidades_ganhas: won.length,
+    oportunidades_perdidas: lost.length,
+    valor_pipeline: open.reduce((sum, item) => sum + Number(item.valor_estimado || 0), 0),
+    valor_ganho: won.reduce((sum, item) => sum + Number(item.valor_fechado ?? item.valor_estimado ?? 0), 0),
+    taxa_conversao: closed ? (won.length / closed) * 100 : 0,
+  };
+}
+
+function crmOpportunityQuery(supabase, clinicId, range, filters) {
+  let query = supabase.from("crm_oportunidades")
+    .select("id,stage_id,valor_estimado,valor_fechado,origem,source,medium,created_at")
+    .eq("clinica_id", clinicId)
+    .gte("created_at", range.start.toISOString())
+    .lt("created_at", range.end.toISOString())
+    .limit(10000);
+  if (filters.canal) query = query.eq("medium", filters.canal);
+  return query;
+}
+
 export async function getBIData({ supabase, clinic, period, filters = {} }) {
-  const [biResult, financeCurrent, financePrevious] = await Promise.all([
+  const [biResult, financeCurrent, financePrevious, crmStages, crmCurrent, crmPrevious] = await Promise.all([
     supabase.rpc("bi_resumo_clinica", buildBIRpcParams({ clinicId: clinic.id, period, filters })),
     supabase.rpc("finance_resumo_clinica", { p_clinica_id: clinic.id, p_inicio: period.current.startKey, p_fim: period.current.endKey }),
     supabase.rpc("finance_resumo_clinica", { p_clinica_id: clinic.id, p_inicio: period.previous.startKey, p_fim: period.previous.endKey }),
+    supabase.from("crm_pipeline_stages").select("id,tipo,semantic_key").eq("clinica_id", clinic.id).eq("ativo", true),
+    crmOpportunityQuery(supabase, clinic.id, period.current, filters),
+    crmOpportunityQuery(supabase, clinic.id, period.previous, filters),
   ]);
 
   const { data, error } = biResult;
@@ -58,6 +100,12 @@ export async function getBIData({ supabase, clinic, period, filters = {} }) {
   if (!financePrevious.error && financePrevious.data) {
     mergedData.anterior = { ...(mergedData.anterior || {}), recebido: Number(financePrevious.data.receber?.recebido || 0),
       pendente: Number(financePrevious.data.receber?.aberto || 0), financeiro: financePrevious.data };
+  }
+  if (!crmStages.error && !crmCurrent.error && !crmPrevious.error) {
+    const currentCrm = summarizeCrm2(crmCurrent.data || [], crmStages.data || [], filters.crmStatus, filters.origem);
+    const previousCrm = summarizeCrm2(crmPrevious.data || [], crmStages.data || [], filters.crmStatus, filters.origem);
+    mergedData.atual = { ...(mergedData.atual || {}), ...currentCrm, crm2: currentCrm };
+    mergedData.anterior = { ...(mergedData.anterior || {}), ...previousCrm, crm2: previousCrm };
   }
   return { data: withDerivedMetrics(mergedData, clinic, period), error: null };
 }

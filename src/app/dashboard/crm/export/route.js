@@ -17,6 +17,9 @@ export async function GET(request) {
 
   const { searchParams } = new URL(request.url);
   const pipelineId = String(searchParams.get("pipeline") || "");
+  const ownerId = String(searchParams.get("responsavel") || "");
+  const temperature = String(searchParams.get("temperatura") || "");
+  const origin = String(searchParams.get("origem") || "");
   const supabase = await createClient();
   let query = supabase.from("crm_oportunidades")
     .select("id,nome,titulo,telefone,email,origem,status,valor_estimado,valor_fechado,temperatura,score,responsavel_id,source,medium,campaign,created_at,last_activity_at,next_activity_at,won_at,lost_at,pipeline_id,stage_id")
@@ -24,6 +27,9 @@ export async function GET(request) {
     .order("created_at", { ascending: false })
     .limit(10000);
   if (pipelineId) query = query.eq("pipeline_id", pipelineId);
+  if (ownerId) query = query.eq("responsavel_id", ownerId);
+  if (temperature) query = query.eq("temperatura", temperature);
+  if (origin) query = query.eq("origem", origin);
   const [opportunitiesResult, pipelinesResult, stagesResult, membersResult] = await Promise.all([
     query,
     supabase.from("crm_pipelines").select("id,nome").eq("clinica_id", context.activeClinic.id),
@@ -49,7 +55,7 @@ export async function GET(request) {
     actor_id: context.user.id,
     acao: "crm.exportacao_csv",
     entidade_tipo: "crm_oportunidades",
-    metadata: { pipeline_id: pipelineId || null, quantidade: rows.length },
+    metadata: { pipeline_id: pipelineId || null, responsavel_id: ownerId || null, temperatura: temperature || null, origem: origin || null, quantidade: rows.length },
   });
   if (auditError) console.error("Erro ao auditar exportação do CRM:", auditError.message);
 

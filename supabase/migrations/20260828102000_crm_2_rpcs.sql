@@ -60,7 +60,7 @@ begin
     on conflict (idempotency_key) do nothing;
   insert into public.eventos_analiticos(clinica_id,actor_id,event_name,idempotency_key,metadata)
     values(p_clinica_id,auth.uid(),'crm_'||replace(p_event_type,'.','_'),v_key,coalesce(p_data,'{}'::jsonb))
-    on conflict (idempotency_key) do nothing;
+    on conflict (clinica_id,idempotency_key) where idempotency_key is not null do nothing;
   return v_id;
 end $$;
 

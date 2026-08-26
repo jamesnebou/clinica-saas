@@ -19,6 +19,7 @@ import {
   WalletCards,
 } from "lucide-react";
 import { getMarketingHomeConfig } from "@/lib/marketing/home-config";
+import { getSystemPlans } from "@/lib/saas/plans";
 import { ConversionTracker } from "@/components/marketing/conversion-tracker";
 import { LeadCaptureForm } from "@/components/marketing/lead-capture-form";
 import { PlanCta } from "@/components/marketing/plan-cta";
@@ -67,39 +68,13 @@ const workflow = [
 ];
 
 
-const plans = [
-  {
-    name: "Starter",
-    price: "R$ 97",
-    badge: "Entrada",
-    description: "Para clínicas em validação comercial.",
-    limits: "3 profissionais, 300 clientes e 500 agendamentos por mês.",
-    differentiator: "Ideal para sair da agenda manual e começar com site, CRM e financeiro.",
-  },
-  {
-    name: "Growth",
-    price: "R$ 197",
-    badge: "Mais vendido",
-    description: "Para clínicas com equipe e rotina ativa.",
-    limits: "10 profissionais, 2.000 clientes e 3.000 agendamentos por mês.",
-    differentiator: "Melhor equilíbrio para clínica que já vende, agenda e precisa controlar equipe.",
-    highlight: true,
-  },
-  {
-    name: "Premium",
-    price: "R$ 397",
-    badge: "Escala",
-    description: "Para operações maiores e redes locais.",
-    limits: "50 profissionais, 10.000 clientes e alto volume comercial.",
-    differentiator: "Para clínicas com múltiplas agendas, alto volume e operação comercial madura.",
-  },
-];
+const planPresentation = {
+  starter: { badge: "Entrada", differentiator: "Ideal para sair da agenda manual e começar com site, CRM e financeiro." },
+  growth: { badge: "Mais vendido", differentiator: "Melhor equilíbrio para clínica que já vende, agenda e precisa controlar equipe.", highlight: true },
+  premium: { badge: "Escala", differentiator: "Para clínicas com múltiplas agendas, alto volume e operação comercial madura." },
+};
 
-const comparisonRows = [
-  ["Usuários", "3", "8", "25"],
-  ["Profissionais", "3", "10", "50"],
-  ["Clientes cadastrados", "300", "2.000", "10.000"],
-  ["Agendamentos por mês", "500", "3.000", "15.000"],
+const comparisonFeatures = [
   ["Site premium da clínica", "Incluso", "Incluso", "Incluso"],
   ["CRM de leads e oportunidades", "Incluso", "Incluso", "Incluso"],
   ["Prontuário, termos e fotos", "Incluso", "Incluso", "Incluso"],
@@ -109,6 +84,30 @@ const comparisonRows = [
   ["Checkout de sinal", "Incluso", "Incluso", "Incluso"],
   ["Indicado para", "Começar", "Crescer", "Escalar"],
 ];
+
+function integer(value) {
+  return Number(value || 0).toLocaleString("pt-BR", { maximumFractionDigits: 0 });
+}
+
+function marketingPlans(systemPlans) {
+  return systemPlans.slice(0, 3).map((plan, index) => {
+    const presentation = planPresentation[plan.slug] || {};
+    return {
+      slug: plan.slug,
+      name: plan.nome,
+      price: Number(plan.preco_mensal || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL", minimumFractionDigits: 0, maximumFractionDigits: 2 }),
+      badge: plan.metadata?.marketing?.badge || presentation.badge || `Plano ${index + 1}`,
+      description: plan.descricao || "Plano comercial NexaWi Clínicas.",
+      limits: `${integer(plan.limite_profissionais)} profissionais, ${integer(plan.limite_clientes)} clientes e ${integer(plan.limite_agendamentos_mes)} agendamentos por mês.`,
+      differentiator: plan.metadata?.marketing?.differentiator || presentation.differentiator || "Recursos integrados para organizar e expandir a operação da clínica.",
+      highlight: plan.metadata?.marketing?.highlight ?? presentation.highlight ?? index === 1,
+      users: integer(plan.limite_usuarios),
+      professionals: integer(plan.limite_profissionais),
+      clients: integer(plan.limite_clientes),
+      appointments: integer(plan.limite_agendamentos_mes),
+    };
+  });
+}
 
 const faqs = [
   {
@@ -165,7 +164,22 @@ export const metadata = {
 };
 
 export default async function Home() {
-  const { hero } = await getMarketingHomeConfig();
+  const [{ hero }, systemPlans] = await Promise.all([getMarketingHomeConfig(), getSystemPlans()]);
+  const plans = marketingPlans(systemPlans);
+  const planValues = (key) => plans.map((plan) => plan[key] || "-");
+  const comparisonRows = [
+    ["Usuários", ...planValues("users")],
+    ["Profissionais", ...planValues("professionals")],
+    ["Clientes cadastrados", ...planValues("clients")],
+    ["Agendamentos por mês", ...planValues("appointments")],
+    ...comparisonFeatures.map(([feature, ...values]) => [
+      feature,
+      ...plans.map((_, index) => values[index] || "Incluso"),
+    ]),
+  ];
+  const comparisonGridStyle = {
+    gridTemplateColumns: `1.45fr repeat(${plans.length}, minmax(0, 1fr))`,
+  };
 
   return (
     <main className="min-h-screen overflow-hidden bg-[#f4f2ed] text-[#09110f]">
@@ -210,12 +224,12 @@ export default async function Home() {
               {hero.subtitle}
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-              <TrackedAnchor href="#demo" eventName="demo_click" eventData={{ location: "hero" }} className="inline-flex h-13 items-center justify-center gap-2 rounded-full bg-[#1c1c1c] px-6 text-sm font-black text-white shadow-[0_22px_56px_rgba(28,28,28,0.26)]">
+              <TrackedAnchor href={hero.primaryCtaHref} eventName="demo_click" eventData={{ location: "hero_primary" }} className="inline-flex h-13 items-center justify-center gap-2 rounded-full bg-[#1c1c1c] px-6 text-sm font-black text-white shadow-[0_22px_56px_rgba(28,28,28,0.26)]">
                 {hero.primaryCtaLabel} <ArrowRight size={17} />
               </TrackedAnchor>
-              <a href="#produto" className="inline-flex h-13 items-center justify-center rounded-full border border-black/10 bg-white/70 px-6 text-sm font-black text-neutral-800 shadow-sm backdrop-blur">
+              <TrackedAnchor href={hero.secondaryCtaHref} eventName="hero_secondary_click" eventData={{ location: "hero_secondary" }} className="inline-flex h-13 items-center justify-center rounded-full border border-black/10 bg-white/70 px-6 text-sm font-black text-neutral-800 shadow-sm backdrop-blur">
                 {hero.secondaryCtaLabel}
-              </a>
+              </TrackedAnchor>
             </div>
             <div className="mt-9 grid gap-3 text-sm font-semibold text-neutral-700 sm:grid-cols-2">
               {hero.topics.map((item) => (
@@ -382,7 +396,7 @@ export default async function Home() {
                 <Sparkles size={17} className="mb-2 text-[#ed7009]" />
                 {plan.differentiator}
               </div>
-              <PlanCta plan={plan.name.toLowerCase()} featured={plan.highlight} />
+              <PlanCta plan={plan.slug} featured={plan.highlight} />
             </article>
           ))}
         </div>
@@ -398,7 +412,7 @@ export default async function Home() {
           />
           <div className="mt-12 -mx-5 overflow-x-auto px-5 pb-3 sm:mx-0 sm:px-0">
             <div className="min-w-[860px] overflow-hidden rounded-[1.75rem] border border-neutral-200 bg-white shadow-[0_24px_80px_rgba(20,18,15,0.08)]">
-              <div className="grid grid-cols-[1.45fr_repeat(3,1fr)] bg-[#1c1c1c] text-sm font-black text-white">
+              <div className="grid bg-[#1c1c1c] text-sm font-black text-white" style={comparisonGridStyle}>
                 <div className="p-4">Recurso</div>
                 {plans.map((plan) => (
                   <div key={plan.name} className={"p-4 " + (plan.highlight ? "bg-[#ed7009]" : "")}>
@@ -406,12 +420,10 @@ export default async function Home() {
                   </div>
                 ))}
               </div>
-              {comparisonRows.map(([feature, starter, growth, premium], index) => (
-                <div key={feature} className={"grid grid-cols-[1.45fr_repeat(3,1fr)] border-t border-neutral-100 text-sm " + (index % 2 === 0 ? "bg-[#fbfaf7]" : "bg-white")}>
+              {comparisonRows.map(([feature, ...values], index) => (
+                <div key={feature} className={"grid border-t border-neutral-100 text-sm " + (index % 2 === 0 ? "bg-[#fbfaf7]" : "bg-white")} style={comparisonGridStyle}>
                   <div className="p-4 font-bold text-neutral-800">{feature}</div>
-                  <div className="p-4 whitespace-nowrap text-neutral-600">{starter}</div>
-                  <div className="p-4 whitespace-nowrap font-bold text-[#ed7009]">{growth}</div>
-                  <div className="p-4 whitespace-nowrap text-neutral-600">{premium}</div>
+                  {values.map((value, valueIndex) => <div key={`${feature}-${valueIndex}`} className={`p-4 whitespace-nowrap ${plans[valueIndex]?.highlight ? "font-bold text-[#ed7009]" : "text-neutral-600"}`}>{value}</div>)}
                 </div>
               ))}
             </div>
@@ -493,4 +505,3 @@ export default async function Home() {
     </main>
   );
 }
-

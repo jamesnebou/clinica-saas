@@ -9,6 +9,7 @@ Aplicar uma única vez, nesta ordem:
 3. `20260827101500_financeiro_2_operacoes.sql`
 4. `20260827102000_financeiro_2_backfill.sql`
 5. `20260827103000_financeiro_2_consolidacao.sql`
+6. `20260828100000_financeiro_2_comissoes_eventos.sql`
 
 ## Banco que já recebeu as quatro primeiras migrations
 
@@ -32,6 +33,14 @@ quais versões estão registradas e valide o schema antes de prosseguir.
 O backfill é idempotente e não altera tabelas legadas. Registros inferidos recebem `metadata.backfill=true` e `metadata.inferido=true`. Pacotes sem vínculo inequívoco de pagamento não recebem liquidação inventada. Competência de atendimento só é criada para atendimento concluído; loja só reconhece pedido pago.
 
 Após validação por amostragem, manter o dual-write por pelo menos um ciclo de cobrança. Não remover colunas ou tabelas legadas nesta fase.
+
+## Extensão de comissões e aging
+
+Depois que a consolidação `20260827103000` estiver aplicada e validada, execute:
+
+`20260828100000_financeiro_2_comissoes_eventos.sql`
+
+Ela adiciona o pagamento atômico de comissões por profissional, registra o contas a pagar e a liquidação correspondente e publica as visões de aging de recebíveis e pagáveis. Não execute essa extensão antes da consolidação, pois ela depende das RPCs financeiras finais.
 ## Recorrências
 
 O repositório inclui um cron diário às 06:00 UTC em `vercel.json`, que chama

@@ -37,6 +37,12 @@ export async function createCrmOpportunityAction(fd) {
     p_attribution: {}, p_identificador_externo: null,
   });
   if (error) throw new Error(error.message);
+  const opportunityId = data?.id || data;
+  const tagIds = fd.getAll("tag_ids").map(String).filter(Boolean);
+  if (opportunityId && tagIds.length) {
+    const { error: tagsError } = await supabase.from("crm_opportunity_tags").insert(tagIds.map((tagId) => ({ clinica_id: clinicId, opportunity_id: opportunityId, tag_id: tagId })));
+    if (tagsError) throw new Error(tagsError.message);
+  }
   refresh(); return { ok: true, opportunity: data };
 }
 
@@ -74,6 +80,40 @@ export async function completeCrmActivityAction(fd) {
   const { supabase, clinicId } = await scope();
   const { error } = await supabase.rpc("crm_complete_activity", { p_clinica_id: clinicId, p_activity_id: text(fd, "activity_id") });
   if (error) throw new Error(error.message); refresh();
+}
+
+export async function setCrmOpportunityTagsAction(fd) {
+  const { supabase, clinicId } = await scope();
+  const opportunityId = text(fd, "opportunity_id");
+  const tagIds = fd.getAll("tag_ids").map(String).filter(Boolean);
+  const { error: deleteError } = await supabase.from("crm_opportunity_tags").delete().eq("clinica_id", clinicId).eq("opportunity_id", opportunityId);
+  if (deleteError) throw new Error(deleteError.message);
+  if (tagIds.length) {
+    const { error: insertError } = await supabase.from("crm_opportunity_tags").insert(tagIds.map((tagId) => ({ clinica_id: clinicId, opportunity_id: opportunityId, tag_id: tagId })));
+    if (insertError) throw new Error(insertError.message);
+  }
+  refresh();
+}
+
+export async function createCrmPipelineAction(fd) {
+  const { supabase, clinicId } = await scope();
+  const { error } = await supabase.rpc("crm_create_pipeline", {
+    p_clinica_id: clinicId,
+    p_nome: text(fd, "nome"),
+    p_make_default: fd.get("padrao") === "on",
+  });
+  if (error) throw new Error(error.message);
+  refresh();
+}
+
+export async function setDefaultCrmPipelineAction(fd) {
+  const { supabase, clinicId } = await scope();
+  const { error } = await supabase.rpc("crm_set_default_pipeline", {
+    p_clinica_id: clinicId,
+    p_pipeline_id: text(fd, "pipeline_id"),
+  });
+  if (error) throw new Error(error.message);
+  refresh();
 }
 
 export async function createPipelineStageAction(fd) {

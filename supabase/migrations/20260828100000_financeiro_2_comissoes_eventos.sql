@@ -109,9 +109,10 @@ begin
     raise exception 'O lote deve conter comissões de um único profissional.' using errcode='22023';
   end if;
 
-  select min(profissional_id),sum(valor),min(competencia),max(competencia)
+  select profissional_id,sum(valor),min(competencia),max(competencia)
     into v_profissional,v_total,v_inicio,v_fim
-    from public.finance_comissoes where clinica_id=p_clinica_id and id=any(p_comissao_ids);
+    from public.finance_comissoes where clinica_id=p_clinica_id and id=any(p_comissao_ids)
+    group by profissional_id;
   select id into v_categoria from public.finance_categorias where clinica_id=p_clinica_id and codigo='CUSTO_COMISSOES' and ativa limit 1;
   select id into v_centro from public.finance_centros_custo where clinica_id=p_clinica_id and codigo='CLINICA' and ativo limit 1;
   v_conta:=p_conta_id;

@@ -233,6 +233,7 @@ export async function upsertSystemPlanAction(formData) {
   revalidatePath("/admin");
   revalidatePath("/dashboard-admin");
   revalidatePath("/dashboard-admin/planos");
+  revalidatePath("/");
 }
 
 export async function upsertClinicTutorialAction(formData) {
@@ -371,7 +372,9 @@ export async function updateMarketingHomeHeroAction(formData) {
       title: text(formData, "hero_title"),
       subtitle: text(formData, "hero_subtitle"),
       primaryCtaLabel: text(formData, "hero_primary_cta_label"),
+      primaryCtaHref: text(formData, "hero_primary_cta_href"),
       secondaryCtaLabel: text(formData, "hero_secondary_cta_label"),
+      secondaryCtaHref: text(formData, "hero_secondary_cta_href"),
       previewEyebrow: text(formData, "hero_preview_eyebrow"),
       previewTitle: text(formData, "hero_preview_title"),
       previewStatus: text(formData, "hero_preview_status"),

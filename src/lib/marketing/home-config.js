@@ -9,7 +9,9 @@ export const defaultMarketingHome = {
     subtitle:
       "NexaWi Clínicas reúne agenda, CRM, prontuário, financeiro, site premium e checkout de sinal em uma operação simples para clínicas.",
     primaryCtaLabel: "Solicitar demonstração",
-    secondaryCtaLabel: "Ver como funciona",
+    primaryCtaHref: "#demo",
+    secondaryCtaLabel: "Conhecer a plataforma",
+    secondaryCtaHref: "#produto",
     previewEyebrow: "Painel operacional",
     previewTitle: "Clínica Bella Skin",
     previewStatus: "Ativa",
@@ -32,6 +34,11 @@ export const defaultMarketingHome = {
 function asString(value, fallback = "") {
   const normalized = String(value || "").trim();
   return normalized || fallback;
+}
+
+function asHref(value, fallback) {
+  const href = asString(value, fallback);
+  return /^(#|\/|https?:\/\/)/i.test(href) ? href : fallback;
 }
 
 function normalizeMetrics(value, fallback) {
@@ -57,14 +64,21 @@ function normalizeTopics(value, fallback) {
 export function normalizeMarketingHomeConfig(value = {}) {
   const sourceHero = value?.hero || {};
   const fallback = defaultMarketingHome.hero;
+  const primaryCtaLabel = asString(sourceHero.primaryCtaLabel, fallback.primaryCtaLabel);
+  const secondaryCandidate = asString(sourceHero.secondaryCtaLabel, fallback.secondaryCtaLabel);
+  const secondaryCtaLabel = secondaryCandidate.toLocaleLowerCase("pt-BR") === primaryCtaLabel.toLocaleLowerCase("pt-BR")
+    ? fallback.secondaryCtaLabel
+    : secondaryCandidate;
 
   return {
     hero: {
       eyebrow: asString(sourceHero.eyebrow, fallback.eyebrow),
       title: asString(sourceHero.title, fallback.title),
       subtitle: asString(sourceHero.subtitle, fallback.subtitle),
-      primaryCtaLabel: asString(sourceHero.primaryCtaLabel, fallback.primaryCtaLabel),
-      secondaryCtaLabel: asString(sourceHero.secondaryCtaLabel, fallback.secondaryCtaLabel),
+      primaryCtaLabel,
+      primaryCtaHref: asHref(sourceHero.primaryCtaHref, fallback.primaryCtaHref),
+      secondaryCtaLabel,
+      secondaryCtaHref: asHref(sourceHero.secondaryCtaHref, fallback.secondaryCtaHref),
       previewEyebrow: asString(sourceHero.previewEyebrow, fallback.previewEyebrow),
       previewTitle: asString(sourceHero.previewTitle, fallback.previewTitle),
       previewStatus: asString(sourceHero.previewStatus, fallback.previewStatus),

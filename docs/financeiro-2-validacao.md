@@ -3,7 +3,8 @@
 ## Checklist funcional
 
 - Confirmar que as quatro migrations históricas não foram reexecutadas no banco existente.
-- Aplicar somente `20260827103000_financeiro_2_consolidacao.sql` quando as quatro anteriores já estiverem instaladas.
+- Aplicar `20260827103000_financeiro_2_consolidacao.sql` quando as quatro anteriores já estiverem instaladas.
+- Depois da consolidação, aplicar `20260828100000_financeiro_2_comissoes_eventos.sql` para pagamento atômico de comissões e histórico de eventos.
 - Conferir que recebíveis/pagáveis históricos possuem parcelas e rateios sem duplicação.
 
 - Criar recebível e impedir liquidação acima do saldo.
