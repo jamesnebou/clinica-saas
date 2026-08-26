@@ -16,8 +16,15 @@ async function syncCanonical({clinicId,originType,originId,description,value,pai
   try {
     const d=await defaults(clinicId,categoryCode);
     if(!d.categoryId) throw new Error(`Categoria financeira ${categoryCode} não configurada.`);
-    const {data:receivable,error}=await supabaseAdmin.from("finance_recebiveis").upsert({clinica_id:clinicId,cliente_id:clientId||null,profissional_id:professionalId||null,procedimento_id:procedureId||null,agendamento_id:appointmentId||null,pedido_id:orderId||null,categoria_id:d.categoryId,centro_custo_id:d.centerId||null,descricao:description,origem_tipo:originType,origem_id:String(originId),valor_original:Number(value||0),vencimento:(paidAt||new Date().toISOString()).slice(0,10),provider:provider||null,provider_reference:providerReference||null,metadata:{...(metadata||{}),dual_write:true}},{onConflict:"clinica_id,origem_tipo,origem_id"}).select("id,valor_total,valor_recebido,status").single();
+    const dueDate=(paidAt||new Date().toISOString()).slice(0,10);
+    const {data:receivable,error}=await supabaseAdmin.from("finance_recebiveis").upsert({clinica_id:clinicId,cliente_id:clientId||null,profissional_id:professionalId||null,procedimento_id:procedureId||null,agendamento_id:appointmentId||null,pedido_id:orderId||null,categoria_id:d.categoryId,centro_custo_id:d.centerId||null,descricao:description,origem_tipo:originType,origem_id:String(originId),valor_original:Number(value||0),vencimento:dueDate,provider:provider||null,provider_reference:providerReference||null,metadata:{...(metadata||{}),dual_write:true}},{onConflict:"clinica_id,origem_tipo,origem_id"}).select("id,valor_total,valor_recebido,status").single();
     if(error) throw error;
+    const {data:installment,error:installmentReadError}=await supabaseAdmin.from("finance_recebivel_parcelas").select("id").eq("clinica_id",clinicId).eq("recebivel_id",receivable.id).eq("numero",1).maybeSingle();
+    if(installmentReadError) throw installmentReadError;
+    if(!installment && Number(receivable.valor_total||0)>0) {
+      const {error:installmentError}=await supabaseAdmin.from("finance_recebivel_parcelas").insert({clinica_id:clinicId,recebivel_id:receivable.id,numero:1,vencimento:dueDate,valor:Number(receivable.valor_total||0)});
+      if(installmentError && installmentError.code!=="23505") throw installmentError;
+    }
     if(receivable.status==="cancelado") {
       const {error:reopenError}=await supabaseAdmin.from("finance_recebiveis").update({status:"aberto"}).eq("clinica_id",clinicId).eq("id",receivable.id);
       if(reopenError) throw reopenError;

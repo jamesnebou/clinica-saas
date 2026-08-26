@@ -187,8 +187,8 @@ export default async function AgendaPage({ searchParams }) {
   const concluidos = agendamentos.filter((item) => item.status === "concluido").length;
 
   return (
-    <main className="px-5 py-8 sm:px-8 lg:px-10">
-      <section className="mx-auto max-w-7xl">
+    <main className="min-w-0 w-full px-4 py-8 sm:px-6 lg:px-8">
+  <section className="w-full min-w-0 max-w-[1680px] mx-auto">
         <PageHeader eyebrow="Agenda" title="Agenda diária" description="Visão comercial por dia, profissional, status, WhatsApp e edição de horários." />
 
         <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">

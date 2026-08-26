@@ -188,7 +188,7 @@ export function TutorialHub({ tutorials, brandName }) {
   }
 
   return (
-    <div className="mx-auto max-w-7xl space-y-7">
+    <div className="mx-auto max-w-[1680px] space-y-7">
       <section className="relative overflow-hidden rounded-[2rem] bg-[#171715] px-6 py-8 text-white shadow-[0_32px_95px_rgba(23,23,21,0.26)] sm:px-9 sm:py-10 lg:px-12">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_12%_12%,color-mix(in_srgb,var(--clinic-primary)_46%,transparent),transparent_28rem),radial-gradient(circle_at_90%_0%,color-mix(in_srgb,var(--clinic-accent)_24%,transparent),transparent_27rem)]" />
         <div className="absolute -right-16 -top-20 h-72 w-72 rounded-full border border-white/10" />

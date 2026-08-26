@@ -171,6 +171,7 @@ export default async function Home() {
     <main className="min-h-screen overflow-hidden bg-[#f4f2ed] text-[#09110f]">
       <ConversionTracker />
       <header className="sticky top-0 z-50 border-b border-white/10 bg-[#1c1c1c]/95 text-white shadow-[0_18px_60px_rgba(28,28,28,0.22)] backdrop-blur-xl">
+      <meta name="facebook-domain-verification" content="kmcw5gfjzqdu3juxynk2mxatuvjez6"/>
         <div className="mx-auto flex h-[72px] max-w-7xl items-center justify-between px-5 sm:px-8 lg:px-10">
           <Link href="/" className="flex items-center gap-3">
             <LogoMark />
@@ -192,7 +193,7 @@ export default async function Home() {
             </TrackedAnchor>
           </div>
         </div>
-        <meta name="facebook-domain-verification" content="kmcw5gfjzqdu3juxynk2mxatuvjez6" />
+        
       </header>
 
       <section className="relative">

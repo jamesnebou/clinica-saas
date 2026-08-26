@@ -82,8 +82,8 @@ export default async function AssinaturaPage({ searchParams }) {
     : activeClinic.proxima_cobranca_em || openCharge?.vencimento || latestCharge?.vencimento || null;
 
   return (
-    <main className="min-w-0 overflow-x-hidden px-5 py-8 sm:px-8 lg:px-10">
-      <section className="mx-auto max-w-7xl min-w-0">
+    <main className="min-w-0 w-full px-4 py-8 sm:px-6 lg:px-8">
+  <section className="w-full min-w-0 max-w-[1680px] mx-auto">
         <PageHeader
           eyebrow="Assinatura"
           title="Plano, limites e cobrança"

@@ -147,7 +147,7 @@ export default async function DashboardPage({ searchParams }) {
 
   return (
     <main className="min-w-0 overflow-x-hidden px-4 py-8 sm:px-6 lg:px-8 xl:px-10">
-      <section className="mx-auto max-w-7xl min-w-0">
+      <section className="mx-auto max-w-[1680px] min-w-0">
         <PageHeader eyebrow="Dashboard" title="Operação da clínica" description={`Visão executiva de ${brandName}: faturamento, agenda, clientes, equipe e status comercial.`} />
         {params?.erro === "permissao" ? (
           <div className="mt-6">

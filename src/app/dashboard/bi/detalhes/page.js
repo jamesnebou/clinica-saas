@@ -37,9 +37,11 @@ export default async function BIDetailPage({ searchParams }) {
   const query = new URLSearchParams({ tipo: type, periodo: period.preset });
   if (period.preset === "custom") { query.set("inicio", period.current.startKey); query.set("fim", period.current.endKey); }
 
+
+
   return (
     <main className="min-w-0 overflow-x-hidden px-4 py-8 sm:px-6 lg:px-8 xl:px-10">
-      <section className="mx-auto max-w-7xl">
+      <section className="mx-auto max-w-[1680px]">
         <PageHeader eyebrow="Drill-down de BI" title={definition.title} description={`${definition.description} Período: ${period.current.startKey.split("-").reverse().join("/")} a ${period.current.endKey.split("-").reverse().join("/")}.`} action={<Link href="/dashboard/bi" className="inline-flex h-10 items-center gap-2 rounded-lg border border-neutral-200 bg-white px-4 text-sm font-bold"><ArrowLeft size={17} /> Voltar ao BI</Link>} />
         {error ? <div className="mt-6"><Notice type="warning" title="Detalhamento indisponível">{error.message}</Notice></div> : (
           <section className="premium-panel mt-6 overflow-hidden rounded-lg">

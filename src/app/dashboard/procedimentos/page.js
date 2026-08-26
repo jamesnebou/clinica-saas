@@ -20,8 +20,8 @@ export default async function ProcedimentosPage() {
     .order("created_at", { ascending: false });
 
   return (
-    <main className="px-5 py-8 sm:px-8 lg:px-10">
-      <section className="mx-auto max-w-7xl">
+    <main className="min-w-0 w-full px-4 py-8 sm:px-6 lg:px-8">
+  <section className="w-full min-w-0 max-w-[1680px] mx-auto">
         <PageHeader eyebrow="Serviços" title="Procedimentos" description="Tabela de serviços, duração, preço e orientações." />
 
         <div className="mt-8 grid gap-6 lg:grid-cols-[420px_1fr]">

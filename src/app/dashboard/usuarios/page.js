@@ -44,8 +44,8 @@ export default async function UsuariosPage({ searchParams }) {
   const remaining = Math.max(0, Number(plan.limite_usuarios || 0) - Number(usage.usuarios || 0));
 
   return (
-    <main className="px-5 py-8 sm:px-8 lg:px-10">
-      <section className="mx-auto max-w-7xl">
+    <main className="min-w-0 w-full px-4 py-8 sm:px-6 lg:px-8">
+  <section className="w-full min-w-0 max-w-[1680px] mx-auto">
         <PageHeader eyebrow="Acesso" title="Usuários da clínica" description="Convide pessoas da equipe, defina papéis e controle usuários ativos dentro do limite do plano." />
 
         <div className="mt-6 space-y-3">

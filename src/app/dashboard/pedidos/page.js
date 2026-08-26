@@ -49,7 +49,8 @@ export default async function StoreOrdersPage({ searchParams }) {
   const visibleOrders = statusFilter ? orders.filter((order) => order.status === statusFilter) : orders;
 
   return (
-    <main className="px-5 py-8 sm:px-8 lg:px-10"><section className="mx-auto max-w-7xl">
+    <main className="min-w-0 w-full px-4 py-8 sm:px-6 lg:px-8">
+  <section className="w-full min-w-0 max-w-[1680px] mx-auto">
       <PageHeader eyebrow="E-commerce" title="Pedidos da Lojinha" description="Acompanhe pagamentos, separação, retirada, entrega, conversão e recuperação de carrinhos." />
       {query?.erro ? <div className="mt-6"><Notice type="danger">{query.mensagem || "Não foi possível concluir a ação."}</Notice></div> : null}
       {query?.ok ? <div className="mt-6"><Notice type="success">{query.mensagem || "Ação concluída."}</Notice></div> : null}

@@ -103,3 +103,27 @@ export async function createRecurrenceAction(fd) {
   if (error) throw error;
   refresh();
 }
+
+export async function saveBudgetAction(fd) {
+  const { supabase, clinicId } = await scope();
+  const categoryId = text(fd, "categoria_id");
+  const centerId = nullable(fd, "centro_custo_id");
+  const competence = text(fd, "competencia");
+  let existingQuery = supabase.from("finance_orcamentos").select("id").eq("clinica_id", clinicId).eq("categoria_id", categoryId).eq("competencia", competence);
+  existingQuery = centerId ? existingQuery.eq("centro_custo_id", centerId) : existingQuery.is("centro_custo_id", null);
+  const { data: existing, error: readError } = await existingQuery.maybeSingle();
+  if (readError) throw readError;
+  const payload = {
+    clinica_id: clinicId,
+    categoria_id: categoryId,
+    centro_custo_id: centerId,
+    competencia: competence,
+    valor_planejado: number(fd, "valor_planejado"),
+    observacoes: nullable(fd, "observacoes"),
+  };
+  const { error } = existing
+    ? await supabase.from("finance_orcamentos").update(payload).eq("clinica_id", clinicId).eq("id", existing.id)
+    : await supabase.from("finance_orcamentos").insert(payload);
+  if (error) throw error;
+  refresh();
+}

@@ -20,6 +20,8 @@ export function RoiCalculator() {
     trackMarketingEvent("roi_calculate", { ticket, empty_slots_week: emptySlots, recovery_percent: recovery, estimated_recovery: Math.round(result.recoverable) });
   }
 
+
+  
   return (
     <section className="marketing-section bg-[#1c1c1c] px-5 py-20 text-white sm:px-8 lg:px-10">
       <div className="mx-auto grid max-w-7xl gap-8 lg:grid-cols-[0.85fr_1.15fr] lg:items-center">

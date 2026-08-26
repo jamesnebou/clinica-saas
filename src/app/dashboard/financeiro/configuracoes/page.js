@@ -8,6 +8,7 @@ import {
   createFinanceCategoryAction,
   createRecurrenceAction,
   createSupplierAction,
+  saveBudgetAction,
   saveFinanceSettingsAction,
 } from "../actions";
 import { FinancePage, FinanceTable, SchemaNotice, StatusPill } from "../shared";
@@ -121,12 +122,24 @@ export default async function ConfigPage() {
             <div className="sm:col-span-2"><SubmitButton>Criar recorrência</SubmitButton></div>
           </form>
         </Panel>
+
+        <Panel title="Orçamento gerencial" description="Defina uma meta mensal por categoria e centro de custo para comparar planejado e realizado.">
+          <form action={saveBudgetAction} className="grid gap-4 sm:grid-cols-2">
+            <SelectField label="Categoria" name="categoria_id" required><option value="">Selecione</option>{finance.categories.filter((item) => item.ativa && item.grupo_dre !== "nao_dre").map((item) => <option key={item.id} value={item.id}>{item.nome}</option>)}</SelectField>
+            <SelectField label="Centro de custo" name="centro_custo_id" required><option value="">Selecione</option>{finance.centers.filter((item) => item.ativo).map((item) => <option key={item.id} value={item.id}>{item.nome}</option>)}</SelectField>
+            <Field label="Competência" name="competencia" type="date" defaultValue={`${today.slice(0, 7)}-01`} required />
+            <Field label="Valor planejado" name="valor_planejado" type="number" min="0" step="0.01" required />
+            <Field label="Observações" name="observacoes" />
+            <div className="sm:col-span-2"><SubmitButton>Salvar orçamento</SubmitButton></div>
+          </form>
+        </Panel>
       </div>
 
       <div className="mt-8 space-y-8">
         <section><h2 className="mb-3 text-lg font-black">Contas cadastradas</h2><FinanceTable rows={finance.accounts} columns={[{ key: "nome", label: "Conta" }, { key: "tipo", label: "Tipo" }, { key: "instituicao", label: "Instituição" }, { key: "saldo_inicial", label: "Saldo inicial", render: (item) => money(item.saldo_inicial) }, { key: "ativa", label: "Status", render: (item) => item.ativa ? "Ativa" : "Inativa" }]} /></section>
         <section><h2 className="mb-3 text-lg font-black">Regras de comissão</h2><FinanceTable rows={finance.commissionRules} columns={[{ key: "profissional_id", label: "Profissional", render: (item) => professionalNames.get(item.profissional_id) || "Todos" }, { key: "procedimento_id", label: "Procedimento", render: (item) => procedureNames.get(item.procedimento_id) || "Todos" }, { key: "tipo", label: "Regra", render: (item) => item.tipo === "fixo" ? money(item.valor_fixo) : `${Number(item.percentual).toLocaleString("pt-BR")}%` }, { key: "base_calculo", label: "Base" }, { key: "ativa", label: "Status", render: (item) => <StatusPill status={item.ativa ? "ativa" : "inativa"} /> }]} /></section>
         <section><h2 className="mb-3 text-lg font-black">Recorrências</h2><FinanceTable rows={finance.recurrences} columns={[{ key: "descricao", label: "Descrição" }, { key: "tipo", label: "Tipo" }, { key: "categoria_id", label: "Categoria", render: (item) => categoryNames.get(item.categoria_id) || "-" }, { key: "periodicidade", label: "Periodicidade" }, { key: "valor", label: "Valor", render: (item) => money(item.valor) }, { key: "proximo_vencimento", label: "Próximo vencimento" }, { key: "ativa", label: "Status", render: (item) => item.ativa ? "Ativa" : "Inativa" }]} /></section>
+        <section><h2 className="mb-3 text-lg font-black">Orçamento mensal</h2><FinanceTable rows={finance.budgets} columns={[{ key: "competencia", label: "Competência" }, { key: "categoria_id", label: "Categoria", render: (item) => categoryNames.get(item.categoria_id) || "-" }, { key: "centro_custo_id", label: "Centro de custo", render: (item) => finance.centers.find((center) => center.id === item.centro_custo_id)?.nome || "-" }, { key: "valor_planejado", label: "Planejado", render: (item) => money(item.valor_planejado) }, { key: "observacoes", label: "Observações" }]} /></section>
       </div>
     </FinancePage>
   );
