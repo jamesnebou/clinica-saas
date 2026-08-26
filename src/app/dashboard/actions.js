@@ -24,6 +24,11 @@ import { decryptClinicSecrets, encryptClinicSecrets } from "@/lib/security/clini
 import { getAsaasBaseUrl, removeAsaasWebhook, upsertAsaasWebhook, validateAsaasConnection } from "@/lib/asaas/client";
 import { normalizeInfinitePayHandle } from "@/lib/infinitepay/client";
 import { emitDomainEvent } from "@/lib/whatsapp/events";
+import {
+  cancelCanonicalReceivableByOrigin,
+  syncCanonicalAppointmentPayment,
+  syncCanonicalPackagePayment,
+} from "@/lib/finance/canonical";
 
 async function getScopedSupabase() {
   const context = await requireClinic();
@@ -1031,6 +1036,30 @@ export async function updateAgendamentoFinanceiroAction(formData) {
   const { error: pagamentoError } = await query;
   if (pagamentoError) throw pagamentoError;
 
+  if (status === "cancelado") {
+    await cancelCanonicalReceivableByOrigin({
+      clinicId: clinicaId,
+      originType: "agendamento",
+      originId: agendamentoId,
+      reason: "Pagamento do agendamento cancelado pela clínica",
+    });
+  } else {
+    await syncCanonicalAppointmentPayment({
+      clinicId: clinicaId,
+      appointmentId: agendamentoId,
+      value: valor,
+      paidValue: valorPago,
+      clientId: clienteId,
+      professionalId: profissionalId,
+      description: pagamentoPayload.descricao,
+      provider: "manual",
+      providerReference: `dashboard:${agendamentoId}:${valorPago}`,
+      paidAt: dataPagamento,
+      paymentMethod: formaPagamento,
+      metadata: { source: "dashboard" },
+    });
+  }
+
   const signalValue = Number(publicBookingBefore?.valor_sinal || 0);
   const paymentConfirmsBooking = status === "pago"
     || (status === "parcial" && signalValue > 0 && valorPago >= signalValue);
@@ -1136,6 +1165,9 @@ export async function sellClientePacoteAction(formData) {
   });
 
   if (pagamentoError) throw pagamentoError;
+  await syncCanonicalPackagePayment({ clinicId: clinicaId, clientPackageId: clientePacote.id, value: pacote.valor,
+    paidValue: valorPago, clientId: clienteId, description: `Venda de pacote: ${pacote.nome}`,
+    paidAt: valorPago > 0 ? new Date().toISOString() : null, paymentMethod: nullableText(formData, "forma_pagamento"), metadata: { source: "dashboard" } });
   revalidatePath("/dashboard/financeiro");
   redirect(financeRedirectUrl(formData));
 }

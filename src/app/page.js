@@ -192,6 +192,7 @@ export default async function Home() {
             </TrackedAnchor>
           </div>
         </div>
+        <meta name="facebook-domain-verification" content="kmcw5gfjzqdu3juxynk2mxatuvjez6" />
       </header>
 
       <section className="relative">

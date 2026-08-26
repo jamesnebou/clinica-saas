@@ -3,6 +3,7 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 import { checkInfinitePayPayment } from "@/lib/infinitepay/client";
 import { notifyPublicBookingPaymentConfirmedById } from "@/lib/notifications/booking";
 import { emitDomainEvent } from "@/lib/whatsapp/events";
+import { syncCanonicalAppointmentPayment, syncCanonicalOrderPayment } from "@/lib/finance/canonical";
 
 export const runtime = "nodejs";
 
@@ -76,7 +77,7 @@ async function verifyPayment({ payload, clinicId, expectedCents }) {
 async function updateBooking({ id, payload }) {
   const { data: booking, error } = await supabaseAdmin
     .from("site_agendamentos_publicos")
-    .select("id, clinica_id, agendamento_id, valor_sinal, pagamento_status, payload")
+    .select("id, clinica_id, cliente_id, profissional_id, procedimento_id, agendamento_id, valor_total, valor_sinal, pagamento_status, payload")
     .eq("agendamento_id", id)
     .maybeSingle();
   if (error) throw error;
@@ -122,6 +123,10 @@ async function updateBooking({ id, payload }) {
     .eq("id", booking.agendamento_id)
     .eq("clinica_id", booking.clinica_id);
   if (agendaError) throw agendaError;
+  await syncCanonicalAppointmentPayment({ clinicId: booking.clinica_id, appointmentId: booking.agendamento_id,
+    value: Number(booking.valor_total || booking.valor_sinal || 0), paidValue: Number(booking.valor_sinal || 0),
+    clientId: booking.cliente_id, professionalId: booking.profissional_id, procedureId: booking.procedimento_id, description: "Sinal de agendamento",
+    provider: "infinitepay", providerReference: verified.transactionNsu || verified.orderNsu, paidAt, paymentMethod: "infinitepay", metadata: { webhook: true } });
   await notifyPublicBookingPaymentConfirmedById(booking.id).catch((notificationError) => {
     console.error("Erro ao enviar confirmação de pagamento da InfinitePay:", notificationError);
   });
@@ -193,6 +198,9 @@ async function updateStoreOrder({ id, payload }) {
     observacoes: "Pagamento confirmado pela verificação oficial da InfinitePay.",
   }, { onConflict: "clinica_id,provedor,provedor_pagamento_id" });
   if (paymentError) throw paymentError;
+  await syncCanonicalOrderPayment({ clinicId: order.clinica_id, orderId: order.id, value: Number(order.total || 0),
+    paidValue: Number(order.total || 0), clientId: order.cliente_id, description: `Pedido ${order.id}`, provider: "infinitepay",
+    providerReference: verified.transactionNsu || verified.orderNsu, paidAt, paymentMethod: captureMethod.includes("PIX") ? "pix" : "cartao_credito", metadata: { webhook: true } });
   return true;
 }
 

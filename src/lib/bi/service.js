@@ -41,10 +41,25 @@ function withDerivedMetrics(data, clinic, period) {
 }
 
 export async function getBIData({ supabase, clinic, period, filters = {} }) {
-  const { data, error } = await supabase.rpc("bi_resumo_clinica", buildBIRpcParams({ clinicId: clinic.id, period, filters }));
+  const [biResult, financeCurrent, financePrevious] = await Promise.all([
+    supabase.rpc("bi_resumo_clinica", buildBIRpcParams({ clinicId: clinic.id, period, filters })),
+    supabase.rpc("finance_resumo_clinica", { p_clinica_id: clinic.id, p_inicio: period.current.startKey, p_fim: period.current.endKey }),
+    supabase.rpc("finance_resumo_clinica", { p_clinica_id: clinic.id, p_inicio: period.previous.startKey, p_fim: period.previous.endKey }),
+  ]);
+
+  const { data, error } = biResult;
 
   if (error) return { data: null, error };
-  return { data: withDerivedMetrics(data || {}, clinic, period), error: null };
+  const mergedData = data || {};
+  if (!financeCurrent.error && financeCurrent.data) {
+    mergedData.atual = { ...(mergedData.atual || {}), recebido: Number(financeCurrent.data.receber?.recebido || 0),
+      pendente: Number(financeCurrent.data.receber?.aberto || 0), financeiro: financeCurrent.data };
+  }
+  if (!financePrevious.error && financePrevious.data) {
+    mergedData.anterior = { ...(mergedData.anterior || {}), recebido: Number(financePrevious.data.receber?.recebido || 0),
+      pendente: Number(financePrevious.data.receber?.aberto || 0), financeiro: financePrevious.data };
+  }
+  return { data: withDerivedMetrics(mergedData, clinic, period), error: null };
 }
 
 export async function getBIFilterOptions({ supabase, clinicId }) {
