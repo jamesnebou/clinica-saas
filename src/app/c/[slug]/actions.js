@@ -59,6 +59,36 @@ async function insertAttributedOpportunity(payload, attribution) {
   return legacyError;
 }
 
+async function createCrm2Opportunity({ payload, attribution, semanticKey = "new", procedureId = null }) {
+  const ensured = await supabaseAdmin.rpc("crm_ensure_default_pipeline", { p_clinica_id: payload.clinica_id });
+  if (ensured.error && ["42883", "PGRST202"].includes(ensured.error.code)) {
+    const legacyError = await insertAttributedOpportunity(payload, attribution);
+    return { data: null, error: legacyError };
+  }
+  if (ensured.error) return { data: null, error: ensured.error };
+  const { data: stage, error: stageError } = await supabaseAdmin.from("crm_pipeline_stages").select("id").eq("clinica_id", payload.clinica_id).eq("pipeline_id", ensured.data).eq("semantic_key", semanticKey).eq("ativo", true).maybeSingle();
+  if (stageError) return { data: null, error: stageError };
+  return supabaseAdmin.rpc("crm_create_opportunity", {
+    p_clinica_id: payload.clinica_id,
+    p_cliente_id: payload.cliente_id || null,
+    p_nome: payload.nome,
+    p_titulo: payload.titulo || payload.proxima_acao || "Nova oportunidade",
+    p_telefone: payload.telefone || null,
+    p_email: payload.email || null,
+    p_origem: attribution.source || payload.origem || "site",
+    p_valor: Number(payload.valor_estimado || 0),
+    p_pipeline_id: ensured.data,
+    p_stage_id: stage?.id || null,
+    p_procedimento_id: procedureId,
+    p_responsavel_id: null,
+    p_temperatura: "morno",
+    p_score: attribution.campaign ? 65 : 50,
+    p_observacoes: payload.observacoes || null,
+    p_attribution: attribution,
+    p_identificador_externo: payload.identificador_externo || null,
+  });
+}
+
 async function recordPublicEvent({ clinicId, clienteId = null, eventName, attribution, metadata = {} }) {
   const { error } = await supabaseAdmin.from("eventos_analiticos").insert({
     clinica_id: clinicId,
@@ -175,7 +205,7 @@ export async function createPublicBookingAction(formData) {
   const selectedIds = procedimentoIds.length ? procedimentoIds : [procedimentoId];
   const { data: procedimentosSelecionados = [], error: procedimentoError } = await supabaseAdmin
     .from("procedimentos")
-    .select("id, nome, descricao, duracao_minutos, intervalo_minutos, preco, preco_promocional, sinal_percentual, sinal_valor, publicado_site, ativo")
+    .select("id, nome, descricao, duracao_minutos, intervalo_minutos, preco, preco_promocional, sinal_percentual, sinal_valor, publicado_site, ativo, crm_booking_behavior")
     .eq("clinica_id", clinic.id)
     .in("id", selectedIds)
     .eq("ativo", true)
@@ -367,10 +397,13 @@ export async function createPublicBookingAction(formData) {
 
   if (publicError) throw publicError;
 
-  await insertAttributedOpportunity({
+  const crmBehavior = procedimentos.find((item) => ["direct_sale", "opportunity", "evaluation"].includes(item.crm_booking_behavior))?.crm_booking_behavior || "none";
+  const crmSemanticKey = crmBehavior === "evaluation" ? "evaluation_scheduled" : crmBehavior === "direct_sale" ? "negotiation" : "new";
+  const crmResult = crmBehavior === "none" ? { data: null, error: null } : await createCrm2Opportunity({ payload: {
     clinica_id: clinic.id,
     cliente_id: clienteId,
     nome,
+    titulo: `${crmBehavior === "direct_sale" ? "Venda" : "Interesse"}: ${procedimentosTexto}`,
     telefone,
     email,
     origem: "site",
@@ -379,7 +412,18 @@ export async function createPublicBookingAction(formData) {
     proxima_acao_em: start.toISOString(),
     proxima_acao: `Atendimento agendado: ${procedimentosTexto}`,
     observacoes: invoiceUrl ? `Criado automaticamente pelo site público com checkout de sinal via ${paymentProvider === "infinitepay" ? "InfinitePay" : "Asaas"}. Procedimentos: ${procedimentosTexto}.` : `Criado automaticamente pelo site público. Procedimentos: ${procedimentosTexto}.`,
-  }, attribution);
+  }, attribution, semanticKey: crmSemanticKey, procedureId: procedimento.id });
+  if (crmResult.error) console.error("crm_public_booking_failed", { clinicId: clinic.id, code: crmResult.error.code || "unknown" });
+  const crmOpportunityId = crmResult.data?.id || null;
+  if (crmOpportunityId) {
+    const linkResults = await Promise.all([
+      supabaseAdmin.from("agendamentos").update({ crm_oportunidade_id: crmOpportunityId }).eq("clinica_id", clinic.id).eq("id", agendamento.id),
+      supabaseAdmin.from("site_agendamentos_publicos").update({ crm_oportunidade_id: crmOpportunityId }).eq("clinica_id", clinic.id).eq("id", publicBooking.id),
+      supabaseAdmin.from("crm_opportunity_appointments").upsert({ clinica_id: clinic.id, opportunity_id: crmOpportunityId, agendamento_id: agendamento.id }, { onConflict: "opportunity_id,agendamento_id" }),
+    ]);
+    const linkError = linkResults.map((result) => result.error).find(Boolean);
+    if (linkError) console.error("crm_public_booking_link_failed", { clinicId: clinic.id, code: linkError.code || "unknown" });
+  }
 
   await recordPublicEvent({
     clinicId: clinic.id,
@@ -457,18 +501,30 @@ export async function createPublicLeadAction(formData) {
     publicLeadRedirect(slug, { lead_erro: "site", mensagem: "O site desta clínica ainda não está publicado." });
   }
 
-  const error = await insertAttributedOpportunity({
+  let contactQuery = supabaseAdmin.from("clientes").select("id").eq("clinica_id", clinic.id).limit(1);
+  contactQuery = email ? contactQuery.ilike("email", email) : contactQuery.eq("telefone", telefone);
+  const { data: existingContact, error: contactReadError } = await contactQuery.maybeSingle();
+  if (contactReadError) throw contactReadError;
+  let contactId = existingContact?.id || null;
+  if (!contactId) {
+    const { data: createdContact, error: contactCreateError } = await supabaseAdmin.from("clientes").insert({ clinica_id: clinic.id, nome, telefone, email, origem: "Site", status: "lead", observacoes: mensagem || "Solicitou mais informações pelo site." }).select("id").single();
+    if (contactCreateError) throw contactCreateError;
+    contactId = createdContact.id;
+  }
+  const result = await createCrm2Opportunity({ payload: {
     clinica_id: clinic.id,
+    cliente_id: contactId,
     nome,
+    titulo: "Solicitação de informações pelo site",
     telefone,
     email,
     origem: "site",
     status: "lead",
     proxima_acao: "Responder solicitação enviada pelo site.",
     observacoes: mensagem || "Lead solicitou mais informações pelo site público.",
-  }, attribution);
+  }, attribution, semanticKey: "new" });
 
-  if (error) {
+  if (result.error) {
     publicLeadRedirect(slug, { lead_erro: "crm", mensagem: "Não foi possível enviar sua solicitação agora. Tente novamente." });
   }
 

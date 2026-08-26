@@ -22,7 +22,7 @@ export default async function ClientesPage() {
 
   return (
     <main className="min-w-0 w-full px-4 py-8 sm:px-6 lg:px-8">
-  <section className="w-full min-w-0 max-w-[1680px] mx-auto">
+  <section className="w-full min-w-0 max-w-[1480px] mx-auto">
         <PageHeader eyebrow="Clientes" title="Clientes e leads" description="Cadastro inicial dos clientes da clínica, com consentimento LGPD e origem." />
 
         <div className="mt-8 grid gap-6 lg:grid-cols-[420px_1fr]">

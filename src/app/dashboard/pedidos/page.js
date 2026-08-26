@@ -50,7 +50,7 @@ export default async function StoreOrdersPage({ searchParams }) {
 
   return (
     <main className="min-w-0 w-full px-4 py-8 sm:px-6 lg:px-8">
-  <section className="w-full min-w-0 max-w-[1680px] mx-auto">
+  <section className="w-full min-w-0 max-w-[1480px] mx-auto">
       <PageHeader eyebrow="E-commerce" title="Pedidos da Lojinha" description="Acompanhe pagamentos, separação, retirada, entrega, conversão e recuperação de carrinhos." />
       {query?.erro ? <div className="mt-6"><Notice type="danger">{query.mensagem || "Não foi possível concluir a ação."}</Notice></div> : null}
       {query?.ok ? <div className="mt-6"><Notice type="success">{query.mensagem || "Ação concluída."}</Notice></div> : null}

@@ -61,7 +61,7 @@ export default async function BIPage({ searchParams }) {
 
   return (
     <main className="min-w-0 overflow-x-hidden px-4 py-8 sm:px-6 lg:px-8 xl:px-10">
-      <section className="mx-auto max-w-[1600px] min-w-0">
+      <section className="mx-auto max-w-[1480px] min-w-0">
         <PageHeader eyebrow="Inteligência / BI" title="Gestão orientada por dados" description={`Indicadores consolidados de ${activeClinic.metadata?.brand_name || activeClinic.nome}, comparados com o período anterior equivalente e calculados no fuso ${period.timeZone}.`} action={<Link href={`/dashboard/bi/export?${exportParams}`} className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-neutral-950 px-4 text-sm font-bold text-white shadow-lg transition hover:-translate-y-0.5"><Download size={17} /> Exportar CSV</Link>} />
 
         <form className="premium-panel mt-6 rounded-lg p-4" action="/dashboard/bi">

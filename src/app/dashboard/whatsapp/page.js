@@ -33,7 +33,8 @@ export default async function WhatsAppPage({ searchParams }) {
   const schemaMissing = [connectionResult,settingsResult,templatesResult,messagesResult].some((result) => ["42P01","PGRST205"].includes(result.error?.code));
   const connection = connectionResult.data; const settings = settingsResult.data || {}; const templates = templatesResult.data || []; const messages = messagesResult.data || [];
   const approved = templates.filter((item) => item.status === "APPROVED").length; const failedJobs = (jobsResult.data || []).filter((item) => item.status === "failed").length;
-  return <main className="min-w-0 overflow-x-hidden px-4 py-8 sm:px-6 lg:px-10"><section className="mx-auto max-w-[1500px]">
+  return <main className="min-w-0 overflow-x-hidden px-4 py-8 sm:px-6 lg:px-10">
+    <section className="mx-auto max-w-[1480px]">
     <PageHeader eyebrow="Comunicação oficial" title="WhatsApp Cloud API" description="Conexão oficial da Meta, automações transacionais, templates, entrega real e diagnóstico por clínica." />
     {schemaMissing ? <div className="mt-6"><Notice type="warning" title="Migration pendente">Aplique a migration <strong>20260826100000_whatsapp_meta_official.sql</strong> para ativar este módulo.</Notice></div> : null}
     {!isMetaConfigured() ? <div className="mt-6"><Notice type="warning" title="Configuração central pendente">WhatsApp Meta ainda não configurado. O restante do sistema continua funcionando normalmente.</Notice></div> : null}

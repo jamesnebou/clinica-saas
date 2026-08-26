@@ -36,6 +36,23 @@ export async function saveFinanceSettingsAction(fd) { const {supabase,clinicId}=
 export async function createAccountAction(fd) { const {supabase,clinicId}=await scope(); const {error}=await supabase.from("finance_contas").insert({clinica_id:clinicId,nome:text(fd,"nome"),tipo:text(fd,"tipo")||"banco",instituicao:nullable(fd,"instituicao"),saldo_inicial:number(fd,"saldo_inicial")}); if(error) throw error; refresh(); }
 export async function recognizePackageSessionAction(fd) { const {supabase,clinicId}=await scope(); const {error}=await supabase.rpc("finance_reconhecer_sessao_pacote",{p_clinica_id:clinicId,p_cliente_pacote_id:text(fd,"cliente_pacote_id"),p_sessao:number(fd,"sessao"),p_competencia:nullable(fd,"competencia")||new Date().toISOString().slice(0,10)}); if(error) throw error; refresh(); }
 
+export async function payCommissionsAction(fd) {
+  const { supabase, clinicId } = await scope();
+  const commissionIds = Array.from(new Set(fd.getAll("comissao_id").map((value) => String(value || "").trim()).filter(Boolean)));
+  if (!commissionIds.length) throw new Error("Selecione ao menos uma comissão para efetuar o repasse.");
+  const paymentDate = nullable(fd, "data_pagamento");
+  const { error } = await supabase.rpc("finance_pagar_comissoes", {
+    p_clinica_id: clinicId,
+    p_comissao_ids: commissionIds,
+    p_conta_id: nullable(fd, "conta_id"),
+    p_forma_pagamento: text(fd, "forma_pagamento") || "pix",
+    p_data_pagamento: paymentDate ? new Date(`${paymentDate}T12:00:00`).toISOString() : new Date().toISOString(),
+    p_idempotency_key: `dashboard:${clinicId}:comissoes:${crypto.randomUUID()}`,
+  });
+  if (error) throw new Error(error.message);
+  refresh();
+}
+
 export async function createFinanceCategoryAction(fd) {
   const { supabase, clinicId } = await scope();
   const { error } = await supabase.from("finance_categorias").insert({

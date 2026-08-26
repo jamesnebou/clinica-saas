@@ -1,7 +1,7 @@
 import { Notice } from "@/components/app-shell/ui";
 import { money } from "@/lib/finance/service";
 
-export function FinancePage({ children }) { return <main className="min-w-0 overflow-x-hidden px-5 py-8 sm:px-8 lg:px-10"><div className="mx-auto max-w-7xl">{children}</div></main>; }
+export function FinancePage({ children }) { return <main className="min-w-0 overflow-x-hidden px-5 py-8 sm:px-8 lg:px-10"><div className="mx-auto max-w-[1480px]">{children}</div></main>; }
 export function SchemaNotice() { return <Notice type="warning" title="Financeiro 2.0 aguardando ativação">Em instalação nova, aplique as migrations `20260827100000` a `20260827103000` na ordem. Se as quatro primeiras já foram aplicadas, execute somente `20260827103000_financeiro_2_consolidacao.sql`.</Notice>; }
 export function Metric({ label, value, detail }) { return <section className="premium-panel min-w-0 rounded-lg p-5"><p className="text-sm font-semibold text-neutral-500">{label}</p><strong className="mt-2 block text-2xl font-black">{typeof value === "number" ? money(value) : value}</strong>{detail ? <p className="mt-2 text-xs text-neutral-500">{detail}</p> : null}</section>; }
 export function StatusPill({ status }) { const tone = status === "pago" || status === "conciliado" ? "bg-emerald-50 text-emerald-700" : status === "vencido" || status === "divergente" ? "bg-red-50 text-red-700" : "bg-amber-50 text-amber-800"; return <span className={`rounded-full px-2 py-1 text-xs font-bold ${tone}`}>{status}</span>; }
