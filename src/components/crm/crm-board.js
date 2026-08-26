@@ -1,9 +1,9 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
-import { DndContext, KeyboardSensor, PointerSensor, TouchSensor, closestCorners, useDroppable, useSensor, useSensors } from "@dnd-kit/core";
-import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { DndContext, DragOverlay, KeyboardSensor, PointerSensor, TouchSensor, closestCorners, pointerWithin, rectIntersection, useDroppable, useSensor, useSensors } from "@dnd-kit/core";
+import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Activity, CalendarClock, Check, ChevronRight, CircleDollarSign, Download, Flame, GripVertical, KanbanSquare, List, MessageCircle, Plus, Search, Settings2, Target, X } from "lucide-react";
 import { completeCrmActivityAction, createCrmActivityAction, createCrmOpportunityAction, moveCrmOpportunityAction, setCrmOpportunityTagsAction, updateCrmOpportunityAction } from "@/app/dashboard/crm/actions";
@@ -37,7 +37,7 @@ function OpportunityCard({ item, stage, owner, onOpen }) {
         <p className="truncate text-sm font-black text-neutral-950">{item.titulo || item.nome}</p>
         <p className="mt-1 truncate text-xs text-neutral-600">{item.nome}</p>
       </button>
-      <button ref={setActivatorNodeRef} {...attributes} {...listeners} type="button" title="Mover oportunidade" className="inline-flex h-8 w-8 shrink-0 touch-none items-center justify-center rounded-md text-neutral-400 hover:bg-neutral-100 hover:text-neutral-800"><GripVertical size={16} /></button>
+      <button ref={setActivatorNodeRef} {...attributes} {...listeners} type="button" title="Mover oportunidade" className="inline-flex h-10 w-10 shrink-0 cursor-grab touch-none items-center justify-center rounded-md text-neutral-400 hover:bg-neutral-100 hover:text-neutral-800 active:cursor-grabbing"><GripVertical size={18} /></button>
     </div>
     <button type="button" onClick={() => onOpen(item.id)} className="mt-3 block w-full text-left">
       <div className="flex items-center justify-between gap-2 text-xs"><strong>{money(item.valor_estimado)}</strong><span className="rounded-full bg-neutral-100 px-2 py-1 font-bold">Score {item.score}</span></div>
@@ -52,10 +52,11 @@ function OpportunityCard({ item, stage, owner, onOpen }) {
   </article>;
 }
 
-function StageColumn({ stage, items, members, onOpen }) {
+function StageColumn({ stage, items, members, onOpen, isDragTarget = false }) {
   const { setNodeRef, isOver } = useDroppable({ id: `stage:${stage.id}`, data: { type: "stage", stageId: stage.id } });
   const value = items.reduce((sum, item) => sum + Number(item.valor_estimado || 0), 0);
-  return <section ref={setNodeRef} className={`w-[310px] shrink-0 rounded-lg border bg-neutral-50/85 p-3 transition ${isOver ? "border-[var(--clinic-primary)] shadow-[0_0_0_3px_color-mix(in_srgb,var(--clinic-primary)_14%,transparent)]" : "border-neutral-200"}`}>
+  const highlighted = isOver || isDragTarget;
+  return <section ref={setNodeRef} className={`min-h-[360px] w-[310px] shrink-0 rounded-lg border bg-neutral-50/85 p-3 transition ${highlighted ? "border-[var(--clinic-primary)] shadow-[0_0_0_3px_color-mix(in_srgb,var(--clinic-primary)_14%,transparent)]" : "border-neutral-200"}`}>
     <header className="mb-3 border-b border-neutral-200 pb-3">
       <div className="flex items-center justify-between gap-3"><h3 className="text-sm font-black">{stage.nome}</h3><span className="rounded-full px-2.5 py-1 text-xs font-black text-white" style={{ backgroundColor: stage.cor }}>{items.length}</span></div>
       <div className="mt-2 flex justify-between text-[11px] text-neutral-500"><span>{money(value)}</span><span>{Number(stage.probabilidade)}% prob.</span></div>
@@ -64,6 +65,76 @@ function StageColumn({ stage, items, members, onOpen }) {
       <div className="min-h-28 space-y-2">{items.length ? items.map((item) => <OpportunityCard key={item.id} item={item} stage={stage} owner={members.find((member) => member.user_id === item.responsavel_id)} onOpen={onOpen} />) : <p className="rounded-lg border border-dashed border-neutral-300 px-3 py-5 text-center text-xs text-neutral-500">Arraste uma oportunidade para esta etapa.</p>}</div>
     </SortableContext>
   </section>;
+}
+
+function DraggedOpportunity({ item, stage }) {
+  if (!item || !stage) return null;
+  return <div className="w-[286px] rotate-[1deg] rounded-lg border border-[var(--clinic-primary)] bg-white p-3 shadow-2xl">
+    <div className="flex items-start justify-between gap-3">
+      <div className="min-w-0"><p className="truncate text-sm font-black text-neutral-950">{item.titulo || item.nome}</p><p className="mt-1 truncate text-xs text-neutral-600">{item.nome}</p></div>
+      <GripVertical size={18} className="shrink-0 text-[var(--clinic-primary)]" />
+    </div>
+    <div className="mt-3 flex items-center justify-between gap-2 text-xs"><strong>{money(item.valor_estimado)}</strong><span className="rounded-full bg-neutral-100 px-2 py-1 font-bold">Score {item.score}</span></div>
+    <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-neutral-100"><span className="block h-full rounded-full" style={{ width: `${stage.probabilidade}%`, backgroundColor: stage.cor }} /></div>
+  </div>;
+}
+
+function stageFromOver(over) {
+  return over?.data.current?.stageId || null;
+}
+
+function prioritizeDropTarget(collisions, activeId) {
+  if (!collisions.length) return collisions;
+
+  const opportunity = collisions.find(({ id, data }) =>
+    String(id) !== String(activeId) && data?.droppableContainer?.data.current?.type === "opportunity"
+  );
+  if (opportunity) return [opportunity];
+
+  const stage = collisions.find(({ data }) => data?.droppableContainer?.data.current?.type === "stage");
+  if (stage) return [stage];
+
+  const activeOpportunity = collisions.find(({ id, data }) =>
+    String(id) === String(activeId) && data?.droppableContainer?.data.current?.type === "opportunity"
+  );
+  if (activeOpportunity) return [activeOpportunity];
+
+  return collisions;
+}
+
+function crmCollisionDetection(args) {
+  const pointerCollisions = prioritizeDropTarget(pointerWithin(args), args.active.id);
+  if (pointerCollisions.length) return pointerCollisions;
+
+  const intersecting = prioritizeDropTarget(rectIntersection(args), args.active.id);
+  if (intersecting.length) return intersecting;
+
+  return prioritizeDropTarget(closestCorners(args), args.active.id);
+}
+
+function placeOpportunity(current, opportunityId, targetStageId, over, activeRect) {
+  const moving = current.find((item) => item.id === opportunityId);
+  if (!moving || !targetStageId) return current;
+
+  const remaining = current.filter((item) => item.id !== opportunityId);
+  const targetItems = remaining
+    .filter((item) => item.stage_id === targetStageId)
+    .sort((left, right) => Number(left.sort_order || 0) - Number(right.sort_order || 0));
+  let insertAt = targetItems.length;
+
+  if (over?.data.current?.type === "opportunity") {
+    const overIndex = targetItems.findIndex((item) => item.id === String(over.id));
+    if (overIndex >= 0) {
+      const translated = activeRect?.current?.translated;
+      const draggedMiddle = translated ? translated.top + translated.height / 2 : null;
+      const targetMiddle = over.rect ? over.rect.top + over.rect.height / 2 : null;
+      insertAt = overIndex + (draggedMiddle !== null && targetMiddle !== null && draggedMiddle > targetMiddle ? 1 : 0);
+    }
+  }
+
+  targetItems.splice(insertAt, 0, { ...moving, stage_id: targetStageId });
+  const normalized = targetItems.map((item, index) => ({ ...item, stage_id: targetStageId, sort_order: (index + 1) * 1000 }));
+  return [...remaining.filter((item) => item.stage_id !== targetStageId), ...normalized];
 }
 
 function ModalShell({ title, children, onClose, wide = false }) {
@@ -148,8 +219,14 @@ export function CrmBoard({ workspace }) {
   const [selectedId, setSelectedId] = useState(null);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState("");
+  const [activeDragId, setActiveDragId] = useState(null);
+  const [activeDropStageId, setActiveDropStageId] = useState(null);
   const [, startTransition] = useTransition();
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 7 } }), useSensor(TouchSensor, { activationConstraint: { delay: 180, tolerance: 8 } }), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }));
+  const itemsRef = useRef(workspace.opportunities);
+  const dragSnapshotRef = useRef(null);
+  const dragSourceStageRef = useRef(null);
+  const boardRef = useRef(null);
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }), useSensor(TouchSensor, { activationConstraint: { delay: 120, tolerance: 10 } }), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }));
   const filtered = useMemo(() => {
     const term = query.trim().toLowerCase();
     return items.filter((item) => (!term || [item.nome, item.titulo, item.telefone, item.email].some((value) => String(value || "").toLowerCase().includes(term)))
@@ -158,57 +235,109 @@ export function CrmBoard({ workspace }) {
       && (!originFilter || item.origem === originFilter));
   }, [items, query, ownerFilter, temperatureFilter, originFilter]);
   const selected = items.find((item) => item.id === selectedId);
+  const dragged = items.find((item) => item.id === activeDragId);
+  const draggedStage = workspace.stages.find((stage) => stage.id === dragged?.stage_id);
   const exportParams = new URLSearchParams({ pipeline: workspace.selectedPipelineId });
   if (ownerFilter) exportParams.set("responsavel", ownerFilter);
   if (temperatureFilter) exportParams.set("temperatura", temperatureFilter);
   if (originFilter) exportParams.set("origem", originFilter);
 
+  function updateItems(next) {
+    setItems((current) => {
+      const value = typeof next === "function" ? next(current) : next;
+      itemsRef.current = value;
+      return value;
+    });
+  }
+
   function move(opportunityId, stageId, lostReasonId = null) {
-    const before = items;
+    const before = itemsRef.current;
     const stage = workspace.stages.find((entry) => entry.id === stageId);
     if (stage?.tipo === "lost" && !lostReasonId) { setError("Informe o motivo da perda antes de mover a oportunidade."); return; }
-    setError(""); setItems((current) => current.map((item) => item.id === opportunityId ? { ...item, stage_id: stageId } : item));
-    startTransition(async () => { const result = await moveCrmOpportunityAction({ opportunityId, stageId, lostReasonId }); if (!result.ok) { setItems(before); setError(result.error || "Não foi possível mover a oportunidade."); } });
+    setError(""); updateItems((current) => current.map((item) => item.id === opportunityId ? { ...item, stage_id: stageId } : item));
+    startTransition(async () => { const result = await moveCrmOpportunityAction({ opportunityId, stageId, lostReasonId }); if (!result.ok) { updateItems(before); setError(result.error || "Não foi possível mover a oportunidade."); } });
+  }
+
+  function finishDrag() {
+    dragSnapshotRef.current = null;
+    dragSourceStageRef.current = null;
+    setActiveDragId(null);
+    setActiveDropStageId(null);
+  }
+
+  function onDragStart({ active }) {
+    dragSnapshotRef.current = itemsRef.current;
+    dragSourceStageRef.current = active.data.current?.stageId || null;
+    setActiveDragId(String(active.id));
+    setActiveDropStageId(active.data.current?.stageId || null);
+    setError("");
+  }
+
+  function onDragOver({ active, over }) {
+    if (!over) return;
+    const target = stageFromOver(over);
+    const opportunityId = String(active.id);
+    const source = dragSourceStageRef.current || active.data.current?.stageId;
+    if (!target) return;
+    setActiveDropStageId(target);
+    const stage = workspace.stages.find((entry) => entry.id === target);
+    if (stage?.tipo === "lost") return;
+    updateItems((current) => {
+      const moving = current.find((item) => item.id === opportunityId);
+      if (!moving || (moving.stage_id === target && (source === target || String(over.id) === opportunityId))) return current;
+      return placeOpportunity(current, opportunityId, target, over, active.rect);
+    });
+  }
+
+  function onDragMove({ active }) {
+    const board = boardRef.current;
+    const translated = active.rect.current?.translated;
+    if (!board || !translated) return;
+    const bounds = board.getBoundingClientRect();
+    const edge = 90;
+    if (translated.right > bounds.right - edge) board.scrollLeft += 20;
+    else if (translated.left < bounds.left + edge) board.scrollLeft -= 20;
+  }
+
+  function onDragCancel() {
+    if (dragSnapshotRef.current) updateItems(dragSnapshotRef.current);
+    finishDrag();
   }
 
   function onDragEnd({ active, over }) {
-    if (!over) return;
-    const target = over.data.current?.type === "stage" ? over.data.current.stageId : over.data.current?.stageId;
+    const previous = dragSnapshotRef.current || itemsRef.current;
+    if (!over) { updateItems(previous); finishDrag(); return; }
+    const target = stageFromOver(over);
     const opportunityId = String(active.id);
-    const source = active.data.current?.stageId;
-    if (!target || (String(over.id) === opportunityId && target === source)) return;
+    const source = dragSourceStageRef.current || active.data.current?.stageId;
+    if (!target) { updateItems(previous); finishDrag(); return; }
     const stage = workspace.stages.find((entry) => entry.id === target);
-    if (stage?.tipo === "lost") { setSelectedId(String(active.id)); setError("Abra a oportunidade e informe o motivo da perda."); return; }
-    const moving = items.find((item) => item.id === opportunityId);
-    if (!moving) return;
-
-    const previous = items;
-    const targetItems = items.filter((item) => item.stage_id === target);
-    let ordered;
-    if (source === target) {
-      const fromIndex = targetItems.findIndex((item) => item.id === opportunityId);
-      const toIndex = targetItems.findIndex((item) => item.id === String(over.id));
-      if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) return;
-      ordered = arrayMove(targetItems, fromIndex, toIndex);
-    } else {
-      ordered = targetItems.filter((item) => item.id !== opportunityId);
-      const overIndex = over.data.current?.type === "opportunity" ? ordered.findIndex((item) => item.id === String(over.id)) : -1;
-      ordered.splice(overIndex >= 0 ? overIndex : ordered.length, 0, { ...moving, stage_id: target });
+    if (stage?.tipo === "lost") {
+      updateItems(previous);
+      finishDrag();
+      setSelectedId(opportunityId);
+      setError("Abra a oportunidade e informe o motivo da perda.");
+      return;
     }
+    if (source === target && String(over.id) === opportunityId) { updateItems(previous); finishDrag(); return; }
 
-    const normalized = ordered.map((item, index) => ({ ...item, stage_id: target, sort_order: (index + 1) * 1000 }));
-    const normalizedIds = new Set(normalized.map((item) => item.id));
-    const next = [...items.filter((item) => item.id !== opportunityId && !normalizedIds.has(item.id)), ...normalized];
+    const preview = itemsRef.current;
+    const next = source !== target && String(over.id) === opportunityId
+      ? preview
+      : placeOpportunity(preview, opportunityId, target, over, active.rect);
+    const normalized = next.filter((item) => item.stage_id === target).sort((left, right) => Number(left.sort_order || 0) - Number(right.sort_order || 0));
     const movedIndex = normalized.findIndex((item) => item.id === opportunityId);
+    if (movedIndex < 0) { updateItems(previous); finishDrag(); return; }
     const beforeId = normalized[movedIndex + 1]?.id || null;
     const afterId = normalized[movedIndex - 1]?.id || null;
 
     setError("");
-    setItems(next);
+    updateItems(next);
+    finishDrag();
     startTransition(async () => {
       const result = await moveCrmOpportunityAction({ opportunityId, stageId: target, beforeId, afterId });
       if (!result.ok) {
-        setItems(previous);
+        updateItems(previous);
         setError(result.error || "Não foi possível reordenar a oportunidade.");
       }
     });
@@ -233,7 +362,10 @@ export function CrmBoard({ workspace }) {
     {view === "board" ? <>
       <div className="mt-5 flex gap-2 overflow-x-auto pb-2 lg:hidden">{workspace.stages.map((stage) => <button key={stage.id} onClick={() => setActiveStage(stage.id)} className={`shrink-0 rounded-full border px-3 py-2 text-xs font-bold ${activeStage === stage.id ? "border-transparent text-white" : "border-neutral-200 bg-white"}`} style={activeStage === stage.id ? { backgroundColor: stage.cor } : {}}>{stage.nome} ({filtered.filter((item) => item.stage_id === stage.id).length})</button>)}</div>
       <div className="mt-4 lg:hidden">{workspace.stages.filter((stage) => stage.id === activeStage).map((stage) => <div key={stage.id} className="space-y-3">{filtered.filter((item) => item.stage_id === stage.id).map((item) => <OpportunityCard key={item.id} item={item} stage={stage} owner={workspace.members.find((member) => member.user_id === item.responsavel_id)} onOpen={setSelectedId} />)}</div>)}</div>
-      <DndContext sensors={sensors} collisionDetection={closestCorners} onDragEnd={onDragEnd}><div className="mt-5 hidden w-full gap-3 overflow-x-auto pb-5 lg:flex">{workspace.stages.map((stage) => <StageColumn key={stage.id} stage={stage} items={filtered.filter((item) => item.stage_id === stage.id)} members={workspace.members} onOpen={setSelectedId} />)}</div></DndContext>
+      <DndContext sensors={sensors} collisionDetection={crmCollisionDetection} autoScroll={{ acceleration: 16, threshold: { x: 0.2, y: 0.15 } }} onDragStart={onDragStart} onDragOver={onDragOver} onDragMove={onDragMove} onDragCancel={onDragCancel} onDragEnd={onDragEnd}>
+        <div ref={boardRef} className="mt-5 hidden w-full gap-3 overflow-x-auto overscroll-x-contain pb-5 lg:flex">{workspace.stages.map((stage) => <StageColumn key={stage.id} stage={stage} items={filtered.filter((item) => item.stage_id === stage.id)} members={workspace.members} onOpen={setSelectedId} isDragTarget={activeDropStageId === stage.id} />)}</div>
+        <DragOverlay dropAnimation={{ duration: 180, easing: "ease-out" }}><DraggedOpportunity item={dragged} stage={draggedStage} /></DragOverlay>
+      </DndContext>
     </> : <div className="premium-panel mt-5 overflow-x-auto rounded-lg"><table className="min-w-[900px] w-full text-left text-sm"><thead className="border-b border-neutral-200 bg-neutral-50 text-xs uppercase text-neutral-500"><tr><th className="p-4">Oportunidade</th><th className="p-4">Contato</th><th className="p-4">Etapa</th><th className="p-4">Responsável</th><th className="p-4">Valor</th><th className="p-4">Próxima ação</th><th className="p-4"></th></tr></thead><tbody>{filtered.map((item) => <tr key={item.id} className="border-b border-neutral-100"><td className="p-4 font-black">{item.titulo}</td><td className="p-4">{item.nome}</td><td className="p-4">{workspace.stages.find((stage) => stage.id === item.stage_id)?.nome}</td><td className="p-4">{workspace.members.find((member) => member.user_id === item.responsavel_id)?.nome || "-"}</td><td className="p-4">{money(item.valor_estimado)}</td><td className="p-4">{dateTime(item.next_activity_at)}</td><td className="p-4"><button onClick={() => setSelectedId(item.id)} className="inline-flex items-center gap-1 font-bold text-[var(--clinic-primary)]">Abrir <ChevronRight size={15} /></button></td></tr>)}</tbody></table></div>}
     {creating ? <NewOpportunityModal pipelineId={workspace.selectedPipelineId} stages={workspace.stages} members={workspace.members} procedures={workspace.procedures} tags={workspace.tags} onClose={() => setCreating(false)} /> : null}
     {selected ? <OpportunityDrawer item={selected} stages={workspace.stages} members={workspace.members} procedures={workspace.procedures} activities={workspace.activities} events={workspace.events} appointments={workspace.appointments} tags={workspace.tags} opportunityTags={workspace.opportunityTags} lostReasons={workspace.lostReasons} onClose={() => setSelectedId(null)} onMove={move} /> : null}
