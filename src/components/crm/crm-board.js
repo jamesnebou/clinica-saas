@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState, useTransition } from "react";
+import { useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { DndContext, DragOverlay, KeyboardSensor, PointerSensor, TouchSensor, closestCorners, pointerWithin, rectIntersection, useDraggable, useDroppable, useSensor, useSensors } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
@@ -29,15 +29,10 @@ function Metric({ label, value, detail, icon: Icon }) {
 }
 
 function OpportunityCard({ item, stage, owner, onOpen }) {
-  const { attributes, listeners, setNodeRef: setDraggableNodeRef, setActivatorNodeRef, transform, isDragging } = useDraggable({
+  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, isDragging } = useDraggable({
     id: item.id,
     data: { type: "opportunity", stageId: item.stage_id },
   });
-  const { setNodeRef: setDroppableNodeRef } = useDroppable({ id: item.id, data: { type: "opportunity", stageId: item.stage_id } });
-  const setNodeRef = useCallback((node) => {
-    setDraggableNodeRef(node);
-    setDroppableNodeRef(node);
-  }, [setDraggableNodeRef, setDroppableNodeRef]);
   const style = { transform: CSS.Transform.toString(transform), opacity: isDragging ? 0.45 : 1 };
   const wa = whatsappUrl(item.telefone, item.nome);
   return <article ref={setNodeRef} style={style} className="rounded-lg border border-neutral-200 bg-white p-3 shadow-sm transition hover:border-[color-mix(in_srgb,var(--clinic-primary)_35%,#e5e5e5)] hover:shadow-[0_14px_30px_color-mix(in_srgb,var(--clinic-primary)_12%,transparent)]">
@@ -109,33 +104,23 @@ function stageFromOver(over) {
   return over?.data.current?.stageId || null;
 }
 
-function prioritizeDropTarget(collisions, activeId) {
+function prioritizeDropTarget(collisions) {
   if (!collisions.length) return collisions;
-
-  const opportunity = collisions.find(({ id, data }) =>
-    String(id) !== String(activeId) && data?.droppableContainer?.data.current?.type === "opportunity"
-  );
-  if (opportunity) return [opportunity];
 
   const stage = collisions.find(({ data }) => data?.droppableContainer?.data.current?.type === "stage");
   if (stage) return [stage];
-
-  const activeOpportunity = collisions.find(({ id, data }) =>
-    String(id) === String(activeId) && data?.droppableContainer?.data.current?.type === "opportunity"
-  );
-  if (activeOpportunity) return [activeOpportunity];
 
   return collisions;
 }
 
 function crmCollisionDetection(args) {
-  const pointerCollisions = prioritizeDropTarget(pointerWithin(args), args.active.id);
+  const pointerCollisions = prioritizeDropTarget(pointerWithin(args));
   if (pointerCollisions.length) return pointerCollisions;
 
-  const intersecting = prioritizeDropTarget(rectIntersection(args), args.active.id);
+  const intersecting = prioritizeDropTarget(rectIntersection(args));
   if (intersecting.length) return intersecting;
 
-  return prioritizeDropTarget(closestCorners(args), args.active.id);
+  return prioritizeDropTarget(closestCorners(args));
 }
 
 function placeOpportunity(current, opportunityId, targetStageId, over, activeRect) {
@@ -251,6 +236,7 @@ export function CrmBoard({ workspace }) {
   const itemsRef = useRef(workspace.opportunities);
   const dragSnapshotRef = useRef(null);
   const dragSourceStageRef = useRef(null);
+  const activeDropStageRef = useRef(null);
   const boardRef = useRef(null);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }), useSensor(TouchSensor, { activationConstraint: { delay: 120, tolerance: 10 } }), useSensor(KeyboardSensor));
   const filtered = useMemo(() => {
@@ -299,6 +285,7 @@ export function CrmBoard({ workspace }) {
   function finishDrag() {
     dragSnapshotRef.current = null;
     dragSourceStageRef.current = null;
+    activeDropStageRef.current = null;
     setActiveDragId(null);
     setActiveDropStageId(null);
   }
@@ -306,25 +293,19 @@ export function CrmBoard({ workspace }) {
   function onDragStart({ active }) {
     dragSnapshotRef.current = itemsRef.current;
     dragSourceStageRef.current = active.data.current?.stageId || null;
+    activeDropStageRef.current = active.data.current?.stageId || null;
     setActiveDragId(String(active.id));
     setActiveDropStageId(active.data.current?.stageId || null);
     setError("");
   }
 
-  function onDragOver({ active, over }) {
+  function onDragOver({ over }) {
     if (!over) return;
     const target = stageFromOver(over);
-    const opportunityId = String(active.id);
-    const source = dragSourceStageRef.current || active.data.current?.stageId;
     if (!target) return;
+    if (activeDropStageRef.current === target) return;
+    activeDropStageRef.current = target;
     setActiveDropStageId(target);
-    const stage = workspace.stages.find((entry) => entry.id === target);
-    if (stage?.tipo === "lost") return;
-    updateItems((current) => {
-      const moving = current.find((item) => item.id === opportunityId);
-      if (!moving || (moving.stage_id === target && (source === target || String(over.id) === opportunityId))) return current;
-      return placeOpportunity(current, opportunityId, target, over, active.rect);
-    });
   }
 
   function onDragMove({ active }) {
@@ -360,9 +341,7 @@ export function CrmBoard({ workspace }) {
     if (source === target && String(over.id) === opportunityId) { updateItems(previous); finishDrag(); return; }
 
     const preview = itemsRef.current;
-    const next = source !== target && String(over.id) === opportunityId
-      ? preview
-      : placeOpportunity(preview, opportunityId, target, over, active.rect);
+    const next = placeOpportunity(preview, opportunityId, target, over, active.rect);
     const normalized = next.filter((item) => item.stage_id === target).sort((left, right) => Number(left.sort_order || 0) - Number(right.sort_order || 0));
     const movedIndex = normalized.findIndex((item) => item.id === opportunityId);
     if (movedIndex < 0) { updateItems(previous); finishDrag(); return; }
