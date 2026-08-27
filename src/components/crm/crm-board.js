@@ -1,16 +1,17 @@
 "use client";
 
-import { useMemo, useRef, useState, useTransition } from "react";
+import { useCallback, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
-import { DndContext, DragOverlay, KeyboardSensor, PointerSensor, TouchSensor, closestCorners, pointerWithin, rectIntersection, useDroppable, useSensor, useSensors } from "@dnd-kit/core";
-import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { DndContext, DragOverlay, KeyboardSensor, PointerSensor, TouchSensor, closestCorners, pointerWithin, rectIntersection, useDraggable, useDroppable, useSensor, useSensors } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import { Activity, CalendarClock, Check, ChevronRight, CircleDollarSign, Download, Flame, GripVertical, KanbanSquare, List, MessageCircle, Plus, Search, Settings2, Target, X } from "lucide-react";
 import { completeCrmActivityAction, createCrmActivityAction, createCrmOpportunityAction, moveCrmOpportunityAction, setCrmOpportunityTagsAction, updateCrmOpportunityAction } from "@/app/dashboard/crm/actions";
-import { CRM_ACTIVITY_TYPES, CRM_ORIGINS, CRM_TEMPERATURES } from "@/lib/crm/core.mjs";
+import { calculateCrmMetrics, CRM_ACTIVITY_TYPES, CRM_ORIGINS, CRM_TEMPERATURES } from "@/lib/crm/core.mjs";
 
 const money = (value) => Number(value || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 const dateTime = (value) => value ? new Date(value).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }) : "-";
+const CRM_AUTO_SCROLL = { acceleration: 16, threshold: { x: 0.2, y: 0.15 } };
+const CRM_DROP_ANIMATION = { duration: 180, easing: "ease-out" };
 
 function whatsappUrl(phone, name) {
   const digits = String(phone || "").replace(/\D/g, "");
@@ -28,8 +29,16 @@ function Metric({ label, value, detail, icon: Icon }) {
 }
 
 function OpportunityCard({ item, stage, owner, onOpen }) {
-  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({ id: item.id, data: { type: "opportunity", stageId: item.stage_id } });
-  const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.45 : 1 };
+  const { attributes, listeners, setNodeRef: setDraggableNodeRef, setActivatorNodeRef, transform, isDragging } = useDraggable({
+    id: item.id,
+    data: { type: "opportunity", stageId: item.stage_id },
+  });
+  const { setNodeRef: setDroppableNodeRef } = useDroppable({ id: item.id, data: { type: "opportunity", stageId: item.stage_id } });
+  const setNodeRef = useCallback((node) => {
+    setDraggableNodeRef(node);
+    setDroppableNodeRef(node);
+  }, [setDraggableNodeRef, setDroppableNodeRef]);
+  const style = { transform: CSS.Transform.toString(transform), opacity: isDragging ? 0.45 : 1 };
   const wa = whatsappUrl(item.telefone, item.nome);
   return <article ref={setNodeRef} style={style} className="rounded-lg border border-neutral-200 bg-white p-3 shadow-sm transition hover:border-[color-mix(in_srgb,var(--clinic-primary)_35%,#e5e5e5)] hover:shadow-[0_14px_30px_color-mix(in_srgb,var(--clinic-primary)_12%,transparent)]">
     <div className="flex items-start justify-between gap-2">
@@ -52,6 +61,25 @@ function OpportunityCard({ item, stage, owner, onOpen }) {
   </article>;
 }
 
+function MobileOpportunityCard({ item, stage, owner, onOpen }) {
+  const wa = whatsappUrl(item.telefone, item.nome);
+
+  return <article className="rounded-lg border border-neutral-200 bg-white p-3 shadow-sm transition hover:border-[color-mix(in_srgb,var(--clinic-primary)_35%,#e5e5e5)] hover:shadow-[0_14px_30px_color-mix(in_srgb,var(--clinic-primary)_12%,transparent)]">
+    <button type="button" onClick={() => onOpen(item.id)} className="block w-full text-left">
+      <p className="truncate text-sm font-black text-neutral-950">{item.titulo || item.nome}</p>
+      <p className="mt-1 truncate text-xs text-neutral-600">{item.nome}</p>
+      <div className="mt-3 flex items-center justify-between gap-2 text-xs"><strong>{money(item.valor_estimado)}</strong><span className="rounded-full bg-neutral-100 px-2 py-1 font-bold">Score {item.score}</span></div>
+      <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-neutral-100"><span className="block h-full rounded-full" style={{ width: `${stage.probabilidade}%`, backgroundColor: stage.cor }} /></div>
+      <div className="mt-3 flex items-center justify-between gap-2 text-[11px] text-neutral-500"><span className="truncate">{owner?.nome || owner?.email || "Sem responsável"}</span><span className="capitalize">{item.temperatura}</span></div>
+      {item.next_activity_at ? <p className="mt-2 flex items-center gap-1 text-[11px] font-bold text-[var(--clinic-primary)]"><CalendarClock size={12} /> {dateTime(item.next_activity_at)}</p> : <p className="mt-2 text-[11px] font-semibold text-amber-700">Sem próxima ação</p>}
+    </button>
+    <div className="mt-3 flex gap-2 border-t border-neutral-100 pt-2">
+      {wa ? <a href={wa} target="_blank" rel="noreferrer" title="Abrir WhatsApp" className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-neutral-200 text-[var(--clinic-primary)]"><MessageCircle size={15} /></a> : null}
+      {item.cliente_id ? <Link href={`/dashboard/clientes/${item.cliente_id}`} className="inline-flex h-8 items-center rounded-md border border-neutral-200 px-2 text-[11px] font-bold">Ficha</Link> : null}
+    </div>
+  </article>;
+}
+
 function StageColumn({ stage, items, members, onOpen, isDragTarget = false }) {
   const { setNodeRef, isOver } = useDroppable({ id: `stage:${stage.id}`, data: { type: "stage", stageId: stage.id } });
   const value = items.reduce((sum, item) => sum + Number(item.valor_estimado || 0), 0);
@@ -61,9 +89,7 @@ function StageColumn({ stage, items, members, onOpen, isDragTarget = false }) {
       <div className="flex items-center justify-between gap-3"><h3 className="text-sm font-black">{stage.nome}</h3><span className="rounded-full px-2.5 py-1 text-xs font-black text-white" style={{ backgroundColor: stage.cor }}>{items.length}</span></div>
       <div className="mt-2 flex justify-between text-[11px] text-neutral-500"><span>{money(value)}</span><span>{Number(stage.probabilidade)}% prob.</span></div>
     </header>
-    <SortableContext items={items.map((item) => item.id)} strategy={verticalListSortingStrategy}>
-      <div className="min-h-28 space-y-2">{items.length ? items.map((item) => <OpportunityCard key={item.id} item={item} stage={stage} owner={members.find((member) => member.user_id === item.responsavel_id)} onOpen={onOpen} />) : <p className="rounded-lg border border-dashed border-neutral-300 px-3 py-5 text-center text-xs text-neutral-500">Arraste uma oportunidade para esta etapa.</p>}</div>
-    </SortableContext>
+    <div className="min-h-28 space-y-2">{items.length ? items.map((item) => <OpportunityCard key={item.id} item={item} stage={stage} owner={members.find((member) => member.user_id === item.responsavel_id)} onOpen={onOpen} />) : <p className="rounded-lg border border-dashed border-neutral-300 px-3 py-5 text-center text-xs text-neutral-500">Arraste uma oportunidade para esta etapa.</p>}</div>
   </section>;
 }
 
@@ -226,7 +252,7 @@ export function CrmBoard({ workspace }) {
   const dragSnapshotRef = useRef(null);
   const dragSourceStageRef = useRef(null);
   const boardRef = useRef(null);
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }), useSensor(TouchSensor, { activationConstraint: { delay: 120, tolerance: 10 } }), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }));
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }), useSensor(TouchSensor, { activationConstraint: { delay: 120, tolerance: 10 } }), useSensor(KeyboardSensor));
   const filtered = useMemo(() => {
     const term = query.trim().toLowerCase();
     return items.filter((item) => (!term || [item.nome, item.titulo, item.telefone, item.email].some((value) => String(value || "").toLowerCase().includes(term)))
@@ -234,6 +260,18 @@ export function CrmBoard({ workspace }) {
       && (!temperatureFilter || item.temperatura === temperatureFilter)
       && (!originFilter || item.origem === originFilter));
   }, [items, query, ownerFilter, temperatureFilter, originFilter]);
+  const liveMetrics = useMemo(
+    () => calculateCrmMetrics(items, workspace.stages, workspace.activities),
+    [items, workspace.activities, workspace.stages]
+  );
+  const itemsByStage = useMemo(() => {
+    const grouped = new Map(workspace.stages.map((stage) => [stage.id, []]));
+    for (const item of filtered) {
+      const bucket = grouped.get(item.stage_id);
+      if (bucket) bucket.push(item);
+    }
+    return grouped;
+  }, [filtered, workspace.stages]);
   const selected = items.find((item) => item.id === selectedId);
   const dragged = items.find((item) => item.id === activeDragId);
   const draggedStage = workspace.stages.find((stage) => stage.id === dragged?.stage_id);
@@ -255,7 +293,7 @@ export function CrmBoard({ workspace }) {
     const stage = workspace.stages.find((entry) => entry.id === stageId);
     if (stage?.tipo === "lost" && !lostReasonId) { setError("Informe o motivo da perda antes de mover a oportunidade."); return; }
     setError(""); updateItems((current) => current.map((item) => item.id === opportunityId ? { ...item, stage_id: stageId } : item));
-    startTransition(async () => { const result = await moveCrmOpportunityAction({ opportunityId, stageId, lostReasonId }); if (!result.ok) { updateItems(before); setError(result.error || "Não foi possível mover a oportunidade."); } });
+    startTransition(async () => { const result = await moveCrmOpportunityAction({ opportunityId, stageId, lostReasonId, refresh: false }); if (!result.ok) { updateItems(before); setError(result.error || "Não foi possível mover a oportunidade."); } });
   }
 
   function finishDrag() {
@@ -335,7 +373,7 @@ export function CrmBoard({ workspace }) {
     updateItems(next);
     finishDrag();
     startTransition(async () => {
-      const result = await moveCrmOpportunityAction({ opportunityId, stageId: target, beforeId, afterId });
+      const result = await moveCrmOpportunityAction({ opportunityId, stageId: target, beforeId, afterId, refresh: false });
       if (!result.ok) {
         updateItems(previous);
         setError(result.error || "Não foi possível reordenar a oportunidade.");
@@ -346,10 +384,10 @@ export function CrmBoard({ workspace }) {
   return <>
     {workspace.pipelines.length > 1 ? <nav className="mt-6 flex gap-2 overflow-x-auto pb-1" aria-label="Pipelines do CRM">{workspace.pipelines.map((pipeline) => <Link key={pipeline.id} href={`/dashboard/crm?pipeline=${pipeline.id}`} className={`shrink-0 rounded-full border px-4 py-2 text-xs font-black ${pipeline.id === workspace.selectedPipelineId ? "border-transparent bg-neutral-950 text-white" : "border-neutral-200 bg-white text-neutral-600"}`}>{pipeline.nome}{pipeline.padrao ? " · padrão" : ""}</Link>)}</nav> : null}
     <div className="mt-6 flex gap-3 overflow-x-auto pb-2">
-      <Metric icon={Target} label="Em aberto" value={workspace.metrics.openCount} detail={money(workspace.metrics.pipelineValue)} />
-      <Metric icon={CircleDollarSign} label="Valor ponderado" value={money(workspace.metrics.weightedValue)} detail="considerando probabilidade" />
-      <Metric icon={Check} label="Conversão" value={`${workspace.metrics.conversionRate.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%`} detail={`${workspace.metrics.wonCount} ganhos`} />
-      <Metric icon={Activity} label="Follow-ups vencidos" value={workspace.metrics.overdueActivities} detail={`${workspace.metrics.withoutNextActivity} sem próxima ação`} />
+      <Metric icon={Target} label="Em aberto" value={liveMetrics.openCount} detail={money(liveMetrics.pipelineValue)} />
+      <Metric icon={CircleDollarSign} label="Valor ponderado" value={money(liveMetrics.weightedValue)} detail="considerando probabilidade" />
+      <Metric icon={Check} label="Conversão" value={`${liveMetrics.conversionRate.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%`} detail={`${liveMetrics.wonCount} ganhos`} />
+      <Metric icon={Activity} label="Follow-ups vencidos" value={liveMetrics.overdueActivities} detail={`${liveMetrics.withoutNextActivity} sem próxima ação`} />
     </div>
     <section className="premium-panel mt-5 rounded-lg p-4">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -360,11 +398,11 @@ export function CrmBoard({ workspace }) {
       {error ? <p className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-800">{error}</p> : null}
     </section>
     {view === "board" ? <>
-      <div className="mt-5 flex gap-2 overflow-x-auto pb-2 lg:hidden">{workspace.stages.map((stage) => <button key={stage.id} onClick={() => setActiveStage(stage.id)} className={`shrink-0 rounded-full border px-3 py-2 text-xs font-bold ${activeStage === stage.id ? "border-transparent text-white" : "border-neutral-200 bg-white"}`} style={activeStage === stage.id ? { backgroundColor: stage.cor } : {}}>{stage.nome} ({filtered.filter((item) => item.stage_id === stage.id).length})</button>)}</div>
-      <div className="mt-4 lg:hidden">{workspace.stages.filter((stage) => stage.id === activeStage).map((stage) => <div key={stage.id} className="space-y-3">{filtered.filter((item) => item.stage_id === stage.id).map((item) => <OpportunityCard key={item.id} item={item} stage={stage} owner={workspace.members.find((member) => member.user_id === item.responsavel_id)} onOpen={setSelectedId} />)}</div>)}</div>
-      <DndContext sensors={sensors} collisionDetection={crmCollisionDetection} autoScroll={{ acceleration: 16, threshold: { x: 0.2, y: 0.15 } }} onDragStart={onDragStart} onDragOver={onDragOver} onDragMove={onDragMove} onDragCancel={onDragCancel} onDragEnd={onDragEnd}>
-        <div ref={boardRef} className="mt-5 hidden w-full gap-3 overflow-x-auto overscroll-x-contain pb-5 lg:flex">{workspace.stages.map((stage) => <StageColumn key={stage.id} stage={stage} items={filtered.filter((item) => item.stage_id === stage.id)} members={workspace.members} onOpen={setSelectedId} isDragTarget={activeDropStageId === stage.id} />)}</div>
-        <DragOverlay dropAnimation={{ duration: 180, easing: "ease-out" }}><DraggedOpportunity item={dragged} stage={draggedStage} /></DragOverlay>
+      <div className="mt-5 flex gap-2 overflow-x-auto pb-2 lg:hidden">{workspace.stages.map((stage) => <button key={stage.id} onClick={() => setActiveStage(stage.id)} className={`shrink-0 rounded-full border px-3 py-2 text-xs font-bold ${activeStage === stage.id ? "border-transparent text-white" : "border-neutral-200 bg-white"}`} style={activeStage === stage.id ? { backgroundColor: stage.cor } : {}}>{stage.nome} ({itemsByStage.get(stage.id)?.length || 0})</button>)}</div>
+      <div className="mt-4 lg:hidden">{workspace.stages.filter((stage) => stage.id === activeStage).map((stage) => <div key={stage.id} className="space-y-3">{(itemsByStage.get(stage.id) || []).map((item) => <MobileOpportunityCard key={item.id} item={item} stage={stage} owner={workspace.members.find((member) => member.user_id === item.responsavel_id)} onOpen={setSelectedId} />)}</div>)}</div>
+      <DndContext sensors={sensors} collisionDetection={crmCollisionDetection} autoScroll={CRM_AUTO_SCROLL} onDragStart={onDragStart} onDragOver={onDragOver} onDragMove={onDragMove} onDragCancel={onDragCancel} onDragEnd={onDragEnd}>
+        <div ref={boardRef} className="mt-5 hidden w-full gap-3 overflow-x-auto overscroll-x-contain pb-5 lg:flex">{workspace.stages.map((stage) => <StageColumn key={stage.id} stage={stage} items={itemsByStage.get(stage.id) || []} members={workspace.members} onOpen={setSelectedId} isDragTarget={activeDropStageId === stage.id} />)}</div>
+        <DragOverlay dropAnimation={CRM_DROP_ANIMATION}><DraggedOpportunity item={dragged} stage={draggedStage} /></DragOverlay>
       </DndContext>
     </> : <div className="premium-panel mt-5 overflow-x-auto rounded-lg"><table className="min-w-[900px] w-full text-left text-sm"><thead className="border-b border-neutral-200 bg-neutral-50 text-xs uppercase text-neutral-500"><tr><th className="p-4">Oportunidade</th><th className="p-4">Contato</th><th className="p-4">Etapa</th><th className="p-4">Responsável</th><th className="p-4">Valor</th><th className="p-4">Próxima ação</th><th className="p-4"></th></tr></thead><tbody>{filtered.map((item) => <tr key={item.id} className="border-b border-neutral-100"><td className="p-4 font-black">{item.titulo}</td><td className="p-4">{item.nome}</td><td className="p-4">{workspace.stages.find((stage) => stage.id === item.stage_id)?.nome}</td><td className="p-4">{workspace.members.find((member) => member.user_id === item.responsavel_id)?.nome || "-"}</td><td className="p-4">{money(item.valor_estimado)}</td><td className="p-4">{dateTime(item.next_activity_at)}</td><td className="p-4"><button onClick={() => setSelectedId(item.id)} className="inline-flex items-center gap-1 font-bold text-[var(--clinic-primary)]">Abrir <ChevronRight size={15} /></button></td></tr>)}</tbody></table></div>}
     {creating ? <NewOpportunityModal pipelineId={workspace.selectedPipelineId} stages={workspace.stages} members={workspace.members} procedures={workspace.procedures} tags={workspace.tags} onClose={() => setCreating(false)} /> : null}

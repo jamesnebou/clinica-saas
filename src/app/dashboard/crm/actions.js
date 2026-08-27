@@ -55,7 +55,8 @@ export async function moveCrmOpportunityAction(input) {
     p_closed_value: payload.closedValue === null || payload.closedValue === undefined || payload.closedValue === "" ? null : Number(payload.closedValue),
   });
   if (error) return { ok: false, error: error.message };
-  refresh(); return { ok: true, opportunity: data };
+  if (input instanceof FormData || payload.refresh !== false) refresh();
+  return { ok: true, opportunity: data };
 }
 
 export async function updateCrmOpportunityAction(fd) {
