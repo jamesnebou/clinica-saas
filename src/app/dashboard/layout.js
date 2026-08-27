@@ -9,7 +9,6 @@ import { getClinicCapabilities } from "@/lib/segments/service";
 import { createClient } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { isDemoLoginEmail } from "@/lib/demo/demo-account";
-import { DemoSessionLifecycle } from "@/components/demo/demo-session-lifecycle";
 import { DemoGuidedTour } from "@/components/demo/demo-guided-tour";
 import { DemoConversionCta } from "@/components/demo/demo-conversion-cta";
 
@@ -153,7 +152,7 @@ export default async function DashboardLayout({ children }) {
         background: "radial-gradient(circle at 10% 0%, color-mix(in srgb, var(--clinic-accent) 16%, transparent), transparent 30rem), radial-gradient(circle at 100% 10%, color-mix(in srgb, var(--clinic-primary) 13%, transparent), transparent 28rem), radial-gradient(circle at 82% 80%, rgba(18,18,16,0.055), transparent 30rem), linear-gradient(145deg, #f9f8f4 0%, #f1eee7 48%, #ebefeb 100%)",
       }}
     >
-      {isDemo ? <><DemoSessionLifecycle /><DemoGuidedTour /><DemoConversionCta /></> : null}
+      {isDemo ? <><DemoGuidedTour /><DemoConversionCta /></> : null}
       <MobileSidebarMenu items={allowedNavItems} brandName={brandName} logoUrl={logoUrl} />
 
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-[260px] flex-col border-r border-neutral-200 bg-white/95 px-4 py-4 shadow-sm backdrop-blur-xl md:flex">
@@ -196,7 +195,7 @@ export default async function DashboardLayout({ children }) {
       <section className="min-w-0">
         {isDemo ? (
           <div className="border-b border-orange-400/25 bg-[#1c1c1c] px-5 py-3 text-sm text-orange-100 shadow-sm backdrop-blur sm:px-8 lg:px-10">
-            <strong>Ambiente demonstrativo.</strong> Explore à vontade: as alterações são temporárias e a base original é restaurada ao atualizar, sair ou fechar a aba.
+            <strong>Ambiente demonstrativo.</strong> Explore à vontade. A base original é restaurada com segurança no início de cada nova demonstração.
           </div>
         ) : null}
         {billingState.level !== "ok" ? (

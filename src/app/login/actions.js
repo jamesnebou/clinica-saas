@@ -3,7 +3,7 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { isInternalAdminUser } from "@/lib/auth/session";
-import { ensureDemoAccountAndReset, isDemoLoginEmail, isDemoPassword, resetDemoClinicData } from "@/lib/demo/demo-account";
+import { ensureDemoAccountAndReset, isDemoLoginEmail, isDemoPassword } from "@/lib/demo/demo-account";
 import { isInternalAdminEmail } from "@/lib/saas/plans";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
@@ -148,19 +148,6 @@ export async function updateRecoveredPasswordAction(_prevState, formData) {
 
 export async function signOutAction(formData) {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
   await supabase.auth.signOut();
-
-  if (isDemoLoginEmail(user?.email)) {
-    try {
-      await resetDemoClinicData();
-    } catch (error) {
-      console.error("Erro ao restaurar conta demo no logout:", error);
-    }
-  }
-
   redirect(safeNext(formData?.get?.("next"), "/login-cliente"));
 }
