@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BarChart3, Bell, BookOpenCheck, CalendarDays, CreditCard, KanbanSquare, LayoutDashboard, Menu, MessageCircleMore, ReceiptText, Scissors, ShoppingBag, PackageCheck, Settings, Stethoscope, UserCog, UsersRound, X } from "lucide-react";
+import { BarChart3, Bell, BookOpenCheck, CalendarDays, CreditCard, KanbanSquare, LayoutDashboard, Menu, MessageCircleMore, ReceiptText, Scissors, ShoppingBag, PackageCheck, Settings, Stethoscope, UserCog, UsersRound, Workflow, X } from "lucide-react";
 import { useState } from "react";
 
 const iconMap = {
@@ -13,6 +13,7 @@ const iconMap = {
   whatsapp: MessageCircleMore,
   clientes: UsersRound,
   crm: KanbanSquare,
+  automacoes: Workflow,
   profissionais: Stethoscope,
   procedimentos: Scissors,
   produtos: ShoppingBag,

@@ -42,6 +42,7 @@ const navItems = [
   { href: "/dashboard/whatsapp", label: "WhatsApp", icon: "whatsapp", section: "whatsapp" },
   { href: "/dashboard/clientes", label: "Clientes", icon: "clientes", section: "clientes" },
   { href: "/dashboard/crm", label: "CRM", icon: "crm", section: "crm" },
+  { href: "/dashboard/automacoes", label: "Automações", icon: "automacoes", section: "automacoes" },
   { href: "/dashboard/profissionais", label: "Profissionais", icon: "profissionais", section: "profissionais" },
   { href: "/dashboard/procedimentos", label: "Procedimentos", icon: "procedimentos", section: "procedimentos" },
   { href: "/dashboard/produtos", label: "Lojinha", icon: "produtos", section: "produtos" },
