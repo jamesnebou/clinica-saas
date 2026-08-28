@@ -179,8 +179,8 @@ export function buildDemoDataset({ clinicId, userId, now = new Date() }) {
     { id: id("order:pending"), clinica_id: clinicId, cliente_id: client.bianca, cupom_id: id("coupon:BEMVINDA"), status: "aguardando_pagamento", pagamento_status: "pendente", entrega_tipo: "retirada", nome_cliente: "Bianca Teixeira", telefone_cliente: "77910101010", email_cliente: "bianca.demo@nexawi.com.br", subtotal: 219, desconto: 21.9, frete: 0, total: 197.1, cupom_codigo: "BEMVINDA", forma_pagamento: "PIX", expiracao_reserva_em: localTimestamp(now, 1, 18), origem: { source: "instagram", campaign: "home_care_demo" }, observacoes: "Pedido aguardando pagamento." },
   ];
   table.pedido_itens_clinica = [
-    { id: id("order-item:paid:serum"), clinica_id: clinicId, pedido_id: id("order:paid"), produto_id: id("product:serum"), nome_produto: "Sérum antioxidante", sku: "DEMO-SERUM", quantidade: 1, valor_unitario: 149, total: 149 },
-    { id: id("order-item:paid:fps"), clinica_id: clinicId, pedido_id: id("order:paid"), produto_id: id("product:protetor"), nome_produto: "Protetor solar premium", sku: "DEMO-FPS", quantidade: 1, valor_unitario: 119, total: 119 },
+    { id: id("order-item:paid:serum"), clinica_id: clinicId, pedido_id: id("order:paid"), produto_id: id("product:serum"), nome_produto: "Sérum antioxidante", sku: "DEMO-SERUM", quantidade: 1, valor_unitario: 149, desconto: 0, total: 149 },
+    { id: id("order-item:paid:fps"), clinica_id: clinicId, pedido_id: id("order:paid"), produto_id: id("product:protetor"), nome_produto: "Protetor solar premium", sku: "DEMO-FPS", quantidade: 1, valor_unitario: 119, desconto: 0, total: 119 },
     { id: id("order-item:pending:kit"), clinica_id: clinicId, pedido_id: id("order:pending"), produto_id: id("product:kit"), nome_produto: "Kit pós-procedimento", sku: "DEMO-KIT", quantidade: 1, valor_unitario: 219, desconto: 21.9, total: 197.1 },
   ];
   table.pagamentos_loja_clinica = [
@@ -213,6 +213,8 @@ export function buildDemoDataset({ clinicId, userId, now = new Date() }) {
     ["mariana", "won", 890, "quente", 100, -5, "Cliente convertida"],
     ["carla", "won", 260, "morno", 100, -7, "Retorno confirmado"],
     ["aline", "won", 250, "morno", 100, -3, "Manutenção recorrente"],
+    ["ana", "won", 1990, "quente", 100, -6, "Pacote corporal contratado"],
+    ["fernanda", "won", 2490, "quente", 100, -4, "Jornada facial contratada"],
     ["daniela", "lost", 1800, "frio", 20, -4, "Retomar em três meses"],
   ];
   table.crm_oportunidades = opportunitySpecs.map(([clientKey, stageKey, value, temperatura, score, nextOffset, action], index) => {

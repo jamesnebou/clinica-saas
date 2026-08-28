@@ -92,11 +92,35 @@ test("CRM demo usa entidades canonicas e nasce pronto para o Kanban", () => {
     assert.ok(semanticStages.has(stage), stage);
   }
   assert.equal(tables.crm_pipelines.length, 1);
-  assert.equal(tables.crm_oportunidades.length, 10);
+  assert.equal(tables.crm_oportunidades.length, 12);
   assert.ok(tables.crm_activities.length >= 5);
   assert.ok(tables.crm_opportunity_events.length >= 20);
   assert.ok(tables.crm_opportunity_appointments.length >= 10);
   assert.ok(tables.crm_oportunidades.every((item) => item.pipeline_id && item.stage_id));
+});
+
+test("agenda e CRM demo não possuem referências órfãs", () => {
+  const dataset = buildDemoDataset({ clinicId, userId, now: fixedNow });
+  const opportunityIds = new Set(dataset.tables.crm_oportunidades.map((row) => row.id));
+  const appointmentIds = new Set(dataset.tables.agendamentos.map((row) => row.id));
+
+  assert.equal(dataset.tables.crm_oportunidades.length, dataset.tables.clientes.length);
+  for (const appointment of dataset.tables.agendamentos) {
+    assert.ok(opportunityIds.has(appointment.crm_oportunidade_id));
+  }
+  for (const link of dataset.tables.crm_opportunity_appointments) {
+    assert.ok(opportunityIds.has(link.opportunity_id));
+    assert.ok(appointmentIds.has(link.agendamento_id));
+  }
+
+  const invalid = buildDemoDataset({ clinicId, userId, now: fixedNow });
+  invalid.tables.crm_oportunidades = invalid.tables.crm_oportunidades.filter(
+    (opportunity) => opportunity.id !== invalid.tables.agendamentos[0].crm_oportunidade_id,
+  );
+  assert.throws(
+    () => validateDemoDataset(invalid, { clinicId, version: DEMO_DATASET_VERSION }),
+    /Referência inválida em agendamentos\.crm_oportunidade_id/,
+  );
 });
 
 test("Financeiro demo usa a fonte canonica sem duplicar pagamentos legados", () => {

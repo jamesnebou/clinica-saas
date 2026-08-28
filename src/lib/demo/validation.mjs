@@ -4,6 +4,20 @@ function normalized(value) {
   return String(value || "").trim().toLowerCase();
 }
 
+function assertReferences(dataset, { sourceTable, sourceColumn, targetTable, targetColumn = "id", nullable = true }) {
+  const targetValues = new Set(dataset.tables[targetTable].map((row) => row[targetColumn]).filter(Boolean));
+
+  for (const row of dataset.tables[sourceTable]) {
+    const value = row[sourceColumn];
+    if ((value === null || value === undefined || value === "") && nullable) continue;
+    if (!targetValues.has(value)) {
+      throw new Error(
+        `Referência inválida em ${sourceTable}.${sourceColumn}: ${value} não existe em ${targetTable}.${targetColumn}.`,
+      );
+    }
+  }
+}
+
 export function validateDemoIdentity({ user, clinic, membership, expectedEmail, expectedSlug }) {
   const errors = [];
   const userEmail = normalized(user?.email);
@@ -64,6 +78,27 @@ export function validateDemoDataset(dataset, { clinicId, version } = {}) {
     if (dataset.tables[tableName].length < minimum) {
       throw new Error(`Dataset demo insuficiente em ${tableName}.`);
     }
+  }
+
+  const references = [
+    ["agendamentos", "cliente_id", "clientes"],
+    ["agendamentos", "profissional_id", "profissionais"],
+    ["agendamentos", "procedimento_id", "procedimentos"],
+    ["agendamentos", "crm_oportunidade_id", "crm_oportunidades"],
+    ["crm_oportunidades", "cliente_id", "clientes"],
+    ["crm_oportunidades", "pipeline_id", "crm_pipelines"],
+    ["crm_oportunidades", "stage_id", "crm_pipeline_stages"],
+    ["crm_pipeline_stages", "pipeline_id", "crm_pipelines"],
+    ["crm_activities", "opportunity_id", "crm_oportunidades"],
+    ["crm_opportunity_events", "opportunity_id", "crm_oportunidades"],
+    ["crm_opportunity_tags", "opportunity_id", "crm_oportunidades"],
+    ["crm_opportunity_tags", "tag_id", "crm_tags"],
+    ["crm_opportunity_appointments", "opportunity_id", "crm_oportunidades"],
+    ["crm_opportunity_appointments", "agendamento_id", "agendamentos"],
+  ];
+
+  for (const [sourceTable, sourceColumn, targetTable] of references) {
+    assertReferences(dataset, { sourceTable, sourceColumn, targetTable });
   }
 
   return true;
