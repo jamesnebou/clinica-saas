@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Activity, CirclePause, CirclePlay, Clock3, Plus, Workflow } from "lucide-react";
+import { Activity, CirclePause, CirclePlay, Clock3, HeartPulse, Plus, Workflow } from "lucide-react";
 import { PageHeader } from "@/components/app-shell/ui";
 import { requireClinicSection } from "@/lib/auth/session";
 import { getAutomationDashboard } from "@/lib/automations/service.js";
@@ -12,6 +12,24 @@ const statusLabel = { draft: "Rascunho", active: "Ativa", paused: "Pausada", arc
 
 function Metric({ label, value, detail }) {
   return <article className="premium-panel rounded-lg p-5"><p className="text-sm text-neutral-500">{label}</p><strong className="mt-2 block text-3xl font-black">{value}</strong><p className="mt-1 text-xs text-neutral-500">{detail}</p></article>;
+}
+
+function WorkerHealth({ health }) {
+  if (!health?.available) return <section className="mt-5 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950"><strong>Saúde do worker indisponível.</strong> Aplique a migration operacional fix-forward para habilitar este diagnóstico.</section>;
+  if (health.status === "never_run") return <section className="mt-5 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950"><strong>Worker ainda não executado.</strong> Configure o scheduler e faça uma chamada autenticada ao cron.</section>;
+  const stale = Boolean(health.stale);
+  const healthy = health.status === "completed" && Number(health.failures || 0) === 0 && !stale;
+  return <section className={`mt-5 rounded-lg border p-4 ${healthy ? "border-emerald-200 bg-emerald-50 text-emerald-950" : "border-amber-200 bg-amber-50 text-amber-950"}`}>
+    <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+      <div><h2 className="flex items-center gap-2 font-black"><HeartPulse size={18}/> Saúde do Automation Worker</h2><p className="mt-1 text-sm">Última execução: {health.started_at ? new Date(health.started_at).toLocaleString("pt-BR") : "não registrada"}{stale ? " · sem execução recente" : ""}</p></div>
+      <dl className="grid grid-cols-2 gap-x-5 gap-y-2 text-xs sm:grid-cols-4 lg:text-right">
+        <div><dt className="opacity-70">Eventos</dt><dd className="font-black">{health.events_processed || 0}/{health.events_found || 0}</dd></div>
+        <div><dt className="opacity-70">Runs</dt><dd className="font-black">{health.runs_started || 0}</dd></div>
+        <div><dt className="opacity-70">Waits</dt><dd className="font-black">{health.waits_resumed || 0}</dd></div>
+        <div><dt className="opacity-70">Duração</dt><dd className="font-black">{health.duration_ms ?? 0} ms</dd></div>
+      </dl>
+    </div>
+  </section>;
 }
 
 export default async function AutomacoesPage() {
@@ -30,6 +48,7 @@ export default async function AutomacoesPage() {
       <p className="mt-1">{missingBase ? "As tabelas centrais ainda não estão disponíveis. Aplique primeiro a migration `20260830100000_automation_engine_v2.sql` e, em seguida, reaplique `20260830110000_automation_engine_v2_hardening.sql`." : "A tabela de tarefas ainda não está disponível. Reaplique a migration `20260830110000_automation_engine_v2_hardening.sql`."}</p>
       {dashboard.schemaIssue?.resource ? <p className="mt-2 text-xs text-amber-800">Recurso indisponível: <strong>{dashboard.schemaIssue.resource}</strong> · código {dashboard.schemaIssue.code}</p> : null}
     </section> : <>
+      <WorkerHealth health={dashboard.workerHealth} />
       <section className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Metric label="Automações ativas" value={dashboard.metrics.active || 0} detail="versões publicadas em execução" />
         <Metric label="Taxa de sucesso" value={`${successRate}%`} detail={`${dashboard.metrics.completed || 0} runs concluídos`} />

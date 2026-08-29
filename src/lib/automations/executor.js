@@ -5,9 +5,34 @@ import { deterministicActionKey } from "./core.mjs";
 import { assertClinicOwnerReference, assertTenantReference } from "./context.js";
 import { sendAutomationEmail } from "./email.js";
 import { normalizeWhatsAppPhone } from "@/lib/whatsapp/core.mjs";
+import { canExecuteAutomationAction } from "./risk-policy.mjs";
 
 function dueAt(minutes) { return new Date(Date.now() + Math.max(0, Number(minutes || 0)) * 60_000).toISOString(); }
 function resultError(message, code, status = "blocked") { return { status, reason: code, message }; }
+
+async function attachAutomationLineage({ run, eventName, payload }) {
+  let query = supabaseAdmin
+    .from("domain_outbox_events")
+    .select("id")
+    .eq("clinica_id", run.clinica_id)
+    .eq("consumer", "automation")
+    .eq("event_name", eventName)
+    .eq("aggregate_type", "crm_opportunity")
+    .eq("aggregate_id", run.entity_id)
+    .order("created_at", { ascending: false })
+    .limit(1);
+  if (payload && Object.keys(payload).length) query = query.contains("payload", payload);
+  const { data, error } = await query.maybeSingle();
+  if (error) throw error;
+  if (!data?.id) return;
+  const { error: updateError } = await supabaseAdmin.from("domain_outbox_events").update({
+    correlation_id: run.correlation_id || String(run.source_event_id || run.id),
+    causation_id: String(run.source_event_id || run.id),
+    automation_run_id: run.id,
+    automation_depth: Number(run.automation_depth || 0) + 1,
+  }).eq("id", data.id).eq("clinica_id", run.clinica_id);
+  if (updateError) throw updateError;
+}
 
 async function executeCrm(actionType, params, context, run) {
   const opportunity = context.opportunity;
@@ -15,7 +40,8 @@ async function executeCrm(actionType, params, context, run) {
   if (["crm.create_activity", "crm.create_follow_up"].includes(actionType)) {
     const { data, error } = await supabaseAdmin.rpc("crm_create_activity", { p_clinica_id: run.clinica_id, p_opportunity_id: opportunity.id, p_tipo: actionType === "crm.create_follow_up" ? "follow_up" : (params.activity_type || "tarefa"), p_titulo: params.title, p_descricao: params.description || null, p_due_at: dueAt(params.due_in_minutes), p_owner_id: opportunity.responsavel_id || null });
     if (error) throw error;
-    return { status: "completed", entityType: "crm_activity", entityId: data };
+    await attachAutomationLineage({ run, eventName: "crm.activity.created", payload: data?.id ? { activity_id: data.id } : null });
+    return { status: "completed", entityType: "crm_activity", entityId: data?.id || data };
   }
   if (actionType === "crm.assign_owner") {
     await assertClinicOwnerReference(run.clinica_id, params.owner_id);
@@ -34,8 +60,17 @@ async function executeCrm(actionType, params, context, run) {
   }
   if (actionType === "crm.move_stage") {
     const stage = await assertTenantReference("crm_pipeline_stages", run.clinica_id, params.stage_id);
-    const { data, error } = await supabaseAdmin.rpc("crm_move_opportunity", { p_clinica_id: run.clinica_id, p_opportunity_id: opportunity.id, p_pipeline_id: opportunity.pipeline_id, p_from_stage_id: opportunity.stage_id, p_to_stage_id: stage.id, p_before_id: null, p_after_id: null, p_sort_order: null });
+    const { data, error } = await supabaseAdmin.rpc("crm_move_opportunity", {
+      p_clinica_id: run.clinica_id,
+      p_opportunity_id: opportunity.id,
+      p_stage_id: stage.id,
+      p_before_id: null,
+      p_after_id: null,
+      p_lost_reason_id: null,
+      p_closed_value: null,
+    });
     if (error) throw error;
+    await attachAutomationLineage({ run, eventName: "crm.stage.changed", payload: { to_stage_id: stage.id } });
     return { status: "completed", entityType: "crm_opportunity", entityId: data || opportunity.id };
   }
   throw Object.assign(new Error("Ação CRM sem executor."), { code: "ACTION_NOT_IMPLEMENTED", permanent: true });
@@ -46,8 +81,8 @@ async function executeActionEffect(actionType, params, context, run, idempotency
   if (actionType === "agenda.register_reminder" || actionType === "finance.create_collection_task" || actionType === "internal.create_notification") {
     const entity = context.booking || context.receivable || context.opportunity || null;
     const title = params.title || (actionType === "agenda.register_reminder" ? "Lembrete de agendamento" : "Notificação da automação");
-    const { data, error } = await supabaseAdmin.from("automation_tasks").upsert({ clinica_id: run.clinica_id, run_id: run.id, entity_type: run.entity_type || null, entity_id: entity?.id || null, title, description: params.message || params.description || null, due_at: dueAt(params.due_in_minutes), assigned_to: context.opportunity?.responsavel_id || null, idempotency_key: idempotencyKey }, { onConflict: "idempotency_key", ignoreDuplicates: true }).select("id").maybeSingle();
-    if (error) throw error;
+    const { data, error } = await supabaseAdmin.from("automation_tasks").insert({ clinica_id: run.clinica_id, run_id: run.id, entity_type: run.entity_type || null, entity_id: entity?.id || null, title, description: params.message || params.description || null, due_at: dueAt(params.due_in_minutes), assigned_to: context.opportunity?.responsavel_id || null, idempotency_key: idempotencyKey }).select("id").maybeSingle();
+    if (error && error.code !== "23505") throw error;
     if (data?.id) return { status: "completed", entityType: "automation_task", entityId: data.id };
     const existing = await supabaseAdmin.from("automation_tasks").select("id").eq("clinica_id", run.clinica_id).eq("idempotency_key", idempotencyKey).single();
     if (existing.error) throw existing.error;
@@ -82,7 +117,7 @@ async function executeActionEffect(actionType, params, context, run, idempotency
     if (error) throw error;
     return { status: "completed", entityType: "notification_job", entityId: job?.id || null, queued: true };
   }
-  if (["agenda.update_status", "finance.create_receivable"].includes(actionType) && process.env.AUTOMATION_ALLOW_HIGH_RISK_ACTIONS !== "true") return resultError("Ação sensível bloqueada pela política do motor.", "HIGH_RISK_ACTION_BLOCKED");
+  if (!canExecuteAutomationAction(actionType, process.env.AUTOMATION_ALLOW_HIGH_RISK_ACTIONS === "true")) return resultError("Ação sensível bloqueada pela política do motor.", "HIGH_RISK_ACTION_BLOCKED");
   if (actionType === "agenda.update_status") {
     if (!context.booking) return resultError("Agendamento não disponível.", "BOOKING_REQUIRED");
     const { error } = await supabaseAdmin.from("agendamentos").update({ status: params.status }).eq("clinica_id", run.clinica_id).eq("id", context.booking.id);

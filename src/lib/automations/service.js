@@ -13,10 +13,11 @@ function schemaIssue(resource, error) {
 
 export async function getAutomationDashboard(clinicId) {
   const supabase = await createClient();
-  const [automations, runs, tasks] = await Promise.all([
+  const [automations, runs, tasks, health] = await Promise.all([
     supabase.from("automations").select("id,name,description,status,trigger_type,current_version_id,published_at,updated_at").eq("clinica_id", clinicId).order("updated_at", { ascending: false }),
     supabase.from("automation_runs").select("id,automation_id,source_event_type,status,started_at,completed_at,created_at,failure_code").eq("clinica_id", clinicId).order("created_at", { ascending: false }).limit(50),
     supabase.from("automation_tasks").select("id,title,status,due_at,created_at").eq("clinica_id", clinicId).eq("status", "pending").order("due_at", { ascending: true }).limit(10),
+    supabase.rpc("get_automation_worker_health"),
   ]);
   const failedQuery = [
     { resource: "automations", error: automations.error },
@@ -31,6 +32,7 @@ export async function getAutomationDashboard(clinicId) {
       runs: [],
       tasks: [],
       metrics: {},
+      workerHealth: { available: false, status: "schema_unavailable" },
       schemaIssue: schemaIssue(failedQuery.resource, error),
     };
   }
@@ -62,7 +64,12 @@ export async function getAutomationDashboard(clinicId) {
     const finished = itemStats.completed + itemStats.failed;
     return { ...item, recent_stats: { ...itemStats, successRate: finished ? Math.round((itemStats.completed / finished) * 100) : null } };
   });
-  return { available: true, automations: enriched, runs: runList, tasks: tasks.data || [], metrics: { active: list.filter((item) => item.status === "active").length, waiting: runList.filter((item) => item.status === "waiting").length, completed: runList.filter((item) => item.status === "completed").length, failed: runList.filter((item) => item.status === "failed").length, actions: [...actionCounts.values()].reduce((total, value) => total + value, 0) } };
+  const healthData = health.data || { status: "never_run" };
+  const healthReference = Date.parse(healthData.completed_at || healthData.started_at || "");
+  const workerHealth = health.error
+    ? { available: false, status: "health_unavailable", code: health.error.code || null }
+    : { available: true, ...healthData, stale: Number.isFinite(healthReference) && Date.now() - healthReference > 15 * 60_000 };
+  return { available: true, automations: enriched, runs: runList, tasks: tasks.data || [], workerHealth, metrics: { active: list.filter((item) => item.status === "active").length, waiting: runList.filter((item) => item.status === "waiting").length, completed: runList.filter((item) => item.status === "completed").length, failed: runList.filter((item) => item.status === "failed").length, actions: [...actionCounts.values()].reduce((total, value) => total + value, 0) } };
 }
 
 export async function getAutomationDetail(clinicId, automationId, filters = {}) {

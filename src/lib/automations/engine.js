@@ -9,6 +9,7 @@ import { resolveAutomationLimits } from "./limits.mjs";
 import { auditAutomation, recordAutomationMetric } from "./observability.js";
 import { calculateWaitResumeAt } from "./time.mjs";
 import { deterministicActionKey } from "./core.mjs";
+import { automationRetryDecision } from "./retry-policy.mjs";
 
 function safeError(error) { return { code: error?.code || "AUTOMATION_FAILED", message: String(error?.message || error || "Falha desconhecida").slice(0, 800) }; }
 
@@ -28,9 +29,9 @@ async function finishRun(run, status, failure = null) {
 
 async function queueRetry(run, error, limits) {
   const failure = safeError(error);
-  if (error?.permanent || Number(run.attempts || 0) >= limits.maxAttempts) return finishRun(run, "failed", failure);
-  const delay = Math.min(60, 2 ** Math.max(0, Number(run.attempts || 1) - 1));
-  const { error: updateError } = await supabaseAdmin.from("automation_runs").update({ status: "queued", next_attempt_at: new Date(Date.now() + delay * 60_000).toISOString(), locked_at: null, locked_by: null, failure_code: failure.code, failure_message: failure.message, updated_at: new Date().toISOString() }).eq("id", run.id).eq("clinica_id", run.clinica_id);
+  const decision = automationRetryDecision({ attempts: run.attempts, maxAttempts: limits.maxAttempts, error });
+  if (!decision.retry) return finishRun(run, "failed", failure);
+  const { error: updateError } = await supabaseAdmin.from("automation_runs").update({ status: "queued", next_attempt_at: decision.nextAttemptAt, locked_at: null, locked_by: null, failure_code: failure.code, failure_message: failure.message, updated_at: new Date().toISOString() }).eq("id", run.id).eq("clinica_id", run.clinica_id);
   if (updateError) throw updateError;
 }
 
@@ -108,7 +109,10 @@ async function startRun({ event, automation, version, context, depth }) {
   await supabaseAdmin.from("automation_event_consumptions").upsert({ clinica_id: event.clinica_id, source_event_id: event.id, automation_id: automation.id, automation_version_id: version.id, run_id: run.id, status: "created" }, { onConflict: "clinica_id,source_event_id,automation_version_id" });
   await logStep({ ...run, current_step_index: 0, attempts: 1 }, { id: "trigger", type: "trigger" }, "completed", { event_type: event.type });
   await auditAutomation({ clinicId: event.clinica_id, action: "automation.run.started", entityType: "automation_run", entityId: run.id, metadata: { automation_id: automation.id, source_event_type: event.type } });
-  return continueAutomationRun(run.id);
+  // A execução começa somente depois do claim transacional. Isso evita que o
+  // mesmo run seja iniciado em paralelo entre o consumidor do evento e o
+  // processador de runs.
+  return run;
 }
 
 export async function processAutomationOutboxEvent(row) {

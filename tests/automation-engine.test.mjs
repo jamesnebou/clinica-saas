@@ -38,6 +38,9 @@ import { AUTOMATION_TEMPLATES } from "../src/lib/automations/templates.mjs";
 import { assertAutomationOperation, canPerformAutomationOperation } from "../src/lib/automations/permissions.mjs";
 import { calculateWaitResumeAt, zonedLocalToUtc } from "../src/lib/automations/time.mjs";
 import { buildDemoDataset } from "../src/lib/demo/dataset.mjs";
+import { isAutomationCronAuthorized } from "../src/lib/automations/cron-auth.mjs";
+import { automationRetryDecision } from "../src/lib/automations/retry-policy.mjs";
+import { canExecuteAutomationAction, HIGH_RISK_AUTOMATION_ACTIONS } from "../src/lib/automations/risk-policy.mjs";
 
 const UUID_A = "11111111-1111-4111-8111-111111111111";
 const UUID_B = "22222222-2222-4222-8222-222222222222";
@@ -510,4 +513,131 @@ test("Demo 2.0 inclui automações pausadas e histórico coerente", () => {
   assert.ok(dataset.tables.automation_versions.length >= 3);
   assert.ok(dataset.tables.automation_runs.length >= 1);
   assert.ok(dataset.tables.automation_run_steps.length >= 1);
+});
+
+test("Cron de automações rejeita request sem segredo", () => {
+  assert.equal(isAutomationCronAuthorized("", "secret-value"), false);
+  assert.equal(isAutomationCronAuthorized("Bearer secret-value", ""), false);
+});
+
+test("Cron de automações rejeita segredo inválido", () => {
+  assert.equal(isAutomationCronAuthorized("Bearer wrong", "secret-value"), false);
+});
+
+test("Cron de automações aceita somente Bearer com o CRON_SECRET exato", () => {
+  assert.equal(isAutomationCronAuthorized("Bearer secret-value", "secret-value"), true);
+  assert.equal(isAutomationCronAuthorized("secret-value", "secret-value"), false);
+});
+
+test("Retry transitório agenda backoff exponencial", () => {
+  const decision = automationRetryDecision({ attempts: 2, maxAttempts: 5, error: { transient: true }, now: Date.parse("2026-08-31T10:00:00.000Z") });
+  assert.deepEqual(decision, { retry: true, delayMinutes: 2, nextAttemptAt: "2026-08-31T10:02:00.000Z" });
+});
+
+test("Erro permanente não entra em retry", () => {
+  assert.equal(automationRetryDecision({ attempts: 1, maxAttempts: 5, error: { permanent: true } }).retry, false);
+});
+
+test("Retry para ao atingir max attempts", () => {
+  assert.equal(automationRetryDecision({ attempts: 5, maxAttempts: 5, error: { transient: true } }).retry, false);
+});
+
+test("Ações high-risk permanecem bloqueadas por padrão", () => {
+  assert.deepEqual(HIGH_RISK_AUTOMATION_ACTIONS, ["agenda.update_status", "finance.create_receivable"]);
+  assert.equal(canExecuteAutomationAction("agenda.update_status"), false);
+  assert.equal(canExecuteAutomationAction("finance.create_receivable"), false);
+  assert.equal(canExecuteAutomationAction("finance.create_collection_task"), true);
+});
+
+test("Fix-forward recupera claims abandonados com SKIP LOCKED", async () => {
+  const sql = await readFile(new URL("../supabase/migrations/20260831100000_automation_engine_operational_hardening.sql", import.meta.url), "utf8");
+  assert.match(sql, /status='processing' and locked_at<now\(\)-interval '10 minutes'/i);
+  assert.match(sql, /status='running' and locked_at<now\(\)-interval '10 minutes'/i);
+  assert.match(sql, /for update skip locked/gi);
+});
+
+test("Fix-forward não reivindica waits cancelados", async () => {
+  const sql = await readFile(new URL("../supabase/migrations/20260831100000_automation_engine_operational_hardening.sql", import.meta.url), "utf8");
+  const waitClaim = sql.slice(sql.indexOf("create or replace function public.claim_automation_waits"), sql.indexOf("create or replace function public.claim_automation_runs"));
+  assert.match(waitClaim, /status='pending'/i);
+  assert.match(waitClaim, /status='processing'/i);
+  assert.doesNotMatch(waitClaim, /status='cancelled'/i);
+});
+
+test("Fix-forward registra saúde sem expor erro interno no RPC", async () => {
+  const sql = await readFile(new URL("../supabase/migrations/20260831100000_automation_engine_operational_hardening.sql", import.meta.url), "utf8");
+  assert.match(sql, /create table if not exists public\.automation_worker_executions/i);
+  const healthRpc = sql.slice(sql.indexOf("create or replace function public.get_automation_worker_health"), sql.indexOf("create or replace function public.claim_domain_outbox_events_for_consumer"));
+  assert.doesNotMatch(healthRpc, /fatal_error_message|worker_id/i);
+});
+
+test("Worker só executa runs depois do claim transacional", async () => {
+  const [engine, scheduler] = await Promise.all([
+    readFile(new URL("../src/lib/automations/engine.js", import.meta.url), "utf8"),
+    readFile(new URL("../src/lib/automations/scheduler.js", import.meta.url), "utf8"),
+  ]);
+  const startRunSource = engine.slice(
+    engine.indexOf("async function startRun"),
+    engine.indexOf("export async function processAutomationOutboxEvent"),
+  );
+  assert.match(startRunSource, /return run;/);
+  assert.doesNotMatch(startRunSource, /continueAutomationRun\(run\.id\)/);
+  assert.match(scheduler, /claim_automation_runs[\s\S]*continueAutomationRun\(run\.id\)/);
+});
+
+test("Worker conta consumo, waits, retries e falhas sem expor workerId", async () => {
+  const source = await readFile(new URL("../src/lib/automations/scheduler.js", import.meta.url), "utf8");
+  for (const field of ["eventsFound", "eventsProcessed", "runsStarted", "waitsResumed", "retriesExecuted", "failures", "durationMs", "batchSize"]) assert.match(source, new RegExp(field));
+  const publicPart = source.slice(source.indexOf("function publicSummary"));
+  assert.doesNotMatch(publicPart, /workerId:/);
+});
+
+test("Retomada recarrega contexto e respeita cancelamento definitivo", async () => {
+  const source = await readFile(new URL("../src/lib/automations/engine.js", import.meta.url), "utf8");
+  assert.match(source, /const context = await resolveAutomationContext\(run\.context_snapshot\.event\)/);
+  assert.match(source, /if \(run\.status === "cancelled"\)[\s\S]*status: "cancelled"/);
+});
+
+test("Idempotência cobre evento, run, receipt e tarefa", async () => {
+  const [base, hardening] = await Promise.all([
+    readFile(new URL("../supabase/migrations/20260830100000_automation_engine_v2.sql", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/migrations/20260830110000_automation_engine_v2_hardening.sql", import.meta.url), "utf8"),
+  ]);
+  assert.match(base, /automation_runs_once_per_event_idx/i);
+  assert.match(base, /unique \(clinica_id,source_event_id,automation_version_id\)/i);
+  assert.match(base, /idempotency_key text not null unique/i);
+  assert.match(hardening, /automation_tasks_idempotency_uidx/i);
+});
+
+test("Executor de tarefas trata o índice parcial sem upsert incompatível", async () => {
+  const source = await readFile(new URL("../src/lib/automations/executor.js", import.meta.url), "utf8");
+  const taskExecutor = source.slice(
+    source.indexOf('if (actionType === "agenda.register_reminder"'),
+    source.indexOf('if (actionType === "communication.send_email"'),
+  );
+  assert.match(taskExecutor, /from\("automation_tasks"\)\.insert/);
+  assert.match(taskExecutor, /error\.code !== "23505"/);
+  assert.doesNotMatch(taskExecutor, /from\("automation_tasks"\)\.upsert/);
+});
+
+test("Tenant isolation e limites continuam aplicados", async () => {
+  const base = await readFile(new URL("../supabase/migrations/20260830100000_automation_engine_v2.sql", import.meta.url), "utf8");
+  assert.match(base, /foreign key \(clinica_id,automation_version_id\)/i);
+  assert.equal(resolveAutomationLimits({ automation_limits: { maxMonthlyRuns: 1 } }).maxMonthlyRuns, 1);
+});
+
+test("Executor CRM usa a assinatura canonica completa ao mover oportunidade", async () => {
+  const source = await readFile(new URL("../src/lib/automations/executor.js", import.meta.url), "utf8");
+  const move = source.slice(source.indexOf('if (actionType === "crm.move_stage")'), source.indexOf('throw Object.assign(new Error("Ação CRM sem executor."'));
+  for (const parameter of ["p_clinica_id", "p_opportunity_id", "p_stage_id", "p_before_id", "p_after_id", "p_lost_reason_id", "p_closed_value"]) assert.match(move, new RegExp(parameter));
+  assert.match(move, /attachAutomationLineage/);
+});
+
+test("Homologacao real exige confirmacao e restringe execucao ao tenant demo", async () => {
+  const source = await readFile(new URL("../scripts/homologate-automation-engine.mjs", import.meta.url), "utf8");
+  assert.match(source, /AUTOMATION_HOMOLOGATION_CONFIRM/);
+  assert.match(source, /demo-isolado/);
+  assert.match(source, /metadata\?\.demo === true/);
+  assert.match(source, /AUTOMATION_ALLOW_HIGH_RISK_ACTIONS = "false"/);
+  assert.doesNotMatch(source, /runAutomationWorker/);
 });
