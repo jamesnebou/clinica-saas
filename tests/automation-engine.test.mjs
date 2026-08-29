@@ -371,6 +371,25 @@ test("Galeria inicial contém oito modelos inativos por definição", () => {
   assert.equal(AUTOMATION_TEMPLATES.every((item) => item.definition && !item.active), true);
 });
 
+test("Contexto autorizado de seção disponibiliza o cliente Supabase às actions", async () => {
+  const source = await readFile(new URL("../src/lib/auth/session.js", import.meta.url), "utf8");
+  assert.match(source, /const supabase = await createClient\(\);[\s\S]*return \{ \.\.\.context, supabase \};/);
+  assert.doesNotMatch(source, /if \(!activeClinic\) \{\s*return context;/);
+});
+
+test("Builder mantém margens e controles responsivos", async () => {
+  const [page, builder] = await Promise.all([
+    readFile(new URL("../src/app/dashboard/automacoes/[id]/page.js", import.meta.url), "utf8"),
+    readFile(new URL("../src/components/automations/automation-builder.js", import.meta.url), "utf8"),
+  ]);
+  assert.match(page, /px-4 py-6 sm:px-6 sm:py-8 lg:px-8 xl:px-10/);
+  assert.match(page, /max-w-\[1680px\]/);
+  assert.match(page, /overflow-x-auto/);
+  assert.match(builder, /min-w-0 max-w-full/);
+  assert.match(builder, /flex min-w-0 flex-wrap items-center/);
+  assert.match(builder, /flex flex-col-reverse gap-3 sm:flex-row/);
+});
+
 test("Todos os templates usam triggers registrados", () => {
   assert.equal(AUTOMATION_TEMPLATES.every((item) => EVENT_TYPES.includes(item.definition.trigger.type)), true);
 });

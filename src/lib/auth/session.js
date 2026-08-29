@@ -70,9 +70,10 @@ export async function requireClinic() {
 export async function requireClinicSection(section) {
   const context = await requireClinic();
   const activeClinic = context.activeClinic;
+  const supabase = await createClient();
 
   if (!activeClinic) {
-    return context;
+    return { ...context, supabase };
   }
 
   const membership = getCurrentMembership(context.memberships, activeClinic.id);
@@ -80,14 +81,13 @@ export async function requireClinicSection(section) {
     redirect("/dashboard?erro=permissao");
   }
 
-  const supabase = await createClient();
   const plan = await getClinicPlan(activeClinic);
   const capabilities = await getClinicCapabilities({ clinic: activeClinic, plan, client: supabase });
   if (!sectionHasCapability(section, capabilities.effective)) {
     redirect("/dashboard?erro=recurso_indisponivel");
   }
 
-  return context;
+  return { ...context, supabase };
 }
 
 export async function requireInternalAdmin() {

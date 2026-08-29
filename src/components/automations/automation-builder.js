@@ -25,11 +25,11 @@ function newActionStep(prefix = "action") {
 }
 
 function Input({ className = "", ...props }) {
-  return <input {...props} className={`dashboard-field min-h-11 rounded-lg border border-neutral-200 bg-white px-3 text-sm ${className}`} />;
+  return <input {...props} className={`dashboard-field min-h-11 min-w-0 max-w-full rounded-lg border border-neutral-200 bg-white px-3 text-sm ${className}`} />;
 }
 
 function Select({ className = "", ...props }) {
-  return <select {...props} className={`dashboard-field min-h-11 rounded-lg border border-neutral-200 bg-white px-3 text-sm ${className}`} />;
+  return <select {...props} className={`dashboard-field min-h-11 min-w-0 max-w-full rounded-lg border border-neutral-200 bg-white px-3 text-sm ${className}`} />;
 }
 
 function ConditionGroupEditor({ group, event, onChange, compact = false }) {
@@ -69,7 +69,7 @@ function ConditionGroupEditor({ group, event, onChange, compact = false }) {
     {conditions.map((condition, index) => {
       const selectedField = fieldMap[condition.field] || event?.fields?.[0];
       const hasValue = !["is_empty", "is_not_empty"].includes(condition.operator);
-      return <div key={`${condition.field}-${index}`} className="grid gap-2 rounded-lg border border-neutral-200 bg-white/70 p-3 lg:grid-cols-[1.3fr_1fr_1fr_auto]">
+      return <div key={`${condition.field}-${index}`} className="grid min-w-0 gap-2 rounded-lg border border-neutral-200 bg-white/70 p-3 lg:grid-cols-[1.3fr_1fr_1fr_auto]">
         <Select aria-label="Campo" value={condition.field} onChange={(changeEvent) => {
           const next = fieldMap[changeEvent.target.value];
           updateCondition(index, { field: changeEvent.target.value, valueType: next?.type || "string" });
@@ -97,7 +97,7 @@ function ActionEditor({ step, onChange }) {
       {Object.values(ACTION_REGISTRY).map((item) => <option key={item.type} value={item.type}>{item.module} · {item.label}</option>)}
     </Select>
     <div className="grid gap-2 sm:grid-cols-2">
-      {(action?.parameters || []).map((parameter) => <label key={parameter.name} className="text-xs font-bold text-neutral-600">
+      {(action?.parameters || []).map((parameter) => <label key={parameter.name} className="min-w-0 text-xs font-bold text-neutral-600">
         {parameter.label}
         {parameter.type === "enum" ? <Select value={step.params?.[parameter.name] || ""} onChange={(event) => onChange({ params: { ...step.params, [parameter.name]: event.target.value } })} className="mt-1 w-full">
           <option value="">Selecione</option>{(parameter.options || []).map((option) => <option key={option} value={option}>{option}</option>)}
@@ -138,14 +138,16 @@ function StepCard({ step, index, total, event, onChange, onMove, onDuplicate, on
   };
   const [label, icon] = labels[step.type] || labels.action;
 
-  return <div className="rounded-lg border border-neutral-200 bg-white/75 p-4">
-    <div className="flex items-center gap-3">
+  return <div className="min-w-0 rounded-lg border border-neutral-200 bg-white/75 p-4">
+    <div className="flex min-w-0 flex-wrap items-center gap-2 sm:gap-3">
       <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-[var(--clinic-soft)] text-[var(--clinic-primary)]">{icon}</span>
-      <strong className="flex-1">{label}</strong>
-      <button type="button" title="Duplicar" onClick={onDuplicate}><Copy size={17} /></button>
-      <button type="button" title="Subir" disabled={index === 0} onClick={() => onMove(-1)}><ArrowUp size={17} /></button>
-      <button type="button" title="Descer" disabled={index === total - 1} onClick={() => onMove(1)}><ArrowDown size={17} /></button>
-      <button type="button" title="Remover" onClick={onRemove} className="text-red-600"><Trash2 size={17} /></button>
+      <strong className="min-w-36 flex-1">{label}</strong>
+      <div className="ml-auto flex shrink-0 items-center gap-1">
+        <button type="button" title="Duplicar" onClick={onDuplicate} className="inline-flex h-9 w-9 items-center justify-center rounded-lg hover:bg-neutral-100"><Copy size={17} /></button>
+        <button type="button" title="Subir" disabled={index === 0} onClick={() => onMove(-1)} className="inline-flex h-9 w-9 items-center justify-center rounded-lg hover:bg-neutral-100 disabled:opacity-30"><ArrowUp size={17} /></button>
+        <button type="button" title="Descer" disabled={index === total - 1} onClick={() => onMove(1)} className="inline-flex h-9 w-9 items-center justify-center rounded-lg hover:bg-neutral-100 disabled:opacity-30"><ArrowDown size={17} /></button>
+        <button type="button" title="Remover" onClick={onRemove} className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-red-600 hover:bg-red-50"><Trash2 size={17} /></button>
+      </div>
     </div>
 
     {step.type === "action" ? <ActionEditor step={step} onChange={onChange} /> : null}
@@ -199,20 +201,20 @@ export function AutomationBuilder({ automation, saveAction }) {
     }
   }
 
-  return <div className="space-y-5">
-    <form action={saveAction} className="space-y-5">
+  return <div className="min-w-0 space-y-5">
+    <form action={saveAction} className="min-w-0 space-y-5">
       <input type="hidden" name="automation_id" value={automation.id} />
       <input type="hidden" name="current_status" value={automation.status} />
       <input type="hidden" name="definition_json" value={JSON.stringify(definition)} />
 
-      <section className="premium-panel rounded-lg p-5">
+      <section className="premium-panel min-w-0 rounded-lg p-4 sm:p-5">
         <div className="grid gap-4 md:grid-cols-2">
           <label className="text-sm font-bold">Nome<Input name="name" defaultValue={automation.name} required className="mt-2 w-full" /></label>
           <label className="text-sm font-bold">Descrição<Input name="description" defaultValue={automation.description || ""} className="mt-2 w-full" /></label>
         </div>
       </section>
 
-      <section className="premium-panel rounded-lg p-5">
+      <section className="premium-panel min-w-0 rounded-lg p-4 sm:p-5">
         <p className="text-xs font-black uppercase tracking-[0.18em] text-[var(--clinic-primary)]">Quando</p>
         <Select aria-label="Evento" value={event?.type || ""} onChange={(changeEvent) => update({ trigger: { type: changeEvent.target.value, reentry: "deny_self" }, conditions: emptyGroup() })} className="mt-3 w-full">
           <option value="">Selecione um evento</option>{Object.values(EVENT_REGISTRY).map((item) => <option key={item.type} value={item.type}>{item.module} · {item.label}</option>)}
@@ -220,13 +222,13 @@ export function AutomationBuilder({ automation, saveAction }) {
         <p className="mt-2 text-sm text-neutral-500">{event?.description}</p>
       </section>
 
-      <section className="premium-panel rounded-lg p-5">
+      <section className="premium-panel min-w-0 rounded-lg p-4 sm:p-5">
         <p className="text-xs font-black uppercase tracking-[0.18em] text-[var(--clinic-primary)]">Se</p>
         <h2 className="mt-1 text-lg font-black">Condições iniciais</h2>
         <ConditionGroupEditor group={definition.conditions} event={event} onChange={(conditions) => update({ conditions })} />
       </section>
 
-      <section className="premium-panel rounded-lg p-5">
+      <section className="premium-panel min-w-0 rounded-lg p-4 sm:p-5">
         <p className="text-xs font-black uppercase tracking-[0.18em] text-[var(--clinic-primary)]">Então</p>
         <h2 className="mt-1 text-lg font-black">Etapas da automação</h2>
         <div className="mt-4 space-y-3">
@@ -244,9 +246,9 @@ export function AutomationBuilder({ automation, saveAction }) {
         </div>
       </section>
 
-      <div className="flex flex-wrap justify-end gap-3">
-        <button type="button" onClick={testDefinition} className="inline-flex items-center gap-2 rounded-lg border border-neutral-300 bg-white px-5 py-3 font-bold"><Beaker size={18} /> Testar sem executar</button>
-        <button type="submit" className="rounded-lg bg-neutral-950 px-6 py-3 font-bold text-white">Salvar rascunho</button>
+      <div className="flex flex-col-reverse gap-3 sm:flex-row sm:flex-wrap sm:justify-end">
+        <button type="button" onClick={testDefinition} className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-neutral-300 bg-white px-5 py-3 font-bold sm:w-auto"><Beaker size={18} /> Testar sem executar</button>
+        <button type="submit" className="w-full rounded-lg bg-neutral-950 px-6 py-3 font-bold text-white sm:w-auto">Salvar rascunho</button>
       </div>
     </form>
 
