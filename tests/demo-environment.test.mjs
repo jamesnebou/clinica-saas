@@ -151,10 +151,10 @@ test("dataset cobre todos os modulos registrados e nao deixa tabelas implicitas"
 });
 
 test("migration restringe e serializa o reset atomico da demo", async () => {
-  const migration = await readFile(
-    new URL("../supabase/migrations/20260829100000_demo_environment_v2.sql", import.meta.url),
-    "utf8",
-  );
+  const [migration, automationMigration] = await Promise.all([
+    readFile(new URL("../supabase/migrations/20260829100000_demo_environment_v2.sql", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/migrations/20260830100000_automation_engine_v2.sql", import.meta.url), "utf8"),
+  ]);
   const registryBlock = migration.slice(
     migration.indexOf("with registry(table_name, description)"),
     migration.indexOf("create or replace function app_private.assert_demo_service_role"),
@@ -166,8 +166,14 @@ test("migration restringe e serializa o reset atomico da demo", async () => {
   );
   const orderedTables = [...orderingBlock.matchAll(/'([a-z][a-z0-9_]+)'/g)].map((match) => match[1]);
 
-  assert.deepEqual(registeredTables, DEMO_MUTABLE_TABLES);
-  assert.deepEqual(orderedTables, DEMO_MUTABLE_TABLES);
+  const automationTables = [...automationMigration
+    .slice(automationMigration.indexOf("insert into app_private.demo_reset_registry"))
+    .matchAll(/\('?(automations|automation_[a-z0-9_]+)'?,\s*\d+/g)]
+    .map((match) => match[1]);
+  const baseDatasetTables = DEMO_MUTABLE_TABLES.filter((table) => !table.startsWith("automation"));
+  assert.deepEqual(registeredTables, baseDatasetTables);
+  assert.deepEqual(orderedTables, baseDatasetTables);
+  assert.deepEqual(automationTables, DEMO_MUTABLE_TABLES.filter((table) => table.startsWith("automation")));
   assert.match(migration, /^begin;/i);
   assert.match(migration, /commit;\s*$/i);
   assert.doesNotMatch(migration, /truncate\s|drop\s+table/i);

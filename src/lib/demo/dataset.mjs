@@ -1,10 +1,18 @@
 import { createHash } from "node:crypto";
 
-export const DEMO_DATASET_VERSION = 2;
+export const DEMO_DATASET_VERSION = 3;
 export const DEMO_TIME_ZONE = "America/Bahia";
 
 // Keep this list aligned with app_private.demo_reset_registry in the demo migration.
 export const DEMO_MUTABLE_TABLES = [
+  "automation_action_receipts",
+  "automation_waits",
+  "automation_run_steps",
+  "automation_event_consumptions",
+  "automation_tasks",
+  "automation_runs",
+  "automation_versions",
+  "automations",
   "finance_comissao_pagamento_itens",
   "finance_comissao_pagamentos",
   "finance_transferencias",
@@ -101,6 +109,81 @@ export function buildDemoDataset({ clinicId, userId, now = new Date() }) {
   const id = (key) => deterministicDemoId(clinicId, key);
   const { start: monthStart, end: monthEnd } = monthBounds(now);
   const table = Object.fromEntries(DEMO_MUTABLE_TABLES.map((name) => [name, []]));
+
+  const automationDefinitions = [
+    {
+      key: "lead-follow-up", name: "Follow-up de novo lead", trigger: "crm.opportunity.created",
+      steps: [
+        { id: "wait_10m", type: "wait", mode: "duration", amount: 10, unit: "minutes", until: null },
+        { id: "create_follow_up", type: "action", actionType: "crm.create_follow_up", params: { title: "Entrar em contato com novo lead", due_in_minutes: 0 } },
+      ],
+    },
+    {
+      key: "booking-reminder", name: "Lembrete de agendamento", trigger: "booking.created",
+      steps: [{ id: "register_reminder", type: "action", actionType: "agenda.register_reminder", params: { channel: "interno", message: "Confirmar o próximo atendimento." } }],
+    },
+    {
+      key: "overdue-recovery", name: "Recuperação de inadimplência", trigger: "finance.receivable.overdue",
+      steps: [{ id: "collection_task", type: "action", actionType: "finance.create_collection_task", params: { title: "Cobrar recebível vencido", due_in_minutes: 0 } }],
+    },
+  ].map((item) => ({ ...item, definition: { schemaVersion: 1, trigger: { type: item.trigger, reentry: "deny_self" }, conditions: { kind: "group", operator: "AND", conditions: [] }, steps: item.steps } }));
+
+  table.automations = automationDefinitions.map((item) => ({
+    id: id(`automation:${item.key}`), clinica_id: clinicId, name: item.name,
+    description: "Automação fictícia e pausada para demonstração segura.", status: "paused",
+    trigger_type: item.trigger, draft_definition: item.definition, current_version_id: null,
+    owner_id: userId, metadata: { demo: true },
+  }));
+  table.automation_versions = automationDefinitions.map((item) => ({
+    id: id(`automation-version:${item.key}`), clinica_id: clinicId,
+    automation_id: id(`automation:${item.key}`), version: 1, trigger_type: item.trigger,
+    definition: item.definition,
+    definition_hash: createHash("sha256").update(JSON.stringify(item.definition)).digest("hex"),
+    status: "active", created_by: userId,
+  }));
+  const automationRunSpecs = [
+    ["lead-follow-up", "waiting", -2, 0],
+    ["booking-reminder", "completed", -1, 1],
+    ["overdue-recovery", "failed", 0, 1],
+  ];
+  table.automation_runs = automationRunSpecs.map(([key, status, offset, cursor]) => {
+    const item = automationDefinitions.find((candidate) => candidate.key === key);
+    return {
+      id: id(`automation-run:${key}`), clinica_id: clinicId,
+      automation_id: id(`automation:${key}`), automation_version_id: id(`automation-version:${key}`),
+      source_event_id: null, source_event_type: item.trigger, entity_type: "demo", entity_id: null,
+      status, current_step_index: cursor, execution_plan: item.steps,
+      context_snapshot: { event: { type: item.trigger, clinica_id: clinicId }, clinic_metadata: { demo: true } },
+      correlation_id: `demo:${key}`, automation_depth: 0, attempts: status === "failed" ? 2 : 1,
+      next_attempt_at: localTimestamp(now, offset, 10), started_at: localTimestamp(now, offset, 10),
+      completed_at: ["completed", "failed"].includes(status) ? localTimestamp(now, offset, 10, 5) : null,
+      failure_code: status === "failed" ? "DEMO_CONFIGURATION_REQUIRED" : null,
+      failure_message: status === "failed" ? "Execução fictícia para demonstrar o diagnóstico de falhas." : null,
+    };
+  });
+  table.automation_run_steps = automationRunSpecs.flatMap(([key, status, offset]) => {
+    const item = automationDefinitions.find((candidate) => candidate.key === key);
+    return item.steps.map((step, index) => ({
+      id: id(`automation-step:${key}:${step.id}`), clinica_id: clinicId, run_id: id(`automation-run:${key}`),
+      step_id: step.id, step_index: index, step_type: step.type, action_type: step.actionType || null,
+      status: status === "waiting" ? (step.type === "wait" ? "waiting" : "queued") : status === "failed" && index === item.steps.length - 1 ? "failed" : "completed",
+      attempt: 1, result: status === "waiting" && step.type === "wait" ? { resume_at: localTimestamp(now, 1, 10) } : { demo: true },
+      error_code: status === "failed" && index === item.steps.length - 1 ? "DEMO_CONFIGURATION_REQUIRED" : null,
+      error_message: status === "failed" && index === item.steps.length - 1 ? "Falha fictícia da demonstração." : null,
+      started_at: localTimestamp(now, offset, 10, index), completed_at: status === "waiting" ? null : localTimestamp(now, offset, 10, index + 1),
+    }));
+  });
+  table.automation_waits = [{
+    id: id("automation-wait:lead-follow-up"), clinica_id: clinicId,
+    run_id: id("automation-run:lead-follow-up"), step_id: "wait_10m",
+    resume_at: localTimestamp(now, 1, 10), status: "pending", attempts: 0,
+  }];
+  table.automation_tasks = [{
+    id: id("automation-task:overdue-recovery"), clinica_id: clinicId,
+    run_id: id("automation-run:overdue-recovery"), entity_type: "finance_receivable", entity_id: null,
+    title: "Revisar cobrança demonstrativa", description: "Tarefa fictícia criada pelo Motor 2.0.",
+    due_at: localTimestamp(now, 1, 14), status: "pending", assigned_to: userId,
+  }];
 
   const professionalSpecs = [
     ["helena", "Dra. Helena Martins", "Harmonização facial", 18],

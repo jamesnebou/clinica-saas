@@ -139,6 +139,7 @@ create table if not exists public.automation_action_receipts (
   entity_id text,
   result jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
   completed_at timestamptz,
   foreign key (clinica_id,run_id) references public.automation_runs(clinica_id,id) on delete cascade
 );
@@ -146,7 +147,7 @@ create table if not exists public.automation_action_receipts (
 create table if not exists public.automation_tasks (
   id uuid primary key default gen_random_uuid(),
   clinica_id uuid not null references public.clinicas(id) on delete cascade,
-  run_id uuid references public.automation_runs(id) on delete set null,
+  run_id uuid,
   entity_type text,
   entity_id uuid,
   title text not null,
@@ -154,9 +155,32 @@ create table if not exists public.automation_tasks (
   due_at timestamptz,
   status text not null default 'pending' check (status in ('pending','completed','cancelled')),
   assigned_to uuid,
+  idempotency_key text,
   created_at timestamptz not null default now(),
-  completed_at timestamptz
+  completed_at timestamptz,
+  unique (clinica_id,id)
 );
+
+-- Keep the migration safe when a previous local attempt created the tables only
+-- partially. The composite foreign keys prevent a run from another clinic from
+-- being attached to a consumption or task.
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname='automation_event_consumptions_clinic_run_fk') then
+    alter table public.automation_event_consumptions
+      add constraint automation_event_consumptions_clinic_run_fk
+      foreign key (clinica_id,run_id) references public.automation_runs(clinica_id,id) on delete set null;
+  end if;
+end $$;
+
+alter table public.automation_tasks drop constraint if exists automation_tasks_run_id_fkey;
+create unique index if not exists automation_tasks_clinic_id_id_uidx on public.automation_tasks(clinica_id,id);
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname='automation_tasks_clinic_run_fk') then
+    alter table public.automation_tasks
+      add constraint automation_tasks_clinic_run_fk
+      foreign key (clinica_id,run_id) references public.automation_runs(clinica_id,id) on delete set null;
+  end if;
+end $$;
 
 create index if not exists automations_trigger_idx on public.automations(clinica_id,trigger_type,status);
 create index if not exists automation_versions_lookup_idx on public.automation_versions(clinica_id,automation_id,version desc);
@@ -165,6 +189,7 @@ create index if not exists automation_runs_clinic_idx on public.automation_runs(
 create index if not exists automation_steps_run_idx on public.automation_run_steps(clinica_id,run_id,step_index);
 create index if not exists automation_waits_claim_idx on public.automation_waits(status,resume_at);
 create index if not exists automation_tasks_clinic_idx on public.automation_tasks(clinica_id,status,due_at);
+create unique index if not exists automation_tasks_idempotency_uidx on public.automation_tasks(idempotency_key) where idempotency_key is not null;
 
 alter table public.domain_outbox_events
   add column if not exists schema_version integer not null default 1,
@@ -176,7 +201,7 @@ alter table public.domain_outbox_events
 
 create or replace function app_private.automation_has_access(p_clinica_id uuid, p_admin_only boolean default false)
 returns boolean language sql stable security definer set search_path=public,app_private as $$
-  select auth.uid() is null or exists (
+  select exists (
     select 1 from public.usuarios_clinica uc
     where uc.clinica_id=p_clinica_id and uc.user_id=auth.uid() and uc.ativo
       and (not p_admin_only or uc.papel in ('owner','admin'))
@@ -268,7 +293,7 @@ begin
   elsif new.status is distinct from old.status or new.valor_recebido is distinct from old.valor_recebido then
     v_event:=case when new.status='pago' then 'payment.received' when coalesce(new.valor_recebido,0)>coalesce(old.valor_recebido,0) then 'payment.partial' else null end;
   end if;
-  if v_event is not null then perform app_private.emit_automation_event(new.clinica_id,v_event,'finance_receivable',new.id,jsonb_build_object('receivable_id',new.id,'cliente_id',new.cliente_id,'status',new.status,'valor_total',new.valor_total,'valor_recebido',new.valor_recebido,'vencimento',new.vencimento),'automation:'||v_event||':'||new.id||':'||case when tg_op='INSERT' then 'created' else txid_current()::text end,now()); end if;
+  if v_event is not null then perform app_private.emit_automation_event(new.clinica_id,v_event,'finance_receivable',new.id,jsonb_build_object('receivable_id',new.id,'cliente_id',new.cliente_id,'status',new.status,'valor_total',new.valor_original,'valor_recebido',new.valor_recebido,'vencimento',new.vencimento),'automation:'||v_event||':'||new.id||':'||case when tg_op='INSERT' then 'created' else txid_current()::text end,now()); end if;
   return new;
 end $$;
 drop trigger if exists automation_receivable_event_trigger on public.finance_recebiveis;
@@ -278,12 +303,12 @@ create or replace function public.enqueue_due_finance_automation_events(p_limit 
 returns integer language plpgsql security definer set search_path=public,app_private as $$
 declare v_count integer:=0; r record; v_event text;
 begin
-  for r in select id,clinica_id,cliente_id,status,valor_total,valor_recebido,vencimento from public.finance_recebiveis
-    where status in ('aberto','parcial','vencido') and vencimento between current_date-30 and current_date+1
+  for r in select id,clinica_id,cliente_id,status,valor_original,valor_recebido,vencimento from public.finance_recebiveis
+    where status in ('aberto','parcial') and vencimento between current_date-30 and current_date+1
     order by vencimento limit greatest(1,least(coalesce(p_limit,100),500))
   loop
     v_event:=case when r.vencimento<current_date then 'finance.receivable.overdue' else 'finance.receivable.due_soon' end;
-    perform app_private.emit_automation_event(r.clinica_id,v_event,'finance_receivable',r.id,jsonb_build_object('receivable_id',r.id,'cliente_id',r.cliente_id,'status',r.status,'valor_total',r.valor_total,'valor_recebido',r.valor_recebido,'vencimento',r.vencimento),'automation:'||v_event||':'||r.id||':'||current_date,now());
+    perform app_private.emit_automation_event(r.clinica_id,v_event,'finance_receivable',r.id,jsonb_build_object('receivable_id',r.id,'cliente_id',r.cliente_id,'status',r.status,'valor_total',r.valor_original,'valor_recebido',r.valor_recebido,'vencimento',r.vencimento),'automation:'||v_event||':'||r.id||':'||current_date,now());
     v_count:=v_count+1;
   end loop;
   return v_count;

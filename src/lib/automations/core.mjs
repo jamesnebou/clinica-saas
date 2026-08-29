@@ -1,7 +1,7 @@
 export const AUTOMATION_DEFINITION_VERSION = 1;
 export const AUTOMATION_STATUSES = Object.freeze(["draft", "active", "paused", "archived"]);
 export const RUN_STATUSES = Object.freeze(["queued", "running", "waiting", "completed", "failed", "cancelled", "skipped"]);
-export const STEP_STATUSES = Object.freeze(["pending", "running", "waiting", "completed", "failed", "cancelled", "skipped", "blocked"]);
+export const STEP_STATUSES = Object.freeze(["pending", "running", "waiting", "completed", "failed", "cancelled", "skipped", "blocked", "unavailable"]);
 
 export function createEmptyConditionGroup() {
   return { kind: "group", operator: "AND", conditions: [] };

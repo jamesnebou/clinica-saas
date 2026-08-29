@@ -17,20 +17,25 @@ function validateGroup(group, eventType, errors, path = "conditions") {
   }
 }
 
-function validateSteps(steps, eventType, errors, path = "steps", capabilities = null) {
-  const ids = new Set();
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function validateSteps(steps, eventType, errors, path = "steps", capabilities = null, ids = new Set()) {
   for (const [index, step] of steps.entries()) {
     const current = `${path}.${index}`;
     if (!step.id || ids.has(step.id)) errors.push(`${current}: identificador de etapa ausente ou duplicado.`); else ids.add(step.id);
     if (step.type === "action") {
       const action = getActionDefinition(step.actionType);
       errors.push(...validateActionParameters(step.actionType, step.params).map((message) => `${current}: ${message}`));
+      for (const parameter of action?.parameters || []) {
+        const value = step.params?.[parameter.name];
+        if (parameter.type === "reference" && parameter.required && !UUID_PATTERN.test(String(value || ""))) errors.push(`${current}: ${parameter.label} deve ser uma referência UUID válida.`);
+      }
       if (action && capabilities && !capabilities.includes(action.capability)) errors.push(`${current}: a capability ${action.capability} não está disponível.`);
     } else if (step.type === "wait") {
       if (step.mode === "duration" && (!(step.amount > 0) || !["minutes", "hours", "days"].includes(step.unit))) errors.push(`${current}: espera inválida.`);
       if (step.mode === "until" && !step.until) errors.push(`${current}: horário de retomada obrigatório.`);
     } else if (step.type === "condition") validateGroup(step.conditions, eventType, errors, `${current}.conditions`);
-    else if (step.type === "branch") { validateGroup(step.conditions, eventType, errors, `${current}.conditions`); validateSteps(step.then || [], eventType, errors, `${current}.then`, capabilities); validateSteps(step.else || [], eventType, errors, `${current}.else`, capabilities); }
+    else if (step.type === "branch") { validateGroup(step.conditions, eventType, errors, `${current}.conditions`); validateSteps(step.then || [], eventType, errors, `${current}.then`, capabilities, ids); validateSteps(step.else || [], eventType, errors, `${current}.else`, capabilities, ids); }
     else errors.push(`${current}: tipo de etapa não suportado.`);
   }
 }
@@ -59,5 +64,5 @@ export function validateAutomationDefinition(input, options = {}) {
 export function validateReferenceShape(actionType, params = {}) {
   const action = getActionDefinition(actionType);
   if (!action) return false;
-  return action.parameters.filter((item) => item.type === "reference" && item.required).every((item) => /^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(String(params[item.name] || "")));
+  return action.parameters.filter((item) => item.type === "reference" && item.required).every((item) => UUID_PATTERN.test(String(params[item.name] || "")));
 }

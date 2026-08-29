@@ -7,17 +7,14 @@ import { normalizeAutomationEvent } from "./events.js";
 import { evaluateLoopGuard } from "./loop-guard.mjs";
 import { resolveAutomationLimits } from "./limits.mjs";
 import { auditAutomation, recordAutomationMetric } from "./observability.js";
+import { calculateWaitResumeAt } from "./time.mjs";
+import { deterministicActionKey } from "./core.mjs";
 
 function safeError(error) { return { code: error?.code || "AUTOMATION_FAILED", message: String(error?.message || error || "Falha desconhecida").slice(0, 800) }; }
-function waitUntil(step) {
-  if (step.mode === "until") { const parsed = Date.parse(step.until); if (!Number.isFinite(parsed)) throw Object.assign(new Error("Data de espera inválida."), { code: "INVALID_WAIT", permanent: true }); return new Date(parsed).toISOString(); }
-  const multiplier = step.unit === "days" ? 86_400_000 : step.unit === "hours" ? 3_600_000 : 60_000;
-  return new Date(Date.now() + Math.max(1, Number(step.amount || 0)) * multiplier).toISOString();
-}
 
 async function logStep(run, step, status, result = {}, error = null) {
   const now = new Date().toISOString();
-  const row = { clinica_id: run.clinica_id, run_id: run.id, step_id: step.id, step_index: run.current_step_index, step_type: step.type, action_type: step.actionType || null, status, attempt: Math.max(1, Number(run.attempts || 1)), result, error_code: error?.code || null, error_message: error?.message ? String(error.message).slice(0, 800) : null, completed_at: ["running", "waiting"].includes(status) ? null : now };
+  const row = { clinica_id: run.clinica_id, run_id: run.id, step_id: step.id, step_index: run.current_step_index, step_type: step.type, action_type: step.actionType || null, status, attempt: Math.max(1, Number(run.attempts || 1)), idempotency_key: step.type === "action" ? deterministicActionKey(run.id, step.id) : null, result, error_code: error?.code || null, error_message: error?.message ? String(error.message).slice(0, 800) : null, completed_at: ["running", "waiting"].includes(status) ? null : now };
   const { error: insertError } = await supabaseAdmin.from("automation_run_steps").upsert(row, { onConflict: "run_id,step_id,attempt" });
   if (insertError) throw insertError;
 }
@@ -64,7 +61,10 @@ export async function continueAutomationRun(runOrId) {
       } else if (step.type === "wait") {
         const { data: existing } = await supabaseAdmin.from("automation_waits").select("status,resume_at").eq("run_id", run.id).eq("step_id", step.id).maybeSingle();
         if (existing?.status === "completed") { cursor += 1; continue; }
-        const resumeAt = existing?.resume_at || waitUntil(step);
+        const resumeAt = existing?.resume_at || calculateWaitResumeAt(step, {
+          now: context.now,
+          timeZone: context.clinic?.timezone || context.clinic?.metadata?.timezone || "America/Bahia",
+        });
         const { error } = await supabaseAdmin.from("automation_waits").upsert({ clinica_id: run.clinica_id, run_id: run.id, step_id: step.id, resume_at: resumeAt, status: "pending" }, { onConflict: "run_id,step_id" });
         if (error) throw error;
         await logStep(currentRun, step, "waiting", { resume_at: resumeAt });
@@ -117,18 +117,31 @@ export async function processAutomationOutboxEvent(row) {
   if (error) throw error;
   if (!automations?.length) return { matched: 0 };
   const context = await resolveAutomationContext(event);
+  const limits = resolveAutomationLimits(context.clinic?.metadata || {});
+  let monthlyRuns = 0;
+  if (limits.maxMonthlyRuns !== null) {
+    const monthStart = new Date();
+    monthStart.setUTCDate(1);
+    monthStart.setUTCHours(0, 0, 0, 0);
+    const { count, error: countError } = await supabaseAdmin.from("automation_runs").select("id", { count: "exact", head: true }).eq("clinica_id", event.clinica_id).gte("created_at", monthStart.toISOString());
+    if (countError) throw countError;
+    monthlyRuns = Number(count || 0);
+  }
   let matched = 0;
   for (const automation of automations) {
     const { data: version, error: versionError } = await supabaseAdmin.from("automation_versions").select("id,definition,version").eq("clinica_id", event.clinica_id).eq("id", automation.current_version_id).single();
     if (versionError) throw versionError;
-    const limits = resolveAutomationLimits(context.clinic?.metadata || {});
+    if (limits.maxMonthlyRuns !== null && monthlyRuns >= limits.maxMonthlyRuns) {
+      await supabaseAdmin.from("automation_event_consumptions").upsert({ clinica_id: event.clinica_id, source_event_id: event.id, automation_id: automation.id, automation_version_id: version.id, status: "skipped", reason: "PLAN_MONTHLY_RUN_LIMIT" }, { onConflict: "clinica_id,source_event_id,automation_version_id" });
+      continue;
+    }
     const guard = evaluateLoopGuard({ event, automationId: automation.id, reentry: version.definition?.trigger?.reentry, limits });
     if (!guard.allowed) {
       await supabaseAdmin.from("automation_event_consumptions").upsert({ clinica_id: event.clinica_id, source_event_id: event.id, automation_id: automation.id, automation_version_id: version.id, status: "loop_blocked", reason: guard.code }, { onConflict: "clinica_id,source_event_id,automation_version_id" });
       continue;
     }
     const started = await startRun({ event, automation, version, context, depth: guard.depth });
-    if (started) matched += 1;
+    if (started) { matched += 1; monthlyRuns += 1; }
   }
   return { matched };
 }
