@@ -426,6 +426,28 @@ test("Migration registra idempotência de ações e tarefas", async () => {
   assert.match(`${base}\n${hardening}`, /automation_tasks_idempotency_uidx/i);
 });
 
+test("Hardening recupera instalações legadas sem automation_tasks", async () => {
+  const sql = await readFile(new URL("../supabase/migrations/20260830110000_automation_engine_v2_hardening.sql", import.meta.url), "utf8");
+  const createPosition = sql.indexOf("create table if not exists public.automation_tasks");
+  const indexPosition = sql.indexOf("create unique index if not exists automation_tasks_idempotency_uidx");
+  assert.ok(createPosition >= 0, "a tabela de tarefas deve ser criada pelo fix-forward");
+  assert.ok(indexPosition > createPosition, "o índice só pode ser criado depois da tabela");
+});
+
+test("Hardening corrige integridade tenant e RLS sem sessão anônima privilegiada", async () => {
+  const sql = await readFile(new URL("../supabase/migrations/20260830110000_automation_engine_v2_hardening.sql", import.meta.url), "utf8");
+  assert.match(sql, /foreign key \(clinica_id,run_id\)[\s\S]*references public\.automation_runs\(clinica_id,id\)/i);
+  assert.match(sql, /automation_tasks_members_select[\s\S]*automation_has_access\(clinica_id,false\)/i);
+  assert.doesNotMatch(sql, /auth\.uid\(\)\s+is\s+null/i);
+});
+
+test("Hardening usa apenas status válidos e valor total do Financeiro 2.0", async () => {
+  const sql = await readFile(new URL("../supabase/migrations/20260830110000_automation_engine_v2_hardening.sql", import.meta.url), "utf8");
+  assert.match(sql, /status in \('aberto','parcial'\)/i);
+  assert.doesNotMatch(sql, /status in \([^)]*'vencido'/i);
+  assert.match(sql, /'valor_total',new\.valor_total/i);
+});
+
 test("Migration permite cancelamento definitivo de wait", async () => {
   const sql = await readFile(new URL("../supabase/migrations/20260830100000_automation_engine_v2.sql", import.meta.url), "utf8");
   assert.match(sql, /cancel_automation_run[\s\S]*automation_waits set status='cancelled'/i);

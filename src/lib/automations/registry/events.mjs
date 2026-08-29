@@ -11,10 +11,6 @@ export const EVENT_REGISTRY = Object.freeze({
     entity: "crm_opportunity", schemaVersion: 1, capability: "crm",
     fields: [field("event.payload.from_stage_id", "Etapa anterior", "reference"), field("event.payload.to_stage_id", "Etapa atual", "reference"), field("opportunity.stage_id", "Etapa atual confirmada", "reference"), field("opportunity.responsavel_id", "Responsável", "reference"), field("opportunity.valor_estimado", "Valor estimado", "money"), field("opportunity.status", "Status", "enum")],
   },
-  "crm.responsible.changed": {
-    type: "crm.responsible.changed", label: "Responsável alterado", module: "CRM", description: "O responsável comercial foi alterado.", entity: "crm_opportunity", schemaVersion: 1, capability: "crm",
-    fields: [field("opportunity.responsavel_id", "Responsável atual", "reference"), field("event.payload.before.responsavel_id", "Responsável anterior", "reference")],
-  },
   "crm.activity.created": { type: "crm.activity.created", label: "Atividade criada", module: "CRM", description: "Uma atividade foi criada.", entity: "crm_opportunity", schemaVersion: 1, capability: "crm", fields: [field("event.payload.activity_id", "Atividade", "reference"), field("event.payload.type", "Tipo", "enum"), field("opportunity.id", "Oportunidade", "reference")] },
   "crm.activity.completed": { type: "crm.activity.completed", label: "Atividade concluída", module: "CRM", description: "Uma atividade foi concluída.", entity: "crm_opportunity", schemaVersion: 1, capability: "crm", fields: [field("event.payload.activity_id", "Atividade", "reference"), field("opportunity.id", "Oportunidade", "reference")] },
   "crm.opportunity.won": { type: "crm.opportunity.won", label: "Oportunidade ganha", module: "CRM", description: "Uma oportunidade foi convertida.", entity: "crm_opportunity", schemaVersion: 1, capability: "crm", fields: [field("opportunity.valor_fechado", "Valor fechado", "money"), field("opportunity.responsavel_id", "Responsável", "reference")] },
