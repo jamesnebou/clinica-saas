@@ -170,4 +170,8 @@ end $$;
 
 grant execute on function public.enqueue_due_finance_automation_events(integer) to service_role;
 
+-- Atualiza imediatamente o schema exposto pela API REST do Supabase depois
+-- que tabelas ou colunas forem recuperadas por esta migration.
+notify pgrst, 'reload schema';
+
 commit;

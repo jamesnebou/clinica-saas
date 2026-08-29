@@ -166,9 +166,12 @@ test("migration restringe e serializa o reset atomico da demo", async () => {
   );
   const orderedTables = [...orderingBlock.matchAll(/'([a-z][a-z0-9_]+)'/g)].map((match) => match[1]);
 
-  const automationTables = [...automationMigration
-    .slice(automationMigration.indexOf("insert into app_private.demo_reset_registry"))
-    .matchAll(/\('?(automations|automation_[a-z0-9_]+)'?,\s*\d+/g)]
+  const automationRegistryBlock = automationMigration.slice(
+    automationMigration.indexOf("insert into app_private.demo_reset_registry"),
+    automationMigration.indexOf("notify pgrst"),
+  );
+  const automationTables = [...automationRegistryBlock
+    .matchAll(/\('(automations|automation_[a-z0-9_]+)',\s*\d+,\s*'/g)]
     .map((match) => match[1]);
   const baseDatasetTables = DEMO_MUTABLE_TABLES.filter((table) => !table.startsWith("automation"));
   assert.deepEqual(registeredTables, baseDatasetTables);

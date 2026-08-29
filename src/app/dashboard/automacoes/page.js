@@ -20,9 +20,16 @@ export default async function AutomacoesPage() {
   const totalFinished = Number(dashboard.metrics.completed || 0) + Number(dashboard.metrics.failed || 0);
   const successRate = totalFinished ? Math.round((Number(dashboard.metrics.completed || 0) / totalFinished) * 100) : 0;
 
-  return <div>
-    <PageHeader eyebrow="Motor 2.0" title="Automações da clínica" description="Detecte eventos, avalie regras e orquestre CRM, Agenda, Financeiro e comunicações com histórico auditável." action={<a href="#nova" className="inline-flex items-center gap-2 rounded-lg bg-neutral-950 px-4 py-3 text-sm font-bold text-white"><Plus size={17}/> Nova automação</a>} />
-    {!dashboard.available ? <section className="mt-6 rounded-lg border border-amber-200 bg-amber-50 p-5 text-sm text-amber-900">Aplique a migration do Motor de Automação 2.0 para liberar esta área.</section> : <>
+  const missingBase = ["automations", "automation_runs"].includes(dashboard.schemaIssue?.resource);
+
+  return <main className="min-w-0 w-full overflow-x-hidden px-4 py-8 sm:px-6 lg:px-8 xl:px-10">
+    <section className="mx-auto w-full min-w-0 max-w-[1680px]">
+    <PageHeader eyebrow="Motor 2.0" title="Automações da clínica" description="Detecte eventos, avalie regras e orquestre CRM, Agenda, Financeiro e comunicações com histórico auditável." action={<a href="#nova" className="inline-flex shrink-0 items-center gap-2 rounded-lg bg-neutral-950 px-4 py-3 text-sm font-bold text-white"><Plus size={17}/> Nova automação</a>} />
+    {!dashboard.available ? <section className="mt-6 rounded-lg border border-amber-200 bg-amber-50 p-5 text-sm leading-6 text-amber-950">
+      <p className="font-black">Schema do Motor 2.0 incompleto</p>
+      <p className="mt-1">{missingBase ? "As tabelas centrais ainda não estão disponíveis. Aplique primeiro a migration `20260830100000_automation_engine_v2.sql` e, em seguida, reaplique `20260830110000_automation_engine_v2_hardening.sql`." : "A tabela de tarefas ainda não está disponível. Reaplique a migration `20260830110000_automation_engine_v2_hardening.sql`."}</p>
+      {dashboard.schemaIssue?.resource ? <p className="mt-2 text-xs text-amber-800">Recurso indisponível: <strong>{dashboard.schemaIssue.resource}</strong> · código {dashboard.schemaIssue.code}</p> : null}
+    </section> : <>
       <section className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Metric label="Automações ativas" value={dashboard.metrics.active || 0} detail="versões publicadas em execução" />
         <Metric label="Taxa de sucesso" value={`${successRate}%`} detail={`${dashboard.metrics.completed || 0} runs concluídos`} />
@@ -55,5 +62,6 @@ export default async function AutomacoesPage() {
         <form action={createAutomationAction} className="mt-4 premium-panel flex flex-col gap-3 rounded-lg p-5 sm:flex-row sm:items-end"><label className="flex-1 text-sm font-bold">Criar do zero<input name="name" required placeholder="Nome da automação" className="dashboard-field mt-2 h-11 w-full rounded-lg border border-neutral-200 bg-white px-3"/></label><button className="h-11 rounded-lg bg-neutral-950 px-5 font-bold text-white">Criar rascunho</button></form>
       </section>
     </>}
-  </div>;
+    </section>
+  </main>;
 }

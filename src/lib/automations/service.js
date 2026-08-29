@@ -3,6 +3,14 @@ import { createClient } from "@/lib/supabase/server";
 
 function missing(error) { return ["42P01", "PGRST205", "PGRST204"].includes(error?.code); }
 
+function schemaIssue(resource, error) {
+  return {
+    resource,
+    code: error?.code || "SCHEMA_UNAVAILABLE",
+    message: error?.message || "O schema do Motor de Automação 2.0 ainda não está disponível.",
+  };
+}
+
 export async function getAutomationDashboard(clinicId) {
   const supabase = await createClient();
   const [automations, runs, tasks] = await Promise.all([
@@ -10,8 +18,22 @@ export async function getAutomationDashboard(clinicId) {
     supabase.from("automation_runs").select("id,automation_id,source_event_type,status,started_at,completed_at,created_at,failure_code").eq("clinica_id", clinicId).order("created_at", { ascending: false }).limit(50),
     supabase.from("automation_tasks").select("id,title,status,due_at,created_at").eq("clinica_id", clinicId).eq("status", "pending").order("due_at", { ascending: true }).limit(10),
   ]);
-  const error = [automations.error, runs.error, tasks.error].find(Boolean);
-  if (error && missing(error)) return { available: false, automations: [], runs: [], tasks: [], metrics: {} };
+  const failedQuery = [
+    { resource: "automations", error: automations.error },
+    { resource: "automation_runs", error: runs.error },
+    { resource: "automation_tasks", error: tasks.error },
+  ].find((query) => query.error);
+  const error = failedQuery?.error;
+  if (error && missing(error)) {
+    return {
+      available: false,
+      automations: [],
+      runs: [],
+      tasks: [],
+      metrics: {},
+      schemaIssue: schemaIssue(failedQuery.resource, error),
+    };
+  }
   if (error) throw error;
   const list = automations.data || [];
   const runList = runs.data || [];

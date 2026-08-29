@@ -426,6 +426,24 @@ test("Migration registra idempotência de ações e tarefas", async () => {
   assert.match(`${base}\n${hardening}`, /automation_tasks_idempotency_uidx/i);
 });
 
+test("Migration registra somente tabelas ausentes da demo sem reutilizar ordens globais", async () => {
+  const sql = await readFile(new URL("../supabase/migrations/20260830100000_automation_engine_v2.sql", import.meta.url), "utf8");
+  assert.match(sql, /lock table app_private\.demo_reset_registry in exclusive mode/i);
+  assert.match(sql, /coalesce\(max\(delete_order\), 0\) \+ 100/i);
+  assert.match(sql, /coalesce\(max\(insert_order\), 0\) \+ 100/i);
+  assert.match(sql, /where not exists[\s\S]*existing\.table_name = registry\.table_name/i);
+  assert.doesNotMatch(sql, /delete from app_private\.demo_reset_registry/i);
+  assert.doesNotMatch(sql, /\('automation_runs',\s*10,\s*90/i);
+});
+
+test("Migration não recria triggers nem políticas que já existem", async () => {
+  const sql = await readFile(new URL("../supabase/migrations/20260830100000_automation_engine_v2.sql", import.meta.url), "utf8");
+  assert.match(sql, /if not exists \([\s\S]*pg_trigger[\s\S]*automation_booking_event_trigger/i);
+  assert.match(sql, /if not exists \([\s\S]*pg_trigger[\s\S]*automation_receivable_event_trigger/i);
+  assert.match(sql, /if not exists \([\s\S]*pg_policies[\s\S]*members_select/i);
+  assert.doesNotMatch(sql, /drop trigger if exists automation_(booking|receivable)_event_trigger/i);
+});
+
 test("Hardening recupera instalações legadas sem automation_tasks", async () => {
   const sql = await readFile(new URL("../supabase/migrations/20260830110000_automation_engine_v2_hardening.sql", import.meta.url), "utf8");
   const createPosition = sql.indexOf("create table if not exists public.automation_tasks");
@@ -446,6 +464,11 @@ test("Hardening usa apenas status válidos e valor total do Financeiro 2.0", asy
   assert.match(sql, /status in \('aberto','parcial'\)/i);
   assert.doesNotMatch(sql, /status in \([^)]*'vencido'/i);
   assert.match(sql, /'valor_total',new\.valor_total/i);
+});
+
+test("Hardening recarrega o schema REST após recuperar tabelas", async () => {
+  const sql = await readFile(new URL("../supabase/migrations/20260830110000_automation_engine_v2_hardening.sql", import.meta.url), "utf8");
+  assert.match(sql, /notify\s+pgrst\s*,\s*'reload schema'/i);
 });
 
 test("Migration permite cancelamento definitivo de wait", async () => {

@@ -282,8 +282,16 @@ begin
   end if;
   return new;
 end $$;
-drop trigger if exists automation_booking_event_trigger on public.agendamentos;
-create trigger automation_booking_event_trigger after insert or update of status,inicio,fim on public.agendamentos for each row execute function app_private.automation_booking_event_trigger();
+do $$ begin
+  if not exists (
+    select 1 from pg_trigger
+    where tgname = 'automation_booking_event_trigger'
+      and tgrelid = 'public.agendamentos'::regclass
+      and not tgisinternal
+  ) then
+    execute 'create trigger automation_booking_event_trigger after insert or update of status,inicio,fim on public.agendamentos for each row execute function app_private.automation_booking_event_trigger()';
+  end if;
+end $$;
 
 create or replace function app_private.automation_receivable_event_trigger()
 returns trigger language plpgsql security definer set search_path=public,app_private as $$
@@ -296,8 +304,16 @@ begin
   if v_event is not null then perform app_private.emit_automation_event(new.clinica_id,v_event,'finance_receivable',new.id,jsonb_build_object('receivable_id',new.id,'cliente_id',new.cliente_id,'status',new.status,'valor_total',new.valor_original,'valor_recebido',new.valor_recebido,'vencimento',new.vencimento),'automation:'||v_event||':'||new.id||':'||case when tg_op='INSERT' then 'created' else txid_current()::text end,now()); end if;
   return new;
 end $$;
-drop trigger if exists automation_receivable_event_trigger on public.finance_recebiveis;
-create trigger automation_receivable_event_trigger after insert or update of status,valor_recebido on public.finance_recebiveis for each row execute function app_private.automation_receivable_event_trigger();
+do $$ begin
+  if not exists (
+    select 1 from pg_trigger
+    where tgname = 'automation_receivable_event_trigger'
+      and tgrelid = 'public.finance_recebiveis'::regclass
+      and not tgisinternal
+  ) then
+    execute 'create trigger automation_receivable_event_trigger after insert or update of status,valor_recebido on public.finance_recebiveis for each row execute function app_private.automation_receivable_event_trigger()';
+  end if;
+end $$;
 
 create or replace function public.enqueue_due_finance_automation_events(p_limit integer default 100)
 returns integer language plpgsql security definer set search_path=public,app_private as $$
@@ -317,10 +333,18 @@ end $$;
 do $$ declare t text; begin
   foreach t in array array['automations','automation_versions','automation_runs','automation_run_steps','automation_waits','automation_event_consumptions','automation_action_receipts','automation_tasks'] loop
     execute format('alter table public.%I enable row level security',t);
-    execute format('drop policy if exists %I on public.%I',t||'_members_select',t);
-    execute format('create policy %I on public.%I for select to authenticated using (app_private.automation_has_access(clinica_id,false))',t||'_members_select',t);
-    execute format('drop policy if exists %I on public.%I',t||'_admins_manage',t);
-    execute format('create policy %I on public.%I for all to authenticated using (app_private.automation_has_access(clinica_id,true)) with check (app_private.automation_has_access(clinica_id,true))',t||'_admins_manage',t);
+    if not exists (
+      select 1 from pg_policies
+      where schemaname = 'public' and tablename = t and policyname = t||'_members_select'
+    ) then
+      execute format('create policy %I on public.%I for select to authenticated using (app_private.automation_has_access(clinica_id,false))',t||'_members_select',t);
+    end if;
+    if not exists (
+      select 1 from pg_policies
+      where schemaname = 'public' and tablename = t and policyname = t||'_admins_manage'
+    ) then
+      execute format('create policy %I on public.%I for all to authenticated using (app_private.automation_has_access(clinica_id,true)) with check (app_private.automation_has_access(clinica_id,true))',t||'_admins_manage',t);
+    end if;
   end loop;
 end $$;
 
@@ -331,9 +355,52 @@ grant execute on function public.publish_automation_v2(uuid,uuid,jsonb,text,text
 grant execute on function public.cancel_automation_run(uuid,uuid) to authenticated,service_role;
 grant execute on function public.claim_automation_waits(text,integer),public.claim_automation_runs(text,integer),public.enqueue_due_finance_automation_events(integer) to service_role;
 
-insert into app_private.demo_reset_registry(table_name,delete_order,insert_order,required)
-values
- ('automation_action_receipts',5,95,false),('automation_waits',6,94,false),('automation_run_steps',7,93,false),('automation_event_consumptions',8,92,false),('automation_tasks',9,91,false),('automation_runs',10,90,false),('automation_versions',11,89,false),('automations',12,88,false)
-on conflict(table_name) do update set delete_order=excluded.delete_order,insert_order=excluded.insert_order,required=excluded.required;
+do $$
+declare
+  v_delete_base integer;
+  v_insert_base integer;
+begin
+  -- Serializa a reserva das ordens e nunca recria entradas que ja existem.
+  lock table app_private.demo_reset_registry in exclusive mode;
+
+  select
+    coalesce(max(delete_order), 0) + 100,
+    coalesce(max(insert_order), 0) + 100
+  into v_delete_base, v_insert_base
+  from app_private.demo_reset_registry;
+
+  insert into app_private.demo_reset_registry(
+    table_name,
+    delete_order,
+    insert_order,
+    required,
+    description
+  )
+  select
+    registry.table_name,
+    v_delete_base + registry.position,
+    v_insert_base + (9 - registry.position),
+    false,
+    registry.description
+  from (values
+    ('automation_action_receipts', 1, 'Recibos idempotentes das acoes do motor'),
+    ('automation_waits', 2, 'Esperas agendadas das automacoes'),
+    ('automation_run_steps', 3, 'Etapas executadas das automacoes'),
+    ('automation_event_consumptions', 4, 'Consumo idempotente dos eventos do dominio'),
+    ('automation_tasks', 5, 'Tarefas geradas pelas automacoes'),
+    ('automation_runs', 6, 'Execucoes das automacoes'),
+    ('automation_versions', 7, 'Versoes publicadas das automacoes'),
+    ('automations', 8, 'Definicoes das automacoes')
+  ) as registry(table_name, position, description)
+  where not exists (
+    select 1
+    from app_private.demo_reset_registry existing
+    where existing.table_name = registry.table_name
+  )
+  on conflict do nothing;
+end
+$$;
+
+notify pgrst, 'reload schema';
 
 commit;
