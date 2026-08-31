@@ -1,10 +1,12 @@
 import { redirect } from "next/navigation";
 import { getUserClinics, requireUser } from "@/lib/auth/session";
+import { normalizeSelectedPlan } from "@/lib/auth/self-service.mjs";
 import ClinicForm from "./clinic-form";
 
-export const metadata = { title: "Criar clínica | Clínica SaaS" };
+export const metadata = { title: "Criar clínica | NexaWi Clínicas" };
 
-export default async function OnboardingPage() {
+export default async function OnboardingPage({ searchParams }) {
+  const params = await searchParams;
   const user = await requireUser("/login-cliente");
   const { activeClinic } = await getUserClinics();
 
@@ -20,7 +22,11 @@ export default async function OnboardingPage() {
         <p className="mt-3 max-w-2xl text-sm leading-6 text-neutral-600">
           Cadastre a operação, escolha o segmento principal e adicione especialidades complementares. O usuário logado será vinculado como owner da clínica.
         </p>
-        <ClinicForm userEmail={user.email} />
+        <ClinicForm
+          userEmail={user.email}
+          userPhone={user.user_metadata?.phone || ""}
+          selectedPlan={normalizeSelectedPlan(params?.plan || user.user_metadata?.selected_plan)}
+        />
       </section>
     </main>
   );

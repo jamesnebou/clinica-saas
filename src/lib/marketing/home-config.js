@@ -8,10 +8,10 @@ export const defaultMarketingHome = {
     title: "A clínica organizada para vender antes, atender melhor e voltar a faturar depois.",
     subtitle:
       "NexaWi Clínicas reúne agenda, CRM, prontuário, financeiro, site premium e checkout de sinal em uma operação simples para clínicas.",
-    primaryCtaLabel: "Solicitar demonstração",
-    primaryCtaHref: "#demo",
-    secondaryCtaLabel: "Conhecer a plataforma",
-    secondaryCtaHref: "#produto",
+    primaryCtaLabel: "Começar agora",
+    primaryCtaHref: "/cadastro",
+    secondaryCtaLabel: "Ver demonstração",
+    secondaryCtaHref: "/demo",
     previewEyebrow: "Painel operacional",
     previewTitle: "Clínica Bella Skin",
     previewStatus: "Ativa",
@@ -66,19 +66,19 @@ export function normalizeMarketingHomeConfig(value = {}) {
   const fallback = defaultMarketingHome.hero;
   const primaryCtaLabel = asString(sourceHero.primaryCtaLabel, fallback.primaryCtaLabel);
   const secondaryCandidate = asString(sourceHero.secondaryCtaLabel, fallback.secondaryCtaLabel);
-  const secondaryCtaLabel = secondaryCandidate.toLocaleLowerCase("pt-BR") === primaryCtaLabel.toLocaleLowerCase("pt-BR")
-    ? fallback.secondaryCtaLabel
-    : secondaryCandidate;
+  const duplicatedCtas = secondaryCandidate.toLocaleLowerCase("pt-BR") === primaryCtaLabel.toLocaleLowerCase("pt-BR");
+  const normalizedPrimaryLabel = duplicatedCtas ? fallback.primaryCtaLabel : primaryCtaLabel;
+  const secondaryCtaLabel = duplicatedCtas ? fallback.secondaryCtaLabel : secondaryCandidate;
 
   return {
     hero: {
       eyebrow: asString(sourceHero.eyebrow, fallback.eyebrow),
       title: asString(sourceHero.title, fallback.title),
       subtitle: asString(sourceHero.subtitle, fallback.subtitle),
-      primaryCtaLabel,
-      primaryCtaHref: asHref(sourceHero.primaryCtaHref, fallback.primaryCtaHref),
+      primaryCtaLabel: normalizedPrimaryLabel,
+      primaryCtaHref: duplicatedCtas ? fallback.primaryCtaHref : asHref(sourceHero.primaryCtaHref, fallback.primaryCtaHref),
       secondaryCtaLabel,
-      secondaryCtaHref: asHref(sourceHero.secondaryCtaHref, fallback.secondaryCtaHref),
+      secondaryCtaHref: duplicatedCtas ? fallback.secondaryCtaHref : asHref(sourceHero.secondaryCtaHref, fallback.secondaryCtaHref),
       previewEyebrow: asString(sourceHero.previewEyebrow, fallback.previewEyebrow),
       previewTitle: asString(sourceHero.previewTitle, fallback.previewTitle),
       previewStatus: asString(sourceHero.previewStatus, fallback.previewStatus),

@@ -3,16 +3,11 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { isInternalAdminUser } from "@/lib/auth/session";
+import { safeInternalNext } from "@/lib/auth/self-service.mjs";
 import { ensureDemoAccountAndReset, isDemoLoginEmail, isDemoPassword } from "@/lib/demo/demo-account";
 import { isInternalAdminEmail } from "@/lib/saas/plans";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
-
-function safeNext(value, fallback) {
-  const next = String(value || "").trim();
-  if (!next || !next.startsWith("/") || next.startsWith("//")) return fallback;
-  return next;
-}
 
 function normalizeEmail(value) {
   return String(value || "").trim().toLowerCase();
@@ -46,7 +41,7 @@ export async function signInAction(_prevState, formData) {
   const email = normalizeEmail(formData.get("email"));
   const password = String(formData.get("password") || "");
   const mode = String(formData.get("mode") || "cliente");
-  const next = safeNext(formData.get("next"), mode === "admin" ? "/dashboard-admin" : "/dashboard");
+  const next = safeInternalNext(formData.get("next"), mode === "admin" ? "/dashboard-admin" : "/dashboard");
 
   if (!email || !password) {
     return { ok: false, message: "Informe e-mail e senha." };
@@ -115,6 +110,27 @@ export async function requestAdminPasswordResetAction(_prevState, formData) {
   }
 }
 
+export async function requestClientPasswordResetAction(_prevState, formData) {
+  const email = normalizeEmail(formData.get("email"));
+
+  if (!email) return { ok: false, message: "Informe seu e-mail." };
+
+  try {
+    if (!isInternalAdminEmail(email) && !isDemoLoginEmail(email)) {
+      const supabase = await createClient();
+      const baseUrl = await getBaseUrl();
+      const redirectTo = `${baseUrl}/auth/callback?next=/login-cliente/nova-senha`;
+      const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
+      if (error) throw error;
+    }
+
+    return { ok: true, message: "Se este e-mail possuir uma conta de clínica, enviaremos um link para redefinir a senha." };
+  } catch (error) {
+    console.error("Erro ao solicitar recuperação de senha cliente:", { code: error?.code || "unknown" });
+    return { ok: false, message: "Não foi possível enviar o link agora. Aguarde alguns minutos e tente novamente." };
+  }
+}
+
 export async function updateRecoveredPasswordAction(_prevState, formData) {
   const password = String(formData.get("password") || "");
   const passwordConfirm = String(formData.get("password_confirm") || "");
@@ -146,8 +162,31 @@ export async function updateRecoveredPasswordAction(_prevState, formData) {
   redirect("/login?senha=alterada");
 }
 
+export async function updateClientRecoveredPasswordAction(_prevState, formData) {
+  const password = String(formData.get("password") || "");
+  const passwordConfirm = String(formData.get("password_confirm") || "");
+
+  if (password.length < 8) return { ok: false, message: "A nova senha precisa ter pelo menos 8 caracteres." };
+  if (password !== passwordConfirm) return { ok: false, message: "A confirmação da senha não confere." };
+
+  const supabase = await createClient();
+  const { data } = await supabase.auth.getUser();
+  const user = data?.user || null;
+
+  if (!user || isInternalAdminUser(user) || isDemoLoginEmail(user.email)) {
+    if (user) await supabase.auth.signOut();
+    return { ok: false, message: "O link não abriu uma sessão de cliente válida. Solicite um novo link." };
+  }
+
+  const { error } = await supabase.auth.updateUser({ password });
+  if (error) return { ok: false, message: "Não foi possível atualizar a senha. Solicite um novo link e tente novamente." };
+
+  await supabase.auth.signOut();
+  redirect("/login-cliente?senha=alterada");
+}
+
 export async function signOutAction(formData) {
   const supabase = await createClient();
   await supabase.auth.signOut();
-  redirect(safeNext(formData?.get?.("next"), "/login-cliente"));
+  redirect(safeInternalNext(formData?.get?.("next"), "/login-cliente"));
 }

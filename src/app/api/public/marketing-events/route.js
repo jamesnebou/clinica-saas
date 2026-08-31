@@ -22,6 +22,7 @@ const EVENTS = new Set([
   "demo_module_view",
   "demo_cta_click",
   "hero_secondary_click",
+  "signup_click",
 ]);
 
 function requestIp(request) {

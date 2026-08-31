@@ -148,6 +148,13 @@ function LogoMark() {
   );
 }
 
+function marketingCtaEventName(href) {
+  const value = String(href || "");
+  if (value.startsWith("/cadastro")) return "signup_click";
+  if (value.startsWith("/demo") || value === "#demo") return "demo_click";
+  return "hero_secondary_click";
+}
+
 function SectionTitle({ eyebrow, title, description, align = "left" }) {
   return (
     <div className={align === "center" ? "mx-auto max-w-3xl text-center" : "max-w-3xl"}>
@@ -202,9 +209,9 @@ export default async function Home() {
             <Link href="/login-cliente" className="hidden rounded-full border border-white/15 bg-white/8 px-4 py-2.5 text-sm font-bold text-white/78 shadow-sm transition hover:bg-white/14 hover:text-white sm:inline-flex">
               Entrar
             </Link>
-            <TrackedAnchor href="#demo" eventName="demo_click" eventData={{ location: "header" }} className="inline-flex items-center gap-2 rounded-full bg-[#ed7009] px-5 py-3 text-sm font-black text-white shadow-[0_18px_42px_rgba(237,112,9,0.26)]">
-              Quero vender mais <ArrowRight size={16} />
-            </TrackedAnchor>
+            <TrackedLink href="/cadastro" eventName="signup_click" eventData={{ location: "header" }} className="inline-flex items-center gap-2 rounded-full bg-[#ed7009] px-5 py-3 text-sm font-black text-white shadow-[0_18px_42px_rgba(237,112,9,0.26)]">
+              Começar agora <ArrowRight size={16} />
+            </TrackedLink>
           </div>
         </div>
         
@@ -224,10 +231,10 @@ export default async function Home() {
               {hero.subtitle}
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-              <TrackedAnchor href={hero.primaryCtaHref} eventName="demo_click" eventData={{ location: "hero_primary" }} className="inline-flex h-13 items-center justify-center gap-2 rounded-full bg-[#1c1c1c] px-6 text-sm font-black text-white shadow-[0_22px_56px_rgba(28,28,28,0.26)]">
+              <TrackedAnchor href={hero.primaryCtaHref} eventName={marketingCtaEventName(hero.primaryCtaHref)} eventData={{ location: "hero_primary" }} className="inline-flex h-13 items-center justify-center gap-2 rounded-full bg-[#1c1c1c] px-6 text-sm font-black text-white shadow-[0_22px_56px_rgba(28,28,28,0.26)]">
                 {hero.primaryCtaLabel} <ArrowRight size={17} />
               </TrackedAnchor>
-              <TrackedAnchor href={hero.secondaryCtaHref} eventName="hero_secondary_click" eventData={{ location: "hero_secondary" }} className="inline-flex h-13 items-center justify-center rounded-full border border-black/10 bg-white/70 px-6 text-sm font-black text-neutral-800 shadow-sm backdrop-blur">
+              <TrackedAnchor href={hero.secondaryCtaHref} eventName={marketingCtaEventName(hero.secondaryCtaHref)} eventData={{ location: "hero_secondary" }} className="inline-flex h-13 items-center justify-center rounded-full border border-black/10 bg-white/70 px-6 text-sm font-black text-neutral-800 shadow-sm backdrop-blur">
                 {hero.secondaryCtaLabel}
               </TrackedAnchor>
             </div>

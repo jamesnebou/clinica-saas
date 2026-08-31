@@ -42,11 +42,9 @@ export default function LoginForm({ mode = "cliente", next = "/dashboard", email
       <label className="block">
         <span className="flex items-center justify-between gap-3 text-sm font-medium text-neutral-700">
           Senha
-          {mode === "admin" ? (
-            <Link href="/login/recuperar-senha" className="text-xs font-bold text-[#ed7009] hover:text-[#cf5f07]">
-              Esqueci minha senha
-            </Link>
-          ) : null}
+          <Link href={mode === "admin" ? "/login/recuperar-senha" : "/login-cliente/recuperar-senha"} className="text-xs font-bold text-[#ed7009] hover:text-[#cf5f07]">
+            Esqueci minha senha
+          </Link>
         </span>
         <input
           className="mt-2 h-11 w-full rounded-lg border border-neutral-200 px-3 outline-none transition focus:border-emerald-600"

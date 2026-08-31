@@ -77,6 +77,8 @@ export default async function AssinaturaPage({ searchParams }) {
     ? null
     : isOpenChargeStatus(latestCharge?.status) ? latestCharge : null;
   const assinaturaStatus = String(activeClinic.assinatura_status || "").toLowerCase();
+  const selectedPlanIntent = String(activeClinic.metadata?.selected_plan_intent || "").toLowerCase();
+  const intentPlan = plans.find((plan) => String(plan.slug || "").toLowerCase() === selectedPlanIntent) || null;
   const nextBillingDate = assinaturaStatus === "isenta"
     ? null
     : activeClinic.proxima_cobranca_em || openCharge?.vencimento || latestCharge?.vencimento || null;
@@ -97,6 +99,7 @@ export default async function AssinaturaPage({ searchParams }) {
         {params?.erro === "permissao" ? <Notice>{params?.mensagem || "Seu usuário não tem permissão para alterar a assinatura da clínica."}</Notice> : null}
         {params?.erro === "upgrade" || params?.erro === "clinica" || params?.erro === "email" ? <Notice>{params?.mensagem || "Não foi possível processar esta alteração agora."}</Notice> : null}
         {params?.erro === "plano" ? <Notice>Plano não encontrado ou inativo. Revise os planos no painel interno.</Notice> : null}
+        {intentPlan && String(intentPlan.slug).toLowerCase() !== String(currentPlan.slug).toLowerCase() ? <Notice>Você demonstrou interesse no plano <strong>{intentPlan.nome}</strong> durante o cadastro. Revise as condições abaixo antes de ativar a cobrança.</Notice> : null}
         {openCharge ? (
           <Notice>
             Existe uma cobrança de {formatMoney(openCharge.valor)} com vencimento em {formatDate(openCharge.vencimento)} aguardando pagamento. Se ela vencer, o sistema pode ser marcado como inadimplente e novas operações podem ser bloqueadas automaticamente.
@@ -172,7 +175,10 @@ export default async function AssinaturaPage({ searchParams }) {
                         <p className="mt-1 text-sm text-neutral-500">{formatMoney(plan.preco_mensal)}/mês</p>
                         <p className="mt-2 break-words text-xs leading-5 text-neutral-600">{plan.limite_usuarios} usuários - {plan.limite_profissionais} profissionais - {plan.limite_clientes} clientes - {plan.limite_agendamentos_mes} agendamentos/mês</p>
                       </div>
-                      {plan.slug === currentPlan.slug ? <span className="rounded-full bg-white px-2 py-1 text-xs font-bold text-[var(--clinic-primary)]">Atual</span> : null}
+                      <div className="flex shrink-0 flex-col items-end gap-1">
+                        {plan.slug === currentPlan.slug ? <span className="rounded-full bg-white px-2 py-1 text-xs font-bold text-[var(--clinic-primary)]">Atual</span> : null}
+                        {String(plan.slug).toLowerCase() === selectedPlanIntent ? <span className="rounded-full bg-orange-50 px-2 py-1 text-xs font-bold text-[#ed7009]">Escolhido no cadastro</span> : null}
+                      </div>
                     </div>
                     <div className="mt-4">
                       <SelectField label="Forma de cobrança" name="billing_type" defaultValue={activeClinic.metadata?.asaas_billing_type || "UNDEFINED"}>

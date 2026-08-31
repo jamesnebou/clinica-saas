@@ -9,7 +9,8 @@ export const metadata = {
   title: "Login da clínica | NexaWi Clínicas",
 };
 
-export default async function LoginClientePage() {
+export default async function LoginClientePage({ searchParams }) {
+  const params = await searchParams;
   const { user, activeClinic } = await getUserClinics();
 
   if (user && activeClinic) {
@@ -72,6 +73,10 @@ export default async function LoginClientePage() {
             <h2 className="mt-2 text-2xl font-black tracking-tight">Entrar no dashboard</h2>
             <p className="mt-3 text-sm leading-6 text-neutral-600">Use o e-mail cadastrado na equipe da sua clínica.</p>
 
+            {params?.senha === "alterada" ? <p className="mt-5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-800">Senha alterada. Entre novamente com a nova senha.</p> : null}
+            {params?.erro === "link" ? <p className="mt-5 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">O link é inválido ou expirou. Solicite uma nova recuperação de senha.</p> : null}
+            {params?.erro === "demo" ? <p className="mt-5 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">Não foi possível preparar a demonstração agora. Tente novamente em alguns instantes.</p> : null}
+
             <div className="mt-5 rounded-lg border border-orange-200 bg-orange-50 p-4 text-sm text-neutral-800">
               <p className="font-black text-[#ed7009]">Quer testar antes?</p>
               <p className="mt-2 leading-6">
@@ -84,6 +89,9 @@ export default async function LoginClientePage() {
             </div>
 
             <LoginForm mode="cliente" next="/dashboard" emailPlaceholder="voce@clinica.com" submitLabel="Entrar no dashboard" />
+            <div className="mt-5 border-t border-neutral-200 pt-5 text-center text-sm text-neutral-600">
+              Ainda não tem uma conta? <Link href="/cadastro" className="font-black text-[#ed7009]">Criar minha clínica</Link>
+            </div>
           </div>
 
           <p className="mt-5 text-center text-xs leading-5 text-neutral-500">

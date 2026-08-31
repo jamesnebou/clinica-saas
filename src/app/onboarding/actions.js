@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { after } from "next/server";
 import { getCurrentUser } from "@/lib/auth/session";
+import { normalizeSelectedPlan, normalizeSignupPhone } from "@/lib/auth/self-service.mjs";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { SEGMENT_OPTIONS } from "@/lib/segments/registry";
 import { deterministicMetaEventId, isValidMetaEventId, normalizeMarketingAttribution } from "@/lib/tracking/core.mjs";
@@ -49,6 +50,10 @@ function parseMarketingAttribution(value) {
   }
 }
 
+function hasMarketingAttribution(value) {
+  return Boolean(value && typeof value === "object" && Object.keys(value).length);
+}
+
 function slugify(value) {
   return String(value || "")
     .normalize("NFD")
@@ -63,11 +68,13 @@ export async function createClinicAction(_prevState, formData) {
   const user = await getCurrentUser();
 
   if (!user) {
-    redirect("/login");
+    redirect("/login-cliente");
   }
 
   const nome = text(formData, "nome");
   const email = text(formData, "email") || user.email;
+  const selectedPlan = normalizeSelectedPlan(formData.get("selected_plan") || user.user_metadata?.selected_plan);
+  const contactPhone = normalizeSignupPhone(text(formData, "telefone") || user.user_metadata?.phone) || null;
   const validSegments = new Set(SEGMENT_OPTIONS.map((item) => item.slug));
   const primarySegment = validSegments.has(text(formData, "segmento_principal")) ? text(formData, "segmento_principal") : "estetica";
   const additionalSegments = [...new Set(formData.getAll("segmentos_adicionais").map(String).filter((slug) => validSegments.has(slug) && slug !== primarySegment))];
@@ -95,7 +102,7 @@ export async function createClinicAction(_prevState, formData) {
       nome,
       slug,
       email,
-      telefone: text(formData, "telefone") || null,
+      telefone: contactPhone,
       cidade: text(formData, "cidade") || null,
       estado: text(formData, "estado") || null,
       documento: text(formData, "documento") || null,
@@ -104,6 +111,10 @@ export async function createClinicAction(_prevState, formData) {
       assinatura_status: "trial",
       trial_ends_at: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
       billing_email: email,
+      metadata: {
+        selected_plan_intent: selectedPlan,
+        signup_source: user.user_metadata?.signup_source || "onboarding",
+      },
     })
     .select("id")
     .single();
@@ -148,12 +159,14 @@ export async function createClinicAction(_prevState, formData) {
 
   // Persistimos a origem comercial antes do redirect. Falha de tracking nunca desfaz a criação da clínica.
   try {
-    const attribution = parseMarketingAttribution(formData.get("marketing_attribution"));
+    const formAttribution = parseMarketingAttribution(formData.get("marketing_attribution"));
+    const attribution = hasMarketingAttribution(formAttribution)
+      ? formAttribution
+      : normalizeMarketingAttribution(user.user_metadata?.marketing_attribution || {});
     const requestedEventId = String(formData.get("meta_registration_event_id") || "").trim();
     const registrationEventId = isValidMetaEventId(requestedEventId)
       ? requestedEventId
       : deterministicMetaEventId("complete_registration", clinica.id);
-    const contactPhone = text(formData, "telefone") || null;
     const contactEmail = email || user.email || null;
     const savedAttribution = await saveClinicMarketingAttribution({
       clinicId: clinica.id,

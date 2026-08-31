@@ -1,20 +1,19 @@
 import { NextResponse } from "next/server";
+import { safeInternalNext } from "@/lib/auth/self-service.mjs";
 import { createClient } from "@/lib/supabase/server";
-
-function safeNext(value) {
-  const next = String(value || "").trim();
-  if (!next || !next.startsWith("/") || next.startsWith("//")) return "/login";
-  return next;
-}
 
 export async function GET(request) {
   const requestUrl = new URL(request.url);
   const code = requestUrl.searchParams.get("code");
-  const next = safeNext(requestUrl.searchParams.get("next"));
+  const next = safeInternalNext(requestUrl.searchParams.get("next"), "/login");
 
   if (code) {
     const supabase = await createClient();
-    await supabase.auth.exchangeCodeForSession(code);
+    const { error } = await supabase.auth.exchangeCodeForSession(code);
+    if (error) {
+      const errorPath = next.startsWith("/login/") ? "/login/recuperar-senha?erro=link" : "/login-cliente?erro=link";
+      return NextResponse.redirect(new URL(errorPath, requestUrl.origin));
+    }
   }
 
   return NextResponse.redirect(new URL(next, requestUrl.origin));

@@ -14,7 +14,7 @@ export function PlanCta({ plan, featured = false }) {
 
   return (
     <a
-      href="#contato"
+      href={`/cadastro?plan=${encodeURIComponent(String(plan || "starter").toLowerCase())}`}
       onClick={choosePlan}
       className={`mt-6 inline-flex h-12 w-full items-center justify-center gap-2 rounded-full px-5 text-sm font-black transition hover:-translate-y-0.5 ${featured ? "bg-[var(--nexawi-primary)] text-white shadow-[0_18px_42px_var(--nexawi-primary-glow)]" : "bg-[#1c1c1c] text-white"}`}
     >

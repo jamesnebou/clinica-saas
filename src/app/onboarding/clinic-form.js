@@ -22,12 +22,16 @@ function SubmitButton() {
   );
 }
 
-export default function ClinicForm({ userEmail }) {
+export default function ClinicForm({ userEmail, userPhone = "", selectedPlan = "starter" }) {
   const [state, formAction] = useActionState(createClinicAction, initialState);
 
   return (
     <form action={formAction} className="mt-6 grid gap-4 rounded-lg border border-neutral-200 bg-white p-5 shadow-sm">
       <MarketingAttributionHiddenFields pageType="onboarding" />
+      <input type="hidden" name="selected_plan" value={selectedPlan} />
+      <div className="rounded-lg border border-orange-200 bg-orange-50 px-4 py-3 text-sm text-neutral-700">
+        Intenção de plano registrada: <strong className="capitalize">{selectedPlan}</strong>. Nenhuma cobrança será criada nesta etapa.
+      </div>
       <label className="block">
         <span className="text-sm font-medium text-neutral-700">Nome da clínica</span>
         <input className="mt-2 h-11 w-full rounded-lg border border-neutral-200 px-3 text-sm outline-none focus:border-emerald-600" name="nome" required placeholder="Ex: Clínica Bella Skin" />
@@ -51,7 +55,7 @@ export default function ClinicForm({ userEmail }) {
         </label>
         <label className="block">
           <span className="text-sm font-medium text-neutral-700">Telefone</span>
-          <input className="mt-2 h-11 w-full rounded-lg border border-neutral-200 px-3 text-sm outline-none focus:border-emerald-600" name="telefone" />
+          <input className="mt-2 h-11 w-full rounded-lg border border-neutral-200 px-3 text-sm outline-none focus:border-emerald-600" name="telefone" type="tel" defaultValue={userPhone} />
         </label>
       </div>
 
