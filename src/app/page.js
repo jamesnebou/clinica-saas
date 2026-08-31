@@ -20,7 +20,7 @@ import {
 } from "lucide-react";
 import { getMarketingHomeConfig } from "@/lib/marketing/home-config";
 import { getSystemPlans } from "@/lib/saas/plans";
-import { ConversionTracker } from "@/components/marketing/conversion-tracker";
+import { MarketingTracking } from "@/components/marketing/marketing-tracking";
 import { LeadCaptureForm } from "@/components/marketing/lead-capture-form";
 import { PlanCta } from "@/components/marketing/plan-cta";
 import { RoiCalculator } from "@/components/marketing/roi-calculator";
@@ -183,7 +183,7 @@ export default async function Home() {
 
   return (
     <main className="min-h-screen overflow-hidden bg-[#f4f2ed] text-[#09110f]">
-      <ConversionTracker />
+      <MarketingTracking segment="geral" pageType="marketing_home" contentName="NexaWi Clínicas" />
       <header className="sticky top-0 z-50 border-b border-white/10 bg-[#1c1c1c]/95 text-white shadow-[0_18px_60px_rgba(28,28,28,0.22)] backdrop-blur-xl">
      
         <div className="mx-auto flex h-[72px] max-w-7xl items-center justify-between px-5 sm:px-8 lg:px-10">

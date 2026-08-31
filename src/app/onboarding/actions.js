@@ -2,12 +2,51 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
+import { after } from "next/server";
 import { getCurrentUser } from "@/lib/auth/session";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { SEGMENT_OPTIONS } from "@/lib/segments/registry";
+import { deterministicMetaEventId, isValidMetaEventId, normalizeMarketingAttribution } from "@/lib/tracking/core.mjs";
+import { deliverMetaConversionRecord, enqueueClinicLifecycleMetaEvent, queueAndDeliverMetaConversionEvent, saveClinicMarketingAttribution } from "@/lib/tracking/service";
 
 function text(formData, key) {
   return String(formData.get(key) || "").trim();
+}
+
+
+async function trackingRequestContext(pathname) {
+  const headerStore = await headers();
+  const host = headerStore.get("x-forwarded-host") || headerStore.get("host");
+  const protocol = headerStore.get("x-forwarded-proto") || (host?.startsWith("localhost") ? "http" : "https");
+  const baseUrl = host ? `${protocol}://${host}` : process.env.APP_URL || process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
+  const forwarded = headerStore.get("x-forwarded-for")?.split(",")[0]?.trim();
+  return {
+    eventSourceUrl: new URL(pathname, baseUrl).toString(),
+    clientIpAddress: forwarded || headerStore.get("x-real-ip") || null,
+    clientUserAgent: headerStore.get("user-agent") || null,
+  };
+}
+
+function scheduleTrackingDelivery(result, logCode) {
+  if (!result?.record?.id && !result?.input) return;
+  after(async () => {
+    try {
+      if (result.record?.id) await deliverMetaConversionRecord(result.record);
+      else if (result.input) await queueAndDeliverMetaConversionEvent(result.input);
+    } catch (error) {
+      console.error(logCode, { code: error?.code || "unknown" });
+    }
+  });
+}
+
+function parseMarketingAttribution(value) {
+  try {
+    const parsed = JSON.parse(String(value || "{}"));
+    return normalizeMarketingAttribution(parsed);
+  } catch {
+    return {};
+  }
 }
 
 function slugify(value) {
@@ -104,6 +143,59 @@ export async function createClinicAction(_prevState, formData) {
       await supabaseAdmin.from("clinicas").delete().eq("id", clinica.id);
       return { ok: false, message: "Não foi possível salvar os segmentos da clínica." };
     }
+  }
+
+
+  // Persistimos a origem comercial antes do redirect. Falha de tracking nunca desfaz a criação da clínica.
+  try {
+    const attribution = parseMarketingAttribution(formData.get("marketing_attribution"));
+    const requestedEventId = String(formData.get("meta_registration_event_id") || "").trim();
+    const registrationEventId = isValidMetaEventId(requestedEventId)
+      ? requestedEventId
+      : deterministicMetaEventId("complete_registration", clinica.id);
+    const contactPhone = text(formData, "telefone") || null;
+    const contactEmail = email || user.email || null;
+    const savedAttribution = await saveClinicMarketingAttribution({
+      clinicId: clinica.id,
+      email: contactEmail,
+      phone: contactPhone,
+      attribution,
+      segment: primarySegment,
+      registrationEventId,
+    });
+    const requestContext = await trackingRequestContext("/onboarding");
+    const tracking = await enqueueClinicLifecycleMetaEvent({
+      clinicId: clinica.id,
+      eventName: "CompleteRegistration",
+      eventId: registrationEventId,
+      eventSourceUrl: requestContext.eventSourceUrl,
+      segment: primarySegment,
+      sourceType: "clinic_registration",
+      sourceId: clinica.id,
+      clientIpAddress: requestContext.clientIpAddress,
+      clientUserAgent: requestContext.clientUserAgent,
+      contactEmail,
+      contactPhone,
+      fullName: user.user_metadata?.name || null,
+      externalId: user.id,
+    });
+    scheduleTrackingDelivery(tracking, "meta_capi_registration_delivery_failed");
+
+    if (savedAttribution?.leadId) {
+      await supabaseAdmin.from("clinica_marketing_eventos").insert({
+        event_name: "registration_complete",
+        lead_id: savedAttribution.leadId,
+        pagina: "/onboarding",
+        utm_source: savedAttribution.attribution?.utm_source || null,
+        utm_medium: savedAttribution.attribution?.utm_medium || null,
+        utm_campaign: savedAttribution.attribution?.utm_campaign || null,
+        utm_content: savedAttribution.attribution?.utm_content || null,
+        utm_term: savedAttribution.attribution?.utm_term || null,
+        metadata: { clinica_id: clinica.id, segment: primarySegment, meta_event_id: registrationEventId },
+      });
+    }
+  } catch (trackingError) {
+    console.error("marketing_registration_tracking_failed", { code: trackingError?.code || "unknown" });
   }
 
   revalidatePath("/dashboard");

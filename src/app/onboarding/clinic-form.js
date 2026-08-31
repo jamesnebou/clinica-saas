@@ -1,9 +1,10 @@
-﻿"use client";
+"use client";
 
 import { useActionState } from "react";
 import { useFormStatus } from "react-dom";
 import { createClinicAction } from "./actions";
 import { SEGMENT_OPTIONS } from "@/lib/segments/registry";
+import { MarketingAttributionHiddenFields } from "@/components/marketing/attribution-hidden-fields";
 
 const initialState = { ok: true, message: "" };
 
@@ -26,6 +27,7 @@ export default function ClinicForm({ userEmail }) {
 
   return (
     <form action={formAction} className="mt-6 grid gap-4 rounded-lg border border-neutral-200 bg-white p-5 shadow-sm">
+      <MarketingAttributionHiddenFields pageType="onboarding" />
       <label className="block">
         <span className="text-sm font-medium text-neutral-700">Nome da clínica</span>
         <input className="mt-2 h-11 w-full rounded-lg border border-neutral-200 px-3 text-sm outline-none focus:border-emerald-600" name="nome" required placeholder="Ex: Clínica Bella Skin" />

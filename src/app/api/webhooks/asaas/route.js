@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { decryptClinicSecrets } from "@/lib/security/clinic-secrets";
 import { notifyPublicBookingPaymentConfirmedById } from "@/lib/notifications/booking";
@@ -9,8 +9,23 @@ import {
   syncCanonicalOrderPayment,
 } from "@/lib/finance/canonical";
 import { closeDirectSaleOpportunityFromBooking } from "@/lib/crm/payments";
+import { deterministicMetaEventId } from "@/lib/tracking/core.mjs";
+import { deliverMetaConversionRecord, enqueueClinicLifecycleMetaEvent, queueAndDeliverMetaConversionEvent } from "@/lib/tracking/service";
 
 export const runtime = "nodejs";
+
+
+function scheduleTrackingDelivery(result, logCode) {
+  if (!result?.record?.id && !result?.input) return;
+  after(async () => {
+    try {
+      if (result.record?.id) await deliverMetaConversionRecord(result.record);
+      else if (result.input) await queueAndDeliverMetaConversionEvent(result.input);
+    } catch (error) {
+      console.error(logCode, { code: error?.code || "unknown" });
+    }
+  });
+}
 
 function unauthorized() {
   return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
@@ -324,6 +339,39 @@ export async function POST(request) {
 
     if (clinicError) {
       return NextResponse.json({ ok: false, error: clinicError.message }, { status: 500 });
+    }
+  }
+
+
+  // Purchase Meta representa somente receita do SaaS NexaWi. Pedidos da lojinha e sinais de pacientes
+  // retornam antes deste bloco e nunca alimentam o Dataset de aquisição da plataforma.
+  if (paymentStatus === "pago" && payment?.id && payment?.subscription) {
+    const { data: subscriptionClinic } = await supabaseAdmin
+      .from("clinicas")
+      .select("id, asaas_subscription_id")
+      .eq("id", clinic.id)
+      .maybeSingle();
+
+    if (subscriptionClinic?.asaas_subscription_id && subscriptionClinic.asaas_subscription_id === payment.subscription) {
+      try {
+        const baseUrl = process.env.APP_URL || process.env.NEXT_PUBLIC_SITE_URL || "https://clinicas.nexawi.com.br";
+        const tracking = await enqueueClinicLifecycleMetaEvent({
+          clinicId: clinic.id,
+          eventName: "Purchase",
+          eventId: deterministicMetaEventId("purchase", payment.id),
+          eventTime: paidAt ? new Date(paidAt) : new Date(),
+          eventSourceUrl: new URL("/dashboard/assinatura", baseUrl).toString(),
+          value: Number(payment?.value || payment?.netValue || 0),
+          currency: "BRL",
+          subscriptionId: payment.subscription,
+          sourceType: "saas_payment",
+          sourceId: payment.id,
+          externalId: clinic.id,
+        });
+        scheduleTrackingDelivery(tracking, "meta_capi_purchase_delivery_failed");
+      } catch (trackingError) {
+        console.error("marketing_purchase_tracking_failed", { code: trackingError?.code || "unknown" });
+      }
     }
   }
 

@@ -1,56 +1,33 @@
 "use client";
 
 import { useEffect } from "react";
+import {
+  captureMarketingAttribution,
+  createMarketingEventId,
+  fireMetaBrowserEvent,
+  getMarketingAttribution,
+  getMarketingSessionId,
+  refreshMetaCookieAttribution,
+} from "@/lib/tracking/client-attribution";
 
-const ATTRIBUTION_KEY = "nexawi_marketing_attribution";
-const SESSION_KEY = "nexawi_marketing_session";
-const UTM_KEYS = ["utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term"];
+export { getMarketingAttribution, getMarketingSessionId };
 
-function safeStorage(storage, key) {
-  try {
-    return storage.getItem(key);
-  } catch {
-    return null;
-  }
-}
-
-function saveStorage(storage, key, value) {
-  try {
-    storage.setItem(key, value);
-  } catch {
-    // Navegadores em modo restrito podem bloquear storage; o funil continua funcionando.
-  }
-}
-
-export function getMarketingAttribution() {
-  if (typeof window === "undefined") return {};
-  try {
-    return JSON.parse(safeStorage(window.localStorage, ATTRIBUTION_KEY) || "{}") || {};
-  } catch {
-    return {};
-  }
-}
-
-export function getMarketingSessionId() {
-  if (typeof window === "undefined") return null;
-  let value = safeStorage(window.sessionStorage, SESSION_KEY);
-  if (!value) {
-    value = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    saveStorage(window.sessionStorage, SESSION_KEY, value);
-  }
-  return value;
+function currentPage() {
+  return `${window.location.pathname}${window.location.search}`;
 }
 
 export function trackMarketingEvent(eventName, metadata = {}, options = {}) {
-  if (typeof window === "undefined") return;
+  if (typeof window === "undefined") return null;
   const attribution = getMarketingAttribution();
+  const eventId = options.eventId || null;
   const body = JSON.stringify({
     event_name: eventName,
     session_id: getMarketingSessionId(),
-    page: `${window.location.pathname}${window.location.search}`,
+    page: currentPage(),
     referrer: document.referrer || null,
     ...attribution,
     metadata,
+    meta_event_id: eventId,
   });
 
   if (!options.skipInternal) {
@@ -63,25 +40,26 @@ export function trackMarketingEvent(eventName, metadata = {}, options = {}) {
   }
 
   window.gtag?.("event", eventName, metadata);
-  window.fbq?.("trackCustom", eventName, metadata);
+  return eventId;
 }
 
-export function ConversionTracker() {
+export function trackMetaStandardEvent(eventName, parameters = {}, eventId) {
+  return fireMetaBrowserEvent(eventName, parameters, eventId);
+}
+
+export function ConversionTracker({ segment = "geral", pageType = "marketing", contentName = "NexaWi Clínicas" } = {}) {
   useEffect(() => {
     if (window.location.hash) return undefined;
 
     const previousScrollRestoration = window.history.scrollRestoration;
     const resetToTop = () => {
-      if (!window.location.hash) {
-        window.scrollTo({ top: 0, left: 0, behavior: "auto" });
-      }
+      if (!window.location.hash) window.scrollTo({ top: 0, left: 0, behavior: "auto" });
     };
 
     window.history.scrollRestoration = "manual";
     resetToTop();
     const frame = window.requestAnimationFrame(resetToTop);
     window.addEventListener("pageshow", resetToTop);
-
     return () => {
       window.cancelAnimationFrame(frame);
       window.removeEventListener("pageshow", resetToTop);
@@ -90,31 +68,35 @@ export function ConversionTracker() {
   }, []);
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const previous = getMarketingAttribution();
-    const attribution = { ...previous };
-    let hasNewAttribution = false;
+    const context = { segment, pageType };
+    captureMarketingAttribution(context);
+    trackMetaStandardEvent("PageView", { segment, page_type: pageType });
 
-    for (const key of UTM_KEYS) {
-      const value = params.get(key)?.trim();
-      if (value) {
-        attribution[key] = value.slice(0, 120);
-        hasNewAttribution = true;
-      }
+    // O Pixel cria _fbp de forma assíncrona. Fazemos uma atualização leve sem alterar first-touch.
+    const refreshTimers = [250, 1000].map((delay) => window.setTimeout(() => refreshMetaCookieAttribution(context), delay));
+
+    const sessionId = getMarketingSessionId();
+    const viewKey = `nexawi_landing_view_${sessionId}_${window.location.pathname}`;
+    let tracked = false;
+    try {
+      tracked = window.sessionStorage.getItem(viewKey) === "1";
+    } catch {}
+
+    if (!tracked) {
+      try { window.sessionStorage.setItem(viewKey, "1"); } catch {}
+      const eventId = createMarketingEventId("view_content");
+      const parameters = {
+        content_name: contentName,
+        content_category: "SaaS B2B",
+        segment,
+        page_type: pageType,
+      };
+      trackMarketingEvent("landing_view", parameters, { eventId });
+      trackMetaStandardEvent("ViewContent", parameters, eventId);
     }
 
-    if (hasNewAttribution || !safeStorage(window.localStorage, ATTRIBUTION_KEY)) {
-      attribution.first_page ||= window.location.pathname;
-      attribution.first_referrer ||= document.referrer || null;
-      saveStorage(window.localStorage, ATTRIBUTION_KEY, JSON.stringify(attribution));
-    }
-
-    const viewKey = `nexawi_landing_view_${getMarketingSessionId()}`;
-    if (!safeStorage(window.sessionStorage, viewKey)) {
-      saveStorage(window.sessionStorage, viewKey, "1");
-      trackMarketingEvent("landing_view");
-    }
-  }, []);
+    return () => refreshTimers.forEach((timer) => window.clearTimeout(timer));
+  }, [contentName, pageType, segment]);
 
   return null;
 }

@@ -1,11 +1,41 @@
-﻿"use server";
+"use server";
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { headers } from "next/headers";
+import { after } from "next/server";
 import { requireClinic } from "@/lib/auth/session";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { createAsaasCustomerForClinic, createAsaasSubscriptionForClinic, isAsaasConfigured, listAsaasSubscriptionPayments } from "@/lib/asaas/client";
 import { getSystemPlans } from "@/lib/saas/plans";
+import { deterministicMetaEventId } from "@/lib/tracking/core.mjs";
+import { deliverMetaConversionRecord, enqueueClinicLifecycleMetaEvent, queueAndDeliverMetaConversionEvent } from "@/lib/tracking/service";
+
+
+async function trackingRequestContext(pathname) {
+  const headerStore = await headers();
+  const host = headerStore.get("x-forwarded-host") || headerStore.get("host");
+  const protocol = headerStore.get("x-forwarded-proto") || (host?.startsWith("localhost") ? "http" : "https");
+  const baseUrl = host ? `${protocol}://${host}` : process.env.APP_URL || process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
+  const forwarded = headerStore.get("x-forwarded-for")?.split(",")[0]?.trim();
+  return {
+    eventSourceUrl: new URL(pathname, baseUrl).toString(),
+    clientIpAddress: forwarded || headerStore.get("x-real-ip") || null,
+    clientUserAgent: headerStore.get("user-agent") || null,
+  };
+}
+
+function scheduleTrackingDelivery(result, logCode) {
+  if (!result?.record?.id && !result?.input) return;
+  after(async () => {
+    try {
+      if (result.record?.id) await deliverMetaConversionRecord(result.record);
+      else if (result.input) await queueAndDeliverMetaConversionEvent(result.input);
+    } catch (error) {
+      console.error(logCode, { code: error?.code || "unknown" });
+    }
+  });
+}
 
 function text(formData, key) {
   return String(formData.get(key) || "").trim();
@@ -155,6 +185,31 @@ export async function startSubscriptionAction(formData) {
       bank_slip_url: firstPayment.bankSlipUrl || null,
       payload: firstPayment,
     }, { onConflict: "asaas_payment_id" });
+  }
+
+
+  try {
+    const requestContext = await trackingRequestContext("/dashboard/assinatura");
+    const tracking = await enqueueClinicLifecycleMetaEvent({
+      clinicId: clinic.id,
+      eventName: "Subscribe",
+      eventId: deterministicMetaEventId("subscribe", subscription.id),
+      eventSourceUrl: requestContext.eventSourceUrl,
+      value: Number(plan.preco_mensal || 0),
+      currency: "BRL",
+      subscriptionId: subscription.id,
+      plan: plan.slug,
+      sourceType: "saas_subscription",
+      sourceId: subscription.id,
+      clientIpAddress: requestContext.clientIpAddress,
+      clientUserAgent: requestContext.clientUserAgent,
+      contactEmail: billingEmail || clinic.billing_email || clinic.email,
+      contactPhone: clinic.telefone,
+      externalId: clinic.id,
+    });
+    scheduleTrackingDelivery(tracking, "meta_capi_subscribe_delivery_failed");
+  } catch (trackingError) {
+    console.error("marketing_subscription_tracking_failed", { code: trackingError?.code || "unknown" });
   }
 
   revalidatePath("/dashboard");

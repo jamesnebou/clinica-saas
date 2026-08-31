@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { CheckCircle2, LoaderCircle, MessageCircle } from "lucide-react";
-import { getMarketingAttribution, getMarketingSessionId, trackMarketingEvent } from "./conversion-tracker";
+import { createMarketingEventId, getMarketingAttribution, getMarketingSessionId } from "@/lib/tracking/client-attribution";
+import { trackMarketingEvent, trackMetaStandardEvent } from "./conversion-tracker";
 
 const WHATSAPP_URL = "https://wa.me/5577988656394?text=Ol%C3%A1%2C%20quero%20conhecer%20a%20NexaWi%20Cl%C3%ADnicas.";
 
@@ -31,16 +32,20 @@ export function LeadCaptureForm() {
     const form = new FormData(event.currentTarget);
     const payload = Object.fromEntries(form.entries());
 
+    const metaEventId = createMarketingEventId("lead");
+    const attribution = getMarketingAttribution();
+
     try {
       const response = await fetch("/api/public/marketing-leads", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ ...payload, plan_interest: plan, session_id: getMarketingSessionId(), ...getMarketingAttribution() }),
+        body: JSON.stringify({ ...payload, plan_interest: plan, session_id: getMarketingSessionId(), meta_event_id: metaEventId, ...attribution }),
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.error || "Não foi possível enviar agora.");
       setState({ status: "success", message: "Recebemos seus dados. Nossa equipe vai chamar você no WhatsApp." });
-      trackMarketingEvent("lead_submit", { plan }, { skipInternal: true });
+      trackMetaStandardEvent("Lead", { plan, segment: attribution.segment || "geral" }, data.event_id || metaEventId);
+      window.gtag?.("event", "generate_lead", { plan });
       formElement.reset();
     } catch (error) {
       setState({ status: "error", message: error.message || "Tente novamente em alguns instantes." });
