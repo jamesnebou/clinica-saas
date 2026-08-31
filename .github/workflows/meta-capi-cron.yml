@@ -1,0 +1,28 @@
+name: Meta CAPI Worker
+
+on:
+  schedule:
+    - cron: "2-57/5 * * * *"
+
+  workflow_dispatch:
+
+jobs:
+  process-meta-capi:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Processar fila Meta CAPI
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+
+        run: |
+          set -euo pipefail
+
+          curl --fail-with-body \
+            --silent \
+            --show-error \
+            --retry 2 \
+            --retry-delay 5 \
+            -H "Authorization: Bearer ${CRON_SECRET}" \
+            https://clinicas.nexawi.com.br/api/cron/meta-capi
