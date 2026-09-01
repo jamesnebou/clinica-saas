@@ -131,7 +131,12 @@ export async function signUpAction(_previousState, formData) {
   });
 
   if (error) {
-    console.error("self_service_signup_failed", { code: error.code || "unknown" });
+    console.error("self_service_signup_failed", {
+      name: error?.name || null,
+      code: error?.code || null,
+      status: error?.status || null,
+      message: error?.message || null,
+    });
     return { ok: false, message: friendlySignupError(error) };
   }
 
