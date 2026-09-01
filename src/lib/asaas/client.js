@@ -20,6 +20,15 @@ export function isAsaasConfigured(config = {}) {
   return Boolean(config?.asaas_ativo && (config.apiKey || config.asaas_api_key)) || Boolean(!config?.clinica_id && process.env.ASAAS_API_KEY);
 }
 
+export class AsaasApiError extends Error {
+  constructor(message, { status, payload } = {}) {
+    super(message);
+    this.name = "AsaasApiError";
+    this.status = status || 500;
+    this.payload = payload || null;
+  }
+}
+
 async function asaasRequest(path, options = {}, config = {}) {
   const { apiKey, baseUrl } = getAsaasConfig(config);
 
@@ -43,7 +52,7 @@ async function asaasRequest(path, options = {}, config = {}) {
 
   if (!response.ok) {
     const message = payload?.errors?.[0]?.description || payload?.message || "Erro ao comunicar com o Asaas.";
-    throw new Error(message);
+    throw new AsaasApiError(message, { status: response.status, payload });
   }
 
   return payload;
@@ -133,6 +142,46 @@ export async function createAsaasSubscriptionForClinic({ clinic, plan, customerI
       externalReference: clinic.id,
     }),
   });
+}
+
+export function isAsaasNotFoundError(error) {
+  return error instanceof AsaasApiError && error.status === 404;
+}
+
+export async function getAsaasSubscription(subscriptionId) {
+  if (!subscriptionId) return null;
+  return asaasRequest(`/subscriptions/${encodeURIComponent(subscriptionId)}`, { method: "GET" });
+}
+
+export async function listAsaasSubscriptions({ customerId, externalReference, includeDeleted = false } = {}) {
+  const params = new URLSearchParams({ limit: "100", offset: "0" });
+  if (customerId) params.set("customer", customerId);
+  if (externalReference) params.set("externalReference", externalReference);
+  if (includeDeleted) params.set("includeDeleted", "true");
+  const payload = await asaasRequest(`/subscriptions?${params.toString()}`, { method: "GET" });
+  return payload?.data || [];
+}
+
+export async function updateAsaasSubscription(subscriptionId, payload) {
+  if (!subscriptionId) throw new Error("Assinatura Asaas não informada.");
+  return asaasRequest(`/subscriptions/${encodeURIComponent(subscriptionId)}`, {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function pauseAsaasSubscription(subscriptionId) {
+  return updateAsaasSubscription(subscriptionId, { status: "INACTIVE" });
+}
+
+export async function reactivateAsaasSubscription(subscriptionId, nextDueDate, payload = {}) {
+  if (!nextDueDate) throw new Error("Informe a próxima data de cobrança para reativar a assinatura.");
+  return updateAsaasSubscription(subscriptionId, { ...payload, status: "ACTIVE", nextDueDate });
+}
+
+export async function removeAsaasSubscription(subscriptionId) {
+  if (!subscriptionId) throw new Error("Assinatura Asaas não informada.");
+  return asaasRequest(`/subscriptions/${encodeURIComponent(subscriptionId)}`, { method: "DELETE" });
 }
 
 export async function listAsaasSubscriptionPayments(subscriptionId) {

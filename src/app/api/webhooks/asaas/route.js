@@ -59,11 +59,14 @@ function normalizePaymentStatus(status) {
   return "pendente";
 }
 
+function isPaidBillingStatus(status) {
+  return ["pago", "received", "confirmed", "received_in_cash"].includes(String(status || "").toLowerCase());
+}
+
 function commercialStatusFromPayment(status) {
   const normalized = normalizePaymentStatus(status);
   if (normalized === "pago") return { status: "ativa", assinatura_status: "ativa", bloqueada_em: null, bloqueio_motivo: null };
   if (normalized === "vencido") return { status: "inadimplente", assinatura_status: "atrasada", bloqueada_em: new Date().toISOString(), bloqueio_motivo: "Pagamento Asaas vencido." };
-  if (normalized === "cancelado") return { status: "cancelada", assinatura_status: "cancelada", bloqueada_em: new Date().toISOString(), bloqueio_motivo: "Cobrança/assinatura Asaas cancelada." };
   return null;
 }
 
@@ -71,8 +74,12 @@ function commercialStatusFromSubscription(event, subscription) {
   const eventName = String(event || "").toUpperCase();
   const status = String(subscription?.status || "").toUpperCase();
 
-  if (eventName === "SUBSCRIPTION_DELETED" || eventName === "SUBSCRIPTION_INACTIVATED" || subscription?.deleted === true || status === "INACTIVE") {
-    return { status: "cancelada", assinatura_status: "cancelada", bloqueada_em: new Date().toISOString(), bloqueio_motivo: "Assinatura Asaas inativada ou removida." };
+  if (eventName === "SUBSCRIPTION_DELETED" || subscription?.deleted === true) {
+    return { status: "cancelada", assinatura_status: "cancelada", bloqueada_em: new Date().toISOString(), bloqueio_motivo: "Assinatura Asaas cancelada definitivamente." };
+  }
+
+  if (eventName === "SUBSCRIPTION_INACTIVATED" || status === "INACTIVE") {
+    return { status: "inativa", assinatura_status: "pausada", bloqueada_em: new Date().toISOString(), bloqueio_motivo: "Cobrança recorrente pausada temporariamente." };
   }
 
   if (eventName === "SUBSCRIPTION_CREATED" || eventName === "SUBSCRIPTION_UPDATED" || status === "ACTIVE") {
@@ -88,17 +95,17 @@ async function findClinicByPayment(payment) {
   const externalReference = payment?.externalReference || "";
 
   if (subscriptionId) {
-    const { data } = await supabaseAdmin.from("clinicas").select("id").eq("asaas_subscription_id", subscriptionId).maybeSingle();
+    const { data } = await supabaseAdmin.from("clinicas").select("id, asaas_subscription_id").eq("asaas_subscription_id", subscriptionId).maybeSingle();
     if (data?.id) return data;
   }
 
   if (externalReference) {
-    const { data } = await supabaseAdmin.from("clinicas").select("id").eq("id", externalReference).maybeSingle();
+    const { data } = await supabaseAdmin.from("clinicas").select("id, asaas_subscription_id").eq("id", externalReference).maybeSingle();
     if (data?.id) return data;
   }
 
   if (customerId) {
-    const { data } = await supabaseAdmin.from("clinicas").select("id").eq("asaas_customer_id", customerId).maybeSingle();
+    const { data } = await supabaseAdmin.from("clinicas").select("id, asaas_subscription_id").eq("asaas_customer_id", customerId).maybeSingle();
     if (data?.id) return data;
   }
 
@@ -240,17 +247,17 @@ async function findClinicBySubscription(subscription) {
   const externalReference = subscription?.externalReference || "";
 
   if (subscriptionId) {
-    const { data } = await supabaseAdmin.from("clinicas").select("id").eq("asaas_subscription_id", subscriptionId).maybeSingle();
+    const { data } = await supabaseAdmin.from("clinicas").select("id, asaas_subscription_id, assinatura_status, metadata").eq("asaas_subscription_id", subscriptionId).maybeSingle();
     if (data?.id) return data;
   }
 
   if (externalReference) {
-    const { data } = await supabaseAdmin.from("clinicas").select("id").eq("id", externalReference).maybeSingle();
+    const { data } = await supabaseAdmin.from("clinicas").select("id, asaas_subscription_id, assinatura_status, metadata").eq("id", externalReference).maybeSingle();
     if (data?.id) return data;
   }
 
   if (customerId) {
-    const { data } = await supabaseAdmin.from("clinicas").select("id").eq("asaas_customer_id", customerId).maybeSingle();
+    const { data } = await supabaseAdmin.from("clinicas").select("id, asaas_subscription_id, assinatura_status, metadata").eq("asaas_customer_id", customerId).maybeSingle();
     if (data?.id) return data;
   }
 
@@ -273,14 +280,23 @@ export async function POST(request) {
       return NextResponse.json({ ok: true, matched: false, type: "subscription" });
     }
 
+    if (clinic.asaas_subscription_id && subscription?.id && clinic.asaas_subscription_id !== subscription.id) {
+      return NextResponse.json({ ok: true, matched: true, ignored: true, reason: "stale_subscription", type: "subscription" });
+    }
+
+    if (!clinic.asaas_subscription_id && clinic.assinatura_status === "cancelada" && clinic.metadata?.last_asaas_subscription_id === subscription?.id && String(event).toUpperCase() !== "SUBSCRIPTION_DELETED") {
+      return NextResponse.json({ ok: true, matched: true, ignored: true, reason: "canceled_subscription", type: "subscription" });
+    }
+
     const commercialStatus = commercialStatusFromSubscription(event, subscription);
+    const subscriptionDeleted = String(event).toUpperCase() === "SUBSCRIPTION_DELETED" || subscription?.deleted === true;
     const { error } = await supabaseAdmin
       .from("clinicas")
       .update({
         ...(commercialStatus || {}),
-        asaas_subscription_id: subscription?.id || null,
-        asaas_customer_id: subscription?.customer || null,
-        proxima_cobranca_em: subscription?.nextDueDate || null,
+        asaas_subscription_id: subscriptionDeleted ? null : subscription?.id || clinic.asaas_subscription_id || null,
+        ...(subscription?.customer ? { asaas_customer_id: subscription.customer } : {}),
+        proxima_cobranca_em: subscriptionDeleted ? null : subscription?.nextDueDate || null,
       })
       .eq("id", clinic.id);
 
@@ -309,15 +325,28 @@ export async function POST(request) {
     return NextResponse.json({ ok: true, matched: false, type: "payment" });
   }
 
+  let previousCharge = null;
+  if (payment?.id) {
+    const { data } = await supabaseAdmin
+      .from("asaas_cobrancas")
+      .select("status, pago_em")
+      .eq("asaas_payment_id", payment.id)
+      .maybeSingle();
+    previousCharge = data || null;
+  }
+  const preservePaidCharge = isPaidBillingStatus(previousCharge?.status) && !["pago", "estornado"].includes(paymentStatus);
+  const effectivePaymentStatus = preservePaidCharge ? previousCharge.status : paymentStatus;
+  const effectivePaidAt = preservePaidCharge ? previousCharge.pago_em : paidAt ? new Date(paidAt).toISOString() : null;
+
   const { error: billingError } = await supabaseAdmin.from("asaas_cobrancas").upsert({
     clinica_id: clinic.id,
     asaas_payment_id: payment?.id || null,
     asaas_subscription_id: payment?.subscription || null,
     evento: event || null,
-    status: paymentStatus,
+    status: effectivePaymentStatus,
     valor: Number(payment?.value || payment?.netValue || 0),
     vencimento: payment?.dueDate || null,
-    pago_em: paidAt ? new Date(paidAt).toISOString() : null,
+    pago_em: effectivePaidAt,
     invoice_url: payment?.invoiceUrl || null,
     bank_slip_url: payment?.bankSlipUrl || null,
     payload,
@@ -328,7 +357,7 @@ export async function POST(request) {
   }
 
   const commercialStatus = commercialStatusFromPayment(payment?.status);
-  if (commercialStatus) {
+  if (commercialStatus && payment?.subscription && payment.subscription === clinic.asaas_subscription_id) {
     const { error: clinicError } = await supabaseAdmin
       .from("clinicas")
       .update({

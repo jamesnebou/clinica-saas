@@ -69,13 +69,16 @@ function isOpenChargeStatus(status) {
 }
 
 async function getOpenCharge(activeClinic) {
-  if (["cancelada", "inativa"].includes(String(activeClinic?.status || "").toLowerCase())) return null;
+  if (["cancelada"].includes(String(activeClinic?.status || "").toLowerCase())) return null;
   if (["cancelada", "isenta"].includes(String(activeClinic?.assinatura_status || "").toLowerCase())) return null;
 
-  const { data, error } = await supabaseAdmin
+  let query = supabaseAdmin
     .from("asaas_cobrancas")
-    .select("id, status, valor, vencimento, invoice_url")
+    .select("id, asaas_subscription_id, status, valor, vencimento, invoice_url")
     .eq("clinica_id", activeClinic.id)
+    .in("status", ["pending", "pendente", "overdue", "vencido"]);
+  if (activeClinic.asaas_subscription_id) query = query.eq("asaas_subscription_id", activeClinic.asaas_subscription_id);
+  const { data, error } = await query
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();

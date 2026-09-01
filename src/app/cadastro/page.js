@@ -48,7 +48,7 @@ export default async function CadastroPage({ searchParams }) {
           <Link href="/" className="mb-8 flex items-center gap-2 text-[#ed7009] lg:hidden"><Sparkles size={19} /><span className="text-sm font-bold uppercase tracking-[0.18em]">NexaWi Clínicas</span></Link>
           <div className="rounded-lg border border-neutral-200 bg-white p-6 shadow-sm sm:p-8">
             <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-orange-50 text-[#ed7009]"><BadgeCheck size={21} /></div>
-            <p className="mt-5 text-xs font-black uppercase tracking-[0.22em] text-[#ed7009]">Cadastro self-service</p>
+            <p className="mt-5 text-xs font-black uppercase tracking-[0.22em] text-[#ed7009]">Novo Cadastro</p>
             <h2 className="mt-2 text-3xl font-black tracking-tight">Crie sua conta NexaWi Clínicas</h2>
             <p className="mt-3 text-sm leading-6 text-neutral-600">Depois do cadastro, você informará os dados da clínica e entrará no dashboard.</p>
             <CadastroForm selectedPlan={selectedPlan} />

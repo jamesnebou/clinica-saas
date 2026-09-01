@@ -119,6 +119,10 @@ export function getClinicBillingState(clinic) {
     return { blocked: false, level: "ok", title: "Assinatura isenta", message: "Esta clínica está liberada por isenção comercial." };
   }
 
+  if (assinaturaStatus === "pausada" || status === "inativa") {
+    return { blocked: true, level: "warning", title: "Cobrança pausada", message: clinic?.bloqueio_motivo || "A recorrência está pausada e pode ser reativada usando a mesma assinatura Asaas." };
+  }
+
   if (status === "cancelada" || status === "bloqueada") {
     return { blocked: true, level: "danger", title: "Clínica bloqueada", message: clinic?.bloqueio_motivo || "A assinatura desta clínica está cancelada ou bloqueada." };
   }
