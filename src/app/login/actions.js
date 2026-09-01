@@ -1,6 +1,5 @@
 "use server";
 
-import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { isInternalAdminUser } from "@/lib/auth/session";
 import { safeInternalNext } from "@/lib/auth/self-service.mjs";
@@ -8,16 +7,14 @@ import { ensureDemoAccountAndReset, isDemoLoginEmail, isDemoPassword } from "@/l
 import { isInternalAdminEmail } from "@/lib/saas/plans";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { getTrustedAppOrigin } from "@/lib/security/app-origin";
 
 function normalizeEmail(value) {
   return String(value || "").trim().toLowerCase();
 }
 
 async function getBaseUrl() {
-  const headerStore = await headers();
-  const host = headerStore.get("x-forwarded-host") || headerStore.get("host");
-  const protocol = headerStore.get("x-forwarded-proto") || (host?.startsWith("localhost") ? "http" : "https");
-  return host ? `${protocol}://${host}` : process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
+  return getTrustedAppOrigin();
 }
 
 async function findInternalAdminByEmail(email) {

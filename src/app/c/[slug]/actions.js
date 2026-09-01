@@ -1,6 +1,5 @@
 "use server";
 
-import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { supabaseAdmin } from "@/lib/supabase/admin";
@@ -12,6 +11,7 @@ import { clinicTimeZone, dateFromClinicLocal, isWithinWorkingPeriods } from "@/l
 import { totalAppointmentMinutes } from "@/lib/domain/schedule-core.mjs";
 import { decryptClinicSecrets } from "@/lib/security/clinic-secrets";
 import { emitDomainEvent, upsertTransactionalConsent } from "@/lib/whatsapp/events";
+import { getTrustedAppOrigin } from "@/lib/security/app-origin";
 
 function text(formData, key) {
   return String(formData.get(key) || "").trim();
@@ -106,12 +106,7 @@ function publicRedirect(slug, params) {
 }
 
 async function publicAppOrigin() {
-  const requestHeaders = await headers();
-  const configured = String(process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || "").trim().replace(/\/$/, "");
-  if (configured) return configured;
-  const protocol = requestHeaders.get("x-forwarded-proto") || (process.env.NODE_ENV === "production" ? "https" : "http");
-  const host = requestHeaders.get("x-forwarded-host") || requestHeaders.get("host") || "localhost:3000";
-  return `${protocol}://${host}`;
+  return getTrustedAppOrigin();
 }
 
 function publicLeadRedirect(slug, params) {
@@ -312,9 +307,12 @@ export async function createPublicBookingAction(formData) {
       valor_pago: 0,
       observacoes: `Agendamento criado pelo site público. Procedimentos: ${procedimentosTexto}. Duração total: ${duracaoTotal} min.`,
     })
-    .select("id")
-    .single();
+      .select("id")
+      .single();
 
+  if (agendaError?.code === "23P01") {
+    publicRedirect(slug, { erro: "horario", mensagem: "Este horário acabou de ser ocupado. Escolha outra opção disponível." });
+  }
   if (agendaError) throw agendaError;
 
   let invoiceUrl = null;

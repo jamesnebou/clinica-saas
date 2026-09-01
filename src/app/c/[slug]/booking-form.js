@@ -1,44 +1,20 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
 import { createPublicBookingAction } from "./actions";
 import { AttributionFields } from "@/components/public-site/attribution-fields";
+import {
+  addDaysToDateKey,
+  buildCalendarMonth,
+  clinicDateKey,
+  formatBrazilianDate,
+  formatCalendarMonth,
+  monthKeyFromDateKey,
+  shiftMonthKey,
+} from "@/lib/public-booking/calendar-core.mjs";
 
-function nextDate(timeZone) {
-  const parts = Object.fromEntries(new Intl.DateTimeFormat("en", {
-    timeZone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(new Date()).filter((part) => part.type !== "literal").map((part) => [part.type, part.value]));
-  const date = new Date(`${parts.year}-${parts.month}-${parts.day}T12:00:00Z`);
-  date.setUTCDate(date.getUTCDate() + 1);
-  return date.toISOString().slice(0, 10);
-}
-
-function isoToBrazilianDate(value) {
-  const match = String(value || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  return match ? `${match[3]}/${match[2]}/${match[1]}` : "";
-}
-
-function maskBrazilianDate(value) {
-  const digits = String(value || "").replace(/\D/g, "").slice(0, 8);
-  if (digits.length <= 2) return digits;
-  if (digits.length <= 4) return `${digits.slice(0, 2)}/${digits.slice(2)}`;
-  return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`;
-}
-
-function brazilianDateToIso(value) {
-  const match = String(value || "").match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-  if (!match) return "";
-
-  const day = Number(match[1]);
-  const month = Number(match[2]);
-  const year = Number(match[3]);
-  const date = new Date(Date.UTC(year, month - 1, day, 12));
-  if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) return "";
-  return `${match[3]}-${match[2]}-${match[1]}`;
-}
+const WEEKDAYS = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
 
 function money(value) {
   return Number(value || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -60,13 +36,14 @@ function depositValue(procedimento) {
 
 export function PublicBookingForm({ slug, procedimentos, profissionais, query, timeZone = "America/Bahia" }) {
   const firstProcedure = procedimentos[0]?.id || "";
-  const initialDate = nextDate(timeZone);
+  const today = clinicDateKey(timeZone);
+  const initialDate = addDaysToDateKey(today, 1);
   const [procedimentoIds, setProcedimentoIds] = useState(firstProcedure ? [firstProcedure] : []);
   const [profissionalId, setProfissionalId] = useState("");
   const [proceduresOpen, setProceduresOpen] = useState(false);
   const [procedureSearch, setProcedureSearch] = useState("");
   const [date, setDate] = useState(initialDate);
-  const [dateText, setDateText] = useState(isoToBrazilianDate(initialDate));
+  const [visibleMonth, setVisibleMonth] = useState(monthKeyFromDateKey(initialDate));
   const [slots, setSlots] = useState([]);
   const [selectedSlot, setSelectedSlot] = useState("");
   const [selectedSlotProfessional, setSelectedSlotProfessional] = useState("");
@@ -84,18 +61,22 @@ export function PublicBookingForm({ slug, procedimentos, profissionais, query, t
     price: acc.price + Number(item.preco_promocional ?? item.preco ?? 0),
     deposit: acc.deposit + depositValue(item),
   }), { duration: 0, price: 0, deposit: 0 }), [selectedProcedures]);
+  const calendarDays = useMemo(() => buildCalendarMonth(visibleMonth), [visibleMonth]);
+  const firstBookableMonth = monthKeyFromDateKey(initialDate);
 
   useEffect(() => {
-    let cancelled = false;
+    const controller = new AbortController();
 
     async function loadSlots() {
       if (!slug || !procedimentoIds.length || !date) {
         setSlots([]);
         setSelectedSlot("");
         setSelectedSlotProfessional("");
-        if (dateText.length === 10) setSlotsMessage("Informe uma data válida no formato DD/MM/AAAA.");
         return;
       }
+      setSlots([]);
+      setSelectedSlot("");
+      setSelectedSlotProfessional("");
       setLoadingSlots(true);
       setSlotsMessage("");
 
@@ -107,31 +88,31 @@ export function PublicBookingForm({ slug, procedimentos, profissionais, query, t
       if (profissionalId) params.set("profissional_id", profissionalId);
 
       try {
-        const response = await fetch(`/api/public/availability?${params.toString()}`, { cache: "no-store" });
+        const response = await fetch(`/api/public/availability?${params.toString()}`, {
+          cache: "no-store",
+          signal: controller.signal,
+        });
         const payload = await response.json();
-        if (cancelled) return;
+        if (!response.ok) throw new Error(payload?.message || "Não foi possível consultar a agenda.");
         const nextSlots = Array.isArray(payload.slots) ? payload.slots : [];
         setSlots(nextSlots);
         setSelectedSlot(nextSlots[0]?.value || "");
         setSelectedSlotProfessional(nextSlots[0]?.profissional_id || "");
         setSlotsMessage(payload.message || (nextSlots.length ? "" : "Nenhum horário disponível para esta data."));
-      } catch {
-        if (!cancelled) {
-          setSlots([]);
-          setSelectedSlot("");
-          setSelectedSlotProfessional("");
-          setSlotsMessage("Não foi possível carregar os horários. Tente novamente.");
-        }
+      } catch (error) {
+        if (error?.name === "AbortError") return;
+        setSlots([]);
+        setSelectedSlot("");
+        setSelectedSlotProfessional("");
+        setSlotsMessage(error?.message || "Não foi possível carregar os horários. Tente novamente.");
       } finally {
-        if (!cancelled) setLoadingSlots(false);
+        if (!controller.signal.aborted) setLoadingSlots(false);
       }
     }
 
     loadSlots();
-    return () => {
-      cancelled = true;
-    };
-  }, [date, dateText.length, procedimentoIds, profissionalId, slug]);
+    return () => controller.abort();
+  }, [date, procedimentoIds, profissionalId, slug]);
 
   function toggleProcedure(id) {
     setProcedimentoIds((current) => {
@@ -148,14 +129,14 @@ export function PublicBookingForm({ slug, procedimentos, profissionais, query, t
     setSelectedSlotProfessional(slot?.profissional_id || profissionalId || "");
   }
 
-  function handleDateChange(value) {
-    const masked = maskBrazilianDate(value);
-    setDateText(masked);
-    setDate(brazilianDateToIso(masked));
+  function selectDate(nextDate) {
+    if (!nextDate || nextDate < initialDate) return;
+    setDate(nextDate);
+    setVisibleMonth(monthKeyFromDateKey(nextDate));
   }
 
   return (
-    <form action={createPublicBookingAction} className="rounded-[1.75rem] border border-white/70 bg-[#15120f] p-7 text-white shadow-[0_32px_90px_rgba(20,18,15,0.26)]">
+    <form action={createPublicBookingAction} className="rounded-[1.75rem] border border-white/70 bg-[#15120f] p-4 text-white shadow-[0_32px_90px_rgba(20,18,15,0.26)] sm:p-7">
       <input type="hidden" name="slug" value={slug} />
       <AttributionFields />
       <input type="hidden" name="data_hora" value={selectedSlot} />
@@ -217,21 +198,73 @@ export function PublicBookingForm({ slug, procedimentos, profissionais, query, t
           </select>
         </label>
 
-        <label className="block">
-          <span className="text-sm font-semibold text-white/75">Data</span>
-          <input
-            type="text"
-            inputMode="numeric"
-            autoComplete="off"
-            placeholder="DD/MM/AAAA"
-            value={dateText}
-            onChange={(event) => handleDateChange(event.target.value)}
-            pattern="\d{2}/\d{2}/\d{4}"
-            maxLength={10}
-            required
-            className="mt-2 h-12 w-full rounded-2xl border border-white/10 bg-white/10 px-4 text-sm text-white outline-none placeholder:text-white/35"
-          />
-        </label>
+        <div className="md:col-span-2">
+          <span className="text-sm font-semibold text-white/75">Escolha a data</span>
+          <div className="mx-auto mt-2 w-full max-w-[30rem] overflow-hidden rounded-2xl border border-white/10 bg-white/[0.07] p-2 sm:p-4">
+            <div className="flex items-center justify-between gap-3">
+              <button
+                type="button"
+                title="Mês anterior"
+                aria-label="Exibir mês anterior"
+                disabled={visibleMonth <= firstBookableMonth}
+                onClick={() => setVisibleMonth((current) => shiftMonthKey(current, -1))}
+                className="grid h-11 w-11 shrink-0 place-items-center rounded-full border border-white/10 bg-white/10 text-white transition hover:border-white/25 hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-30"
+              >
+                <ChevronLeft size={20} aria-hidden="true" />
+              </button>
+              <div className="min-w-0 text-center">
+                <strong className="block text-sm text-white sm:text-base">{formatCalendarMonth(visibleMonth)}</strong>
+                <span className="mt-0.5 block text-[11px] text-white/50">Toque em um dia para consultar os horários</span>
+              </div>
+              <button
+                type="button"
+                title="Próximo mês"
+                aria-label="Exibir próximo mês"
+                onClick={() => setVisibleMonth((current) => shiftMonthKey(current, 1))}
+                className="grid h-11 w-11 shrink-0 place-items-center rounded-full border border-white/10 bg-white/10 text-white transition hover:border-white/25 hover:bg-white/15"
+              >
+                <ChevronRight size={20} aria-hidden="true" />
+              </button>
+            </div>
+
+            <div className="mt-4 grid grid-cols-7 gap-0.5 text-center sm:gap-1" role="grid" aria-label={`Calendário de ${formatCalendarMonth(visibleMonth)}`}>
+              {WEEKDAYS.map((weekday) => (
+                <span key={weekday} role="columnheader" className="py-1 text-[10px] font-bold uppercase text-white/45 sm:text-xs">{weekday}</span>
+              ))}
+              {calendarDays.map((day) => {
+                const disabled = !day.inMonth || day.date < initialDate;
+                const selected = day.date === date;
+                const isToday = day.date === today;
+                return (
+                  <button
+                    key={day.date}
+                    type="button"
+                    role="gridcell"
+                    disabled={disabled}
+                    aria-label={day.inMonth ? formatBrazilianDate(day.date) : undefined}
+                    aria-selected={selected}
+                    onClick={() => selectDate(day.date)}
+                    className={[
+                      "relative grid min-h-10 place-items-center rounded-xl text-xs font-bold transition sm:min-h-12 sm:text-sm",
+                      selected
+                        ? "bg-[var(--clinic-accent)] text-[#15120f] shadow-[0_8px_24px_color-mix(in_srgb,var(--clinic-accent)_24%,transparent)]"
+                        : "text-white/75 hover:bg-white/12 hover:text-white",
+                      disabled ? "pointer-events-none opacity-20" : "",
+                      isToday && !selected ? "ring-1 ring-inset ring-white/30" : "",
+                    ].join(" ")}
+                  >
+                    {day.day}
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="mt-3 flex items-center gap-2 rounded-xl bg-white/[0.07] px-3 py-2.5 text-xs text-white/70" aria-live="polite">
+              <CalendarDays size={16} className="shrink-0 text-[var(--clinic-accent)]" aria-hidden="true" />
+              <span>Data selecionada: <strong className="text-white">{formatBrazilianDate(date)}</strong></span>
+            </div>
+          </div>
+        </div>
 
         <label className="block md:col-span-2">
           <span className="text-sm font-semibold text-white/75">Horários disponíveis</span>
@@ -244,7 +277,7 @@ export function PublicBookingForm({ slug, procedimentos, profissionais, query, t
               </option>
             ))}
           </select>
-          {slotsMessage ? <span className="mt-2 block text-xs text-amber-100/80">{slotsMessage}</span> : null}
+          {slotsMessage ? <span className="mt-2 block text-xs text-amber-100/80" role="status">{slotsMessage} {!slots.length && !loadingSlots ? "Escolha outro dia no calendário." : ""}</span> : null}
         </label>
 
         <label className="block">

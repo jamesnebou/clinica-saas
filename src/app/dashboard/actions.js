@@ -2,10 +2,9 @@
 
 import { randomBytes } from "node:crypto";
 import { revalidatePath } from "next/cache";
-import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { requireClinic } from "@/lib/auth/session";
+import { requireClinic, requireClinicSection } from "@/lib/auth/session";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { uploadClientPhoto, uploadClinicLogo, uploadClinicSiteImage, uploadProcedureImage, uploadProductImage } from "@/lib/supabase/storage";
 import { assertClinicLimit, assertClinicOperational } from "@/lib/saas/plans";
@@ -22,6 +21,7 @@ import {
 import { ACCESS_SECTIONS } from "@/lib/auth/permissions";
 import { decryptClinicSecrets, encryptClinicSecrets } from "@/lib/security/clinic-secrets";
 import { getAsaasBaseUrl, removeAsaasWebhook, upsertAsaasWebhook, validateAsaasConnection } from "@/lib/asaas/client";
+import { getTrustedAppOrigin } from "@/lib/security/app-origin";
 import { normalizeInfinitePayHandle } from "@/lib/infinitepay/client";
 import { emitDomainEvent } from "@/lib/whatsapp/events";
 import {
@@ -43,6 +43,19 @@ async function getScopedSupabase() {
 
   const supabase = await createClient();
   return { supabase, clinicaId, activeClinic, memberships: context.memberships || [], user: context.user };
+}
+
+async function getScopedSectionSupabase(section) {
+  const context = await requireClinicSection(section);
+  const activeClinic = context.activeClinic;
+  const clinicaId = activeClinic?.id;
+
+  if (!clinicaId) {
+    throw new Error("Nenhuma clinica vinculada ao usuario logado.");
+  }
+
+  assertClinicOperational(activeClinic);
+  return { ...context, clinicaId, activeClinic, memberships: context.memberships || [] };
 }
 
 function text(formData, key) {
@@ -110,7 +123,7 @@ const CLINIC_ROLES = new Set(["owner", "admin", "recepcao", "financeiro", "profi
 const ACCESS_SECTION_SET = new Set(ACCESS_SECTIONS);
 
 function currentMembership(memberships, clinicaId) {
-  return (memberships || []).find((item) => item.clinica_id === clinicaId) || memberships?.[0] || null;
+  return (memberships || []).find((item) => item.clinica_id === clinicaId) || null;
 }
 
 function redirectWithMessage(path, code, message) {
@@ -161,6 +174,18 @@ function requireProntuarioAccess(memberships, clinicaId, redirectTo) {
   }
 }
 
+async function requireScopedClient(supabase, clinicaId, clienteId, redirectTo) {
+  const { data, error } = await supabase
+    .from("clientes")
+    .select("id")
+    .eq("clinica_id", clinicaId)
+    .eq("id", clienteId)
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!data?.id) redirectWithMessage(redirectTo, "cliente", "Cliente não encontrado nesta clínica.");
+}
+
 function normalizeEmail(value) {
   return String(value || "").trim().toLowerCase();
 }
@@ -193,13 +218,9 @@ async function upsertAuthUserWithPassword({ email, password, nome }) {
   const existing = await findAuthUserByEmail(email);
 
   if (existing?.id) {
-    const { data, error } = await supabaseAdmin.auth.admin.updateUserById(existing.id, {
-      password,
-      email_confirm: true,
-      user_metadata: { ...(existing.user_metadata || {}), nome },
-    });
-    if (error) throw error;
-    return { user: data?.user || existing, existed: true };
+    // A clínica que convida nunca pode redefinir a credencial global de uma
+    // pessoa que já possui acesso a outro tenant.
+    return { user: existing, existed: true };
   }
 
   const { data, error } = await supabaseAdmin.auth.admin.createUser({
@@ -688,6 +709,9 @@ export async function createAgendamentoAction(formData) {
     status: "agendado",
   }).select("id").single();
 
+  if (error?.code === "23P01") {
+    redirectAgendaError(formData, "Este horário acabou de ser ocupado. Escolha outro horário.", dateKeyInTimeZone(new Date(payload.inicio), clinicTimeZone(activeClinic)));
+  }
   if (error) throw error;
   await emitWhatsAppDomainEvent({
     clinicId: clinicaId,
@@ -740,6 +764,9 @@ export async function updateAgendamentoAction(formData) {
     .eq("id", id)
     .eq("clinica_id", clinicaId);
 
+  if (error?.code === "23P01") {
+    redirectAgendaError(formData, "Este horário acabou de ser ocupado. Escolha outro horário.", dateKeyInTimeZone(new Date(payload.inicio), clinicTimeZone(activeClinic)));
+  }
   if (error) throw error;
   if (previous.inicio !== payload.inicio || previous.fim !== payload.fim) {
     await emitWhatsAppDomainEvent({
@@ -864,6 +891,7 @@ export async function createClienteFotoAction(formData) {
   const { supabase, clinicaId, memberships, user } = await getScopedSupabase();
   const clienteId = requireValue(text(formData, "cliente_id"), "Cliente não informado.");
   requireProntuarioAccess(memberships, clinicaId, `/dashboard/clientes/${clienteId}`);
+  await requireScopedClient(supabase, clinicaId, clienteId, `/dashboard/clientes/${clienteId}`);
 
   const { error } = await supabase.from("cliente_fotos").insert({
     clinica_id: clinicaId,
@@ -901,9 +929,10 @@ function financeRedirectUrl(formData) {
 }
 
 export async function createClienteFotoUploadAction(formData) {
-  const { clinicaId, memberships, user } = await getScopedSupabase();
+  const { supabase, clinicaId, memberships, user } = await getScopedSupabase();
   const clienteId = requireValue(text(formData, "cliente_id"), "Cliente não informado.");
   requireProntuarioAccess(memberships, clinicaId, `/dashboard/clientes/${clienteId}`);
+  await requireScopedClient(supabase, clinicaId, clienteId, `/dashboard/clientes/${clienteId}`);
   const file = formData.get("arquivo");
   const uploaded = await uploadClientPhoto({ clinicaId, clienteId, file });
 
@@ -933,6 +962,7 @@ export async function createClienteConsentimentoAction(formData) {
   const { supabase, clinicaId, memberships, user } = await getScopedSupabase();
   const clienteId = requireValue(text(formData, "cliente_id"), "Cliente não informado.");
   requireProntuarioAccess(memberships, clinicaId, `/dashboard/clientes/${clienteId}`);
+  await requireScopedClient(supabase, clinicaId, clienteId, `/dashboard/clientes/${clienteId}`);
 
   if (formData.get("aceito") !== "on") {
     redirectWithMessage(`/dashboard/clientes/${clienteId}`, "consentimento", "Marque o aceite para registrar o consentimento.");
@@ -972,10 +1002,19 @@ export async function createClienteConsentimentoAction(formData) {
   redirect(`/dashboard/clientes/${clienteId}?ok=consentimento`);
 }
 export async function updateAgendamentoFinanceiroAction(formData) {
-  const { supabase, clinicaId } = await getScopedSupabase();
+  const { clinicaId } = await getScopedSectionSupabase("financeiro");
   const agendamentoId = requireValue(text(formData, "agendamento_id"), "Agendamento não informado.");
-  const clienteId = nullableText(formData, "cliente_id");
-  const profissionalId = nullableText(formData, "profissional_id");
+  const { data: agendamento, error: agendamentoError } = await supabaseAdmin
+    .from("agendamentos")
+    .select("id, cliente_id, profissional_id")
+    .eq("id", agendamentoId)
+    .eq("clinica_id", clinicaId)
+    .maybeSingle();
+  if (agendamentoError) throw agendamentoError;
+  if (!agendamento) throw new Error("Agendamento não encontrado nesta clínica.");
+
+  const clienteId = agendamento.cliente_id || null;
+  const profissionalId = agendamento.profissional_id || null;
   const valor = numberValue(formData, "valor", 0);
   const valorPagoInformado = numberValue(formData, "valor_pago", 0);
   const status = requireValue(text(formData, "pagamento_status"), "Status de pagamento não informado.");
@@ -992,7 +1031,7 @@ export async function updateAgendamentoFinanceiroAction(formData) {
 
   if (publicBookingError) throw publicBookingError;
 
-  const { error: agendaError } = await supabase
+  const { error: agendaError } = await supabaseAdmin
     .from("agendamentos")
     .update({
       valor,
@@ -1020,7 +1059,7 @@ export async function updateAgendamentoFinanceiroAction(formData) {
     observacoes: nullableText(formData, "observacoes_financeiras"),
   };
 
-  const { data: existente, error: buscaError } = await supabase
+  const { data: existente, error: buscaError } = await supabaseAdmin
     .from("pagamentos_clinica")
     .select("id")
     .eq("clinica_id", clinicaId)
@@ -1030,8 +1069,8 @@ export async function updateAgendamentoFinanceiroAction(formData) {
   if (buscaError) throw buscaError;
 
   const query = existente?.id
-    ? supabase.from("pagamentos_clinica").update(pagamentoPayload).eq("id", existente.id)
-    : supabase.from("pagamentos_clinica").insert(pagamentoPayload);
+    ? supabaseAdmin.from("pagamentos_clinica").update(pagamentoPayload).eq("id", existente.id).eq("clinica_id", clinicaId)
+    : supabaseAdmin.from("pagamentos_clinica").insert(pagamentoPayload);
 
   const { error: pagamentoError } = await query;
   if (pagamentoError) throw pagamentoError;
@@ -1091,7 +1130,7 @@ export async function updateAgendamentoFinanceiroAction(formData) {
 }
 
 export async function createPacoteAction(formData) {
-  const { supabase, clinicaId } = await getScopedSupabase();
+  const { supabase, clinicaId } = await getScopedSectionSupabase("financeiro");
   const procedimentoIds = formData
     .getAll("procedimento_ids")
     .map((value) => String(value || "").trim())
@@ -1114,7 +1153,7 @@ export async function createPacoteAction(formData) {
 }
 
 export async function sellClientePacoteAction(formData) {
-  const { supabase, clinicaId } = await getScopedSupabase();
+  const { supabase, clinicaId } = await getScopedSectionSupabase("financeiro");
   const pacoteId = requireValue(text(formData, "pacote_id"), "Pacote não informado.");
   const clienteId = requireValue(text(formData, "cliente_id"), "Cliente não informado.");
 
@@ -1185,6 +1224,11 @@ export async function inviteClinicUserAction(formData) {
     redirectWithMessage("/dashboard/usuarios", "papel", "Papel de usuario invalido.");
   }
 
+  const actorMembership = currentMembership(memberships, clinicaId);
+  if (papel === "owner" && actorMembership?.papel !== "owner") {
+    redirectWithMessage(redirectTo, "permissao", "Somente um owner pode conceder o papel de owner.");
+  }
+
   const authResult = await upsertAuthUserWithPassword({
     email,
     password: senhaTemporaria,
@@ -1232,6 +1276,11 @@ export async function updateClinicUserAction(formData) {
 
   if (existingError) throw existingError;
   if (!existing) redirectWithMessage("/dashboard/usuarios", "usuario", "Usuário não encontrado nesta clínica.");
+
+  const actorMembership = currentMembership(memberships, clinicaId);
+  if ((existing.papel === "owner" || papel === "owner") && actorMembership?.papel !== "owner") {
+    redirectWithMessage(redirectTo, "permissao", "Somente um owner pode administrar outros owners.");
+  }
 
   if (existing.papel === "owner" && (!ativo || papel !== "owner")) {
     const { count, error } = await supabase
@@ -1693,14 +1742,6 @@ export async function updateClinicSettingsAction(formData) {
   redirect("/dashboard/configuracoes?ok=configuracoes");
 }
 
-function publicAppOrigin(requestHeaders) {
-  const configured = String(process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || "").trim().replace(/\/$/, "");
-  if (configured) return configured;
-  const protocol = requestHeaders.get("x-forwarded-proto") || (process.env.NODE_ENV === "production" ? "https" : "http");
-  const host = requestHeaders.get("x-forwarded-host") || requestHeaders.get("host") || "localhost:3000";
-  return `${protocol}://${host}`;
-}
-
 function isPublicOrigin(origin) {
   try {
     const parsed = new URL(origin);
@@ -1727,8 +1768,7 @@ export async function connectClinicAsaasAction(formData) {
   const integration = { clinica_id: clinicaId, asaas_ativo: true, ambiente, baseUrl, apiKey };
   const connectionChanged = Boolean((currentSecrets.apiKey || current?.asaas_api_key) && (currentSecrets.apiKey || current?.asaas_api_key) !== apiKey) || Boolean(current?.asaas_ambiente && current.asaas_ambiente !== ambiente);
   const webhookToken = connectionChanged ? randomBytes(32).toString("base64url") : (currentSecrets.webhookToken || current?.asaas_webhook_token || randomBytes(32).toString("base64url"));
-  const requestHeaders = await headers();
-  const origin = publicAppOrigin(requestHeaders);
+  const origin = await getTrustedAppOrigin();
   const webhookUrl = `${origin}/api/webhooks/asaas?clinica=${clinicaId}`;
   const canPublishWebhook = isPublicOrigin(origin);
   const notificationEmail = activeClinic.email || user?.email;

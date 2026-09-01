@@ -1,6 +1,5 @@
 "use server";
 
-import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireClinic } from "@/lib/auth/session";
@@ -8,6 +7,7 @@ import { assertSectionAccess, getCurrentMembership } from "@/lib/auth/permission
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { decryptClinicSecrets } from "@/lib/security/clinic-secrets";
 import { refundAsaasPayment } from "@/lib/asaas/client";
+import { getTrustedAppOrigin } from "@/lib/security/app-origin";
 
 function text(formData, key, max = 500) {
   return String(formData.get(key) || "").trim().slice(0, max);
@@ -159,10 +159,7 @@ export async function openAbandonedCartRecoveryAction(formData) {
   const id = text(formData, "id", 80);
   const { data: cart } = await supabaseAdmin.from("carrinhos_abandonados_clinica").select("id, telefone, token_recuperacao, quantidade_lembretes").eq("id", id).eq("clinica_id", clinicId).maybeSingle();
   if (!cart?.telefone) redirectMessage("erro", "Este carrinho não possui WhatsApp autorizado.");
-  const requestHeaders = await headers();
-  const protocol = requestHeaders.get("x-forwarded-proto") || (process.env.NODE_ENV === "production" ? "https" : "http");
-  const host = requestHeaders.get("x-forwarded-host") || requestHeaders.get("host") || "localhost:3000";
-  const recoveryUrl = `${protocol}://${host}/c/${clinic.slug}?carrinho=${cart.token_recuperacao}#loja`;
+  const recoveryUrl = `${await getTrustedAppOrigin()}/c/${clinic.slug}?carrinho=${cart.token_recuperacao}#loja`;
   const message = `Olá! Você deixou produtos no carrinho da ${clinic.nome}. Se quiser concluir sua compra, seu carrinho está salvo aqui: ${recoveryUrl}`;
   await supabaseAdmin.from("carrinhos_abandonados_clinica").update({ lembrete_enviado_em: new Date().toISOString(), quantidade_lembretes: Number(cart.quantidade_lembretes || 0) + 1 }).eq("id", id);
   const phone = String(cart.telefone).replace(/\D/g, "");

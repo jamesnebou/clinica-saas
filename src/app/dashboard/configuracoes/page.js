@@ -127,7 +127,7 @@ export default async function ConfiguracoesPage({ searchParams }) {
     .maybeSingle();
 
   const activeClinic = freshClinic || initialClinic;
-  const membership = context.memberships?.find((item) => item.clinica_id === activeClinic.id) || context.memberships?.[0] || null;
+  const membership = context.memberships?.find((item) => item.clinica_id === activeClinic.id) || null;
   const meta = activeClinic.metadata || {};
   const site = meta.site_publico || {};
   const schedule = normalizeSchedule(meta.horario_funcionamento || {});

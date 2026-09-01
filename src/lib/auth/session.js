@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { isInternalAdminEmail } from "@/lib/saas/plans";
 import { canAccessSection, getCurrentMembership } from "@/lib/auth/permissions";
@@ -45,7 +46,7 @@ export async function getUserClinics() {
 
   const { data, error } = await supabase
     .from("usuarios_clinica")
-    .select("id, clinica_id, papel, nome, email, ativo, permissoes, clinicas(id, nome, slug, documento, telefone, email, cidade, estado, status, plano, metadata, trial_ends_at, billing_email, asaas_customer_id, asaas_subscription_id, assinatura_status, proxima_cobranca_em, bloqueada_em, bloqueio_motivo)")
+    .select("id, clinica_id, user_id, papel, nome, email, ativo, permissoes, clinicas(id, nome, slug, documento, telefone, email, cidade, estado, status, plano, metadata, trial_ends_at, billing_email, asaas_customer_id, asaas_subscription_id, assinatura_status, proxima_cobranca_em, bloqueada_em, bloqueio_motivo)")
     .eq("ativo", true)
     .order("created_at", { ascending: true });
 
@@ -54,8 +55,14 @@ export async function getUserClinics() {
     return { user, memberships: [], activeClinic: null, error };
   }
 
-  const memberships = data || [];
-  const activeClinic = memberships[0]?.clinicas || null;
+  const userEmail = String(user.email || "").trim().toLowerCase();
+  const memberships = (data || []).filter((item) => (
+    item.user_id === user.id || String(item.email || "").trim().toLowerCase() === userEmail
+  ));
+  const cookieStore = await cookies();
+  const selectedClinicId = cookieStore.get("nexawi_active_clinic")?.value || "";
+  const selectedMembership = memberships.find((item) => item.clinica_id === selectedClinicId);
+  const activeClinic = selectedMembership?.clinicas || memberships[0]?.clinicas || null;
 
   return { user, memberships, activeClinic, isInternalAdmin: isInternalAdminUser(user) };
 }

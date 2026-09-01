@@ -10,6 +10,7 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 import { SEGMENT_OPTIONS } from "@/lib/segments/registry";
 import { deterministicMetaEventId, isValidMetaEventId, normalizeMarketingAttribution } from "@/lib/tracking/core.mjs";
 import { deliverMetaConversionRecord, enqueueClinicLifecycleMetaEvent, queueAndDeliverMetaConversionEvent, saveClinicMarketingAttribution } from "@/lib/tracking/service";
+import { getTrustedAppOrigin } from "@/lib/security/app-origin";
 
 function text(formData, key) {
   return String(formData.get(key) || "").trim();
@@ -18,12 +19,9 @@ function text(formData, key) {
 
 async function trackingRequestContext(pathname) {
   const headerStore = await headers();
-  const host = headerStore.get("x-forwarded-host") || headerStore.get("host");
-  const protocol = headerStore.get("x-forwarded-proto") || (host?.startsWith("localhost") ? "http" : "https");
-  const baseUrl = host ? `${protocol}://${host}` : process.env.APP_URL || process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
   const forwarded = headerStore.get("x-forwarded-for")?.split(",")[0]?.trim();
   return {
-    eventSourceUrl: new URL(pathname, baseUrl).toString(),
+    eventSourceUrl: new URL(pathname, await getTrustedAppOrigin()).toString(),
     clientIpAddress: forwarded || headerStore.get("x-real-ip") || null,
     clientUserAgent: headerStore.get("user-agent") || null,
   };

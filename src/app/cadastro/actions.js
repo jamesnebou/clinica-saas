@@ -13,6 +13,7 @@ import { parseInternalAdminEmails } from "@/lib/saas/plans";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { cleanText, normalizeMarketingAttribution } from "@/lib/tracking/core.mjs";
+import { getTrustedAppOrigin } from "@/lib/security/app-origin";
 
 const SIGNUP_LIMIT = 5;
 const SIGNUP_WINDOW_MINUTES = 10;
@@ -30,11 +31,8 @@ async function requestContext() {
   const forwarded = headerStore.get("x-forwarded-for")?.split(",")[0]?.trim();
   const ip = forwarded || headerStore.get("x-real-ip") || "unknown";
   const salt = process.env.SIGNUP_HASH_SALT || process.env.LEAD_HASH_SALT || process.env.CLINIC_SECRETS_KEY || "nexawi-clinicas-public-signup";
-  const host = headerStore.get("x-forwarded-host") || headerStore.get("host");
-  const protocol = headerStore.get("x-forwarded-proto") || (host?.startsWith("localhost") ? "http" : "https");
-  const baseUrl = host ? `${protocol}://${host}` : process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
   return {
-    baseUrl,
+    baseUrl: await getTrustedAppOrigin(),
     ipHash: createHash("sha256").update(`${salt}:${ip}`).digest("hex"),
     userAgent: cleanText(headerStore.get("user-agent"), 300),
   };

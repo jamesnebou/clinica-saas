@@ -11,6 +11,7 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 import { isDemoLoginEmail } from "@/lib/demo/demo-account";
 import { DemoGuidedTour } from "@/components/demo/demo-guided-tour";
 import { DemoConversionCta } from "@/components/demo/demo-conversion-cta";
+import { switchActiveClinicAction } from "./clinic-actions";
 
 
 export async function generateMetadata() {
@@ -145,6 +146,9 @@ export default async function DashboardLayout({ children }) {
   const allowedNavItems = navItems
     .filter((item) => canAccessSection(role, item.section, membership) && sectionHasCapability(item.section, capabilities.effective))
     .map((item) => item.section === "notificacoes" && notificationCount > 0 ? { ...item, badge: notificationCount } : item);
+  const clinicOptions = context.memberships
+    .filter((item) => item.clinicas?.id)
+    .map((item) => ({ id: item.clinicas.id, name: item.clinicas.nome || "Clínica" }));
 
   return (
     <div
@@ -158,6 +162,14 @@ export default async function DashboardLayout({ children }) {
     >
       {isDemo ? <><DemoGuidedTour /><DemoConversionCta /></> : null}
       <MobileSidebarMenu items={allowedNavItems} brandName={brandName} logoUrl={logoUrl} />
+      {clinicOptions.length > 1 ? (
+        <form action={switchActiveClinicAction} className="sticky top-[65px] z-30 flex items-center gap-2 border-b border-neutral-200 bg-white/95 px-4 py-2 shadow-sm backdrop-blur md:hidden">
+          <select name="clinic_id" defaultValue={activeClinic.id} aria-label="Clínica ativa" className="h-10 min-w-0 flex-1 rounded-lg border border-neutral-200 bg-white px-3 text-sm font-semibold">
+            {clinicOptions.map((clinic) => <option key={clinic.id} value={clinic.id}>{clinic.name}</option>)}
+          </select>
+          <button type="submit" className="h-10 rounded-lg bg-neutral-950 px-3 text-sm font-bold text-white">Trocar</button>
+        </form>
+      ) : null}
 
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-[260px] flex-col border-r border-neutral-200 bg-white/95 px-4 py-4 shadow-sm backdrop-blur-xl md:flex">
         <div className="pointer-events-none absolute inset-y-0 right-0 w-px bg-[linear-gradient(180deg,transparent,var(--clinic-accent),transparent)] opacity-55" />
@@ -185,6 +197,16 @@ export default async function DashboardLayout({ children }) {
             </button>
           </form>
         </div>
+
+        {clinicOptions.length > 1 ? (
+          <form action={switchActiveClinicAction} className="relative mt-4 grid gap-2">
+            <label htmlFor="desktop-active-clinic" className="text-xs font-bold uppercase text-neutral-500">Clínica ativa</label>
+            <select id="desktop-active-clinic" name="clinic_id" defaultValue={activeClinic.id} className="h-10 min-w-0 rounded-lg border border-neutral-200 bg-white px-3 text-sm font-semibold">
+              {clinicOptions.map((clinic) => <option key={clinic.id} value={clinic.id}>{clinic.name}</option>)}
+            </select>
+            <button type="submit" className="h-9 rounded-lg border border-neutral-200 bg-white text-sm font-bold text-neutral-700 hover:border-[var(--clinic-primary)] hover:text-[var(--clinic-primary)]">Trocar clínica</button>
+          </form>
+        ) : null}
 
         <SidebarNav items={allowedNavItems} />
 

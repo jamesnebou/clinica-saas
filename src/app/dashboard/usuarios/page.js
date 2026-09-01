@@ -24,7 +24,7 @@ function selectedSections(usuario) {
 
 export default async function UsuariosPage({ searchParams }) {
   const params = await searchParams;
-  const { activeClinic } = await requireClinicSection("usuarios");
+  const { activeClinic, memberships } = await requireClinicSection("usuarios");
 
   if (!activeClinic) {
     return <main className="px-5 py-8 sm:px-8 lg:px-10"><EmptyClinicState /></main>;
@@ -42,6 +42,8 @@ export default async function UsuariosPage({ searchParams }) {
   ]);
 
   const remaining = Math.max(0, Number(plan.limite_usuarios || 0) - Number(usage.usuarios || 0));
+  const actorRole = memberships.find((item) => item.clinica_id === activeClinic.id)?.papel;
+  const assignableRoles = actorRole === "owner" ? roles : roles.filter(([value]) => value !== "owner");
 
   return (
     <main className="min-w-0 w-full px-4 py-8 sm:px-6 lg:px-8">
@@ -50,7 +52,7 @@ export default async function UsuariosPage({ searchParams }) {
 
         <div className="mt-6 space-y-3">
           {params?.ok === "convite" ? <Notice type="success">Usuário criado no Auth e vinculado à clínica. Envie manualmente o e-mail e a senha temporária para ele acessar em `/login-cliente`.</Notice> : null}
-          {params?.ok === "senha" ? <Notice type="success">O usuário já existia no Auth. A senha temporária foi atualizada e o vínculo com a clínica foi criado/reativado.</Notice> : null}
+          {params?.ok === "senha" ? <Notice type="success">O usuário já existia no Auth. A credencial atual foi preservada e o vínculo com a clínica foi criado/reativado.</Notice> : null}
           {params?.ok === "usuario" ? <Notice type="success">Usuário atualizado com sucesso.</Notice> : null}
           {params?.erro === "limite" ? <LimitNotice resource="usuarios" message={params?.mensagem} /> : null}
           {params?.erro && params?.erro !== "limite" ? <Notice type="warning">{params?.mensagem || "Não foi possível concluir esta ação."}</Notice> : null}
@@ -64,7 +66,7 @@ export default async function UsuariosPage({ searchParams }) {
               <Field label="E-mail" name="email" type="email" required />
               <Field label="Senha temporária" name="senha_temporaria" type="password" required placeholder="Mínimo recomendado: 8 caracteres" />
               <SelectField label="Papel" name="papel" defaultValue="recepcao">
-                {roles.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                {assignableRoles.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
               </SelectField>
               <SubmitButton>Convidar usuário</SubmitButton>
             </form>
@@ -85,7 +87,7 @@ export default async function UsuariosPage({ searchParams }) {
                       <p className="mt-2 min-h-11 break-all rounded-lg border border-neutral-100 bg-neutral-50 px-3 py-3 text-sm text-neutral-600">{usuario.email}</p>
                     </div>
                     <SelectField label="Papel" name="papel" defaultValue={usuario.papel}>
-                      {roles.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                      {(usuario.papel === "owner" && actorRole !== "owner" ? roles.filter(([value]) => value === "owner") : assignableRoles).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
                     </SelectField>
                     <SelectField label="Status" name="ativo" defaultValue={usuario.ativo ? "true" : "false"}>
                       <option value="true">Ativo</option>

@@ -218,8 +218,13 @@ export async function uploadProcedureImage({ clinicaId, procedimentoId = "novo",
   };
 }
 
-export async function createSignedPhotoUrl(storagePath) {
+export async function createSignedPhotoUrl(storagePath, { clinicaId, clienteId } = {}) {
   if (!storagePath) return "";
+  const expectedPrefix = clinicaId && clienteId ? `${clinicaId}/${clienteId}/` : null;
+  if (!expectedPrefix || !String(storagePath).startsWith(expectedPrefix)) {
+    console.error("client_photo_path_rejected", { code: "TENANT_PATH_MISMATCH" });
+    return "";
+  }
 
   const { data, error } = await supabaseAdmin.storage
     .from(CLIENT_PHOTOS_BUCKET)

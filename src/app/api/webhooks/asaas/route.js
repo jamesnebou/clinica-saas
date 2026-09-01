@@ -1,4 +1,5 @@
 import { after, NextResponse } from "next/server";
+import { timingSafeEqual } from "node:crypto";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { decryptClinicSecrets } from "@/lib/security/clinic-secrets";
 import { notifyPublicBookingPaymentConfirmedById } from "@/lib/notifications/booking";
@@ -9,13 +10,14 @@ import {
   syncCanonicalOrderPayment,
 } from "@/lib/finance/canonical";
 import { closeDirectSaleOpportunityFromBooking } from "@/lib/crm/payments";
-import { deterministicMetaEventId } from "@/lib/tracking/core.mjs";
 import { deliverMetaConversionRecord, enqueueClinicLifecycleMetaEvent, queueAndDeliverMetaConversionEvent } from "@/lib/tracking/service";
+import { buildSaasPurchaseDecision, normalizeAsaasPaymentStatus } from "@/lib/saas/payment-tracking.mjs";
 
 export const runtime = "nodejs";
 
 
 function scheduleTrackingDelivery(result, logCode) {
+  if (result?.created === false) return;
   if (!result?.record?.id && !result?.input) return;
   after(async () => {
     try {
@@ -35,25 +37,35 @@ function getWebhookToken(request) {
   return request.headers.get("asaas-access-token") || request.headers.get("x-webhook-token") || "";
 }
 
-async function isAllowedWebhookToken(request, token) {
-  const expectedToken = process.env.ASAAS_WEBHOOK_TOKEN;
-  if (expectedToken && token === expectedToken) return true;
-  if (!token) return false;
-  const clinicId = request.nextUrl.searchParams.get("clinica");
-  let query = supabaseAdmin.from("clinica_integracoes")
-    .select("clinica_id, asaas_segredos_criptografados, asaas_webhook_token")
-    .eq("asaas_ativo", true);
-  if (clinicId) query = query.eq("clinica_id", clinicId);
-  const { data, error } = await query;
-  if (error) throw error;
-  return (data || []).some((item) => (decryptClinicSecrets(item.asaas_segredos_criptografados).webhookToken || item.asaas_webhook_token) === token);
+function safeTokenEquals(value, expected) {
+  const left = Buffer.from(String(value || ""));
+  const right = Buffer.from(String(expected || ""));
+  return left.length === right.length && timingSafeEqual(left, right);
 }
 
-function normalizePaymentStatus(status) {
-  const value = String(status || "").toUpperCase();
+async function authorizeWebhookToken(request, token) {
+  const expectedToken = process.env.ASAAS_WEBHOOK_TOKEN;
+  if (expectedToken && safeTokenEquals(token, expectedToken)) return { global: true, clinicId: null };
+  if (!token) return null;
+  const clinicId = request.nextUrl.searchParams.get("clinica");
+  if (!clinicId) return null;
+  const query = supabaseAdmin.from("clinica_integracoes")
+    .select("clinica_id, asaas_segredos_criptografados, asaas_webhook_token")
+    .eq("asaas_ativo", true)
+    .eq("clinica_id", clinicId);
+  const { data, error } = await query;
+  if (error) throw error;
+  const allowed = (data || []).some((item) => safeTokenEquals(
+    token,
+    decryptClinicSecrets(item.asaas_segredos_criptografados).webhookToken || item.asaas_webhook_token,
+  ));
+  return allowed ? { global: false, clinicId } : null;
+}
 
+function normalizeOperationalPaymentStatus(status) {
+  const value = String(status || "").toUpperCase();
   if (["RECEIVED", "CONFIRMED", "RECEIVED_IN_CASH"].includes(value)) return "pago";
-  if (["OVERDUE"].includes(value)) return "vencido";
+  if (value === "OVERDUE") return "vencido";
   if (["REFUNDED", "REFUND_REQUESTED", "CHARGEBACK_REQUESTED", "CHARGEBACK_DISPUTE", "AWAITING_CHARGEBACK_REVERSAL"].includes(value)) return "estornado";
   if (["DELETED", "CANCELED"].includes(value)) return "cancelado";
   return "pendente";
@@ -63,8 +75,8 @@ function isPaidBillingStatus(status) {
   return ["pago", "received", "confirmed", "received_in_cash"].includes(String(status || "").toLowerCase());
 }
 
-function commercialStatusFromPayment(status) {
-  const normalized = normalizePaymentStatus(status);
+function commercialStatusFromPayment(event, status) {
+  const normalized = normalizeAsaasPaymentStatus({ event, status });
   if (normalized === "pago") return { status: "ativa", assinatura_status: "ativa", bloqueada_em: null, bloqueio_motivo: null };
   if (normalized === "vencido") return { status: "inadimplente", assinatura_status: "atrasada", bloqueada_em: new Date().toISOString(), bloqueio_motivo: "Pagamento Asaas vencido." };
   return null;
@@ -89,30 +101,36 @@ function commercialStatusFromSubscription(event, subscription) {
   return null;
 }
 
-async function findClinicByPayment(payment) {
+async function findClinicByPayment(payment, authorizedClinicId = null) {
   const subscriptionId = payment?.subscription || "";
   const customerId = payment?.customer || "";
   const externalReference = payment?.externalReference || "";
 
   if (subscriptionId) {
-    const { data } = await supabaseAdmin.from("clinicas").select("id, asaas_subscription_id").eq("asaas_subscription_id", subscriptionId).maybeSingle();
+    let query = supabaseAdmin.from("clinicas").select("id, asaas_subscription_id").eq("asaas_subscription_id", subscriptionId);
+    if (authorizedClinicId) query = query.eq("id", authorizedClinicId);
+    const { data } = await query.maybeSingle();
     if (data?.id) return data;
   }
 
   if (externalReference) {
-    const { data } = await supabaseAdmin.from("clinicas").select("id, asaas_subscription_id").eq("id", externalReference).maybeSingle();
+    let query = supabaseAdmin.from("clinicas").select("id, asaas_subscription_id").eq("id", externalReference);
+    if (authorizedClinicId) query = query.eq("id", authorizedClinicId);
+    const { data } = await query.maybeSingle();
     if (data?.id) return data;
   }
 
   if (customerId) {
-    const { data } = await supabaseAdmin.from("clinicas").select("id, asaas_subscription_id").eq("asaas_customer_id", customerId).maybeSingle();
+    let query = supabaseAdmin.from("clinicas").select("id, asaas_subscription_id").eq("asaas_customer_id", customerId);
+    if (authorizedClinicId) query = query.eq("id", authorizedClinicId);
+    const { data } = await query.maybeSingle();
     if (data?.id) return data;
   }
 
   return null;
 }
 
-async function updatePublicBookingPayment({ payment, payload, event, paymentStatus, paidAt }) {
+async function updatePublicBookingPayment({ payment, payload, event, paymentStatus, paidAt, authorizedClinicId = null }) {
   const paymentId = payment?.id || "";
   const externalReference = payment?.externalReference || "";
 
@@ -128,13 +146,14 @@ async function updatePublicBookingPayment({ payment, payload, event, paymentStat
   } else {
     return false;
   }
+  if (authorizedClinicId) query = query.eq("clinica_id", authorizedClinicId);
 
   const { data, error } = await query;
   if (error) throw error;
   const booking = data?.[0];
   if (!booking?.id) return false;
 
-  const publicStatus = paymentStatus === "pago" ? "pago" : paymentStatus === "cancelado" ? "cancelado" : "pendente";
+  const publicStatus = paymentStatus === "pago" ? "pago" : ["cancelado", "estornado"].includes(paymentStatus) ? "cancelado" : "pendente";
 
   const { error: publicError } = await supabaseAdmin
     .from("site_agendamentos_publicos")
@@ -169,6 +188,12 @@ async function updatePublicBookingPayment({ payment, payload, event, paymentStat
       description: "Sinal de agendamento", provider: "asaas", providerReference: paymentId || externalReference,
       paidAt: paidAt ? new Date(paidAt).toISOString() : new Date().toISOString(), paymentMethod: String(payment?.billingType || "").toLowerCase(), metadata: { webhook: true } });
   } else if (booking.agendamento_id && ["cancelado", "estornado"].includes(paymentStatus)) {
+    const { error: agendaError } = await supabaseAdmin
+      .from("agendamentos")
+      .update({ pagamento_status: "cancelado", valor_pago: 0, data_pagamento: null })
+      .eq("id", booking.agendamento_id)
+      .eq("clinica_id", booking.clinica_id);
+    if (agendaError) throw agendaError;
     await cancelCanonicalReceivableByOrigin({
       clinicId: booking.clinica_id,
       originType: "agendamento",
@@ -198,18 +223,22 @@ async function updatePublicBookingPayment({ payment, payload, event, paymentStat
   return true;
 }
 
-async function updateStoreOrderPayment({ payment, payload, paymentStatus, paidAt }) {
+async function updateStoreOrderPayment({ payment, payload, paymentStatus, paidAt, authorizedClinicId = null }) {
   const paymentId = payment?.id || "";
   const externalReference = String(payment?.externalReference || "");
   const externalOrderId = externalReference.startsWith("loja:") ? externalReference.slice(5) : "";
   if (!paymentId && !externalOrderId) return false;
   let order = null;
   if (paymentId) {
-    const { data, error } = await supabaseAdmin.from("pedidos_clinica").select("id, clinica_id, cliente_id, total, pagamento_status, status").eq("asaas_payment_id", paymentId).limit(1);
+    let query = supabaseAdmin.from("pedidos_clinica").select("id, clinica_id, cliente_id, total, pagamento_status, status").eq("asaas_payment_id", paymentId);
+    if (authorizedClinicId) query = query.eq("clinica_id", authorizedClinicId);
+    const { data, error } = await query.limit(1);
     if (error) throw error; order = data?.[0] || null;
   }
   if (!order && externalOrderId) {
-    const { data, error } = await supabaseAdmin.from("pedidos_clinica").select("id, clinica_id, cliente_id, total, pagamento_status, status").eq("id", externalOrderId).limit(1);
+    let query = supabaseAdmin.from("pedidos_clinica").select("id, clinica_id, cliente_id, total, pagamento_status, status").eq("id", externalOrderId);
+    if (authorizedClinicId) query = query.eq("clinica_id", authorizedClinicId);
+    const { data, error } = await query.limit(1);
     if (error) throw error; order = data?.[0] || null;
   }
   if (!order?.id) return false;
@@ -241,23 +270,29 @@ async function updateStoreOrderPayment({ payment, payload, paymentStatus, paidAt
   return true;
 }
 
-async function findClinicBySubscription(subscription) {
+async function findClinicBySubscription(subscription, authorizedClinicId = null) {
   const subscriptionId = subscription?.id || "";
   const customerId = subscription?.customer || "";
   const externalReference = subscription?.externalReference || "";
 
   if (subscriptionId) {
-    const { data } = await supabaseAdmin.from("clinicas").select("id, asaas_subscription_id, assinatura_status, metadata").eq("asaas_subscription_id", subscriptionId).maybeSingle();
+    let query = supabaseAdmin.from("clinicas").select("id, asaas_subscription_id, assinatura_status, metadata").eq("asaas_subscription_id", subscriptionId);
+    if (authorizedClinicId) query = query.eq("id", authorizedClinicId);
+    const { data } = await query.maybeSingle();
     if (data?.id) return data;
   }
 
   if (externalReference) {
-    const { data } = await supabaseAdmin.from("clinicas").select("id, asaas_subscription_id, assinatura_status, metadata").eq("id", externalReference).maybeSingle();
+    let query = supabaseAdmin.from("clinicas").select("id, asaas_subscription_id, assinatura_status, metadata").eq("id", externalReference);
+    if (authorizedClinicId) query = query.eq("id", authorizedClinicId);
+    const { data } = await query.maybeSingle();
     if (data?.id) return data;
   }
 
   if (customerId) {
-    const { data } = await supabaseAdmin.from("clinicas").select("id, asaas_subscription_id, assinatura_status, metadata").eq("asaas_customer_id", customerId).maybeSingle();
+    let query = supabaseAdmin.from("clinicas").select("id, asaas_subscription_id, assinatura_status, metadata").eq("asaas_customer_id", customerId);
+    if (authorizedClinicId) query = query.eq("id", authorizedClinicId);
+    const { data } = await query.maybeSingle();
     if (data?.id) return data;
   }
 
@@ -265,16 +300,18 @@ async function findClinicBySubscription(subscription) {
 }
 
 export async function POST(request) {
-  if (!(await isAllowedWebhookToken(request, getWebhookToken(request)))) {
+  const authorization = await authorizeWebhookToken(request, getWebhookToken(request));
+  if (!authorization) {
     return unauthorized();
   }
+  const authorizedClinicId = authorization.global ? null : authorization.clinicId;
 
   const payload = await request.json();
   const event = payload?.event || "";
   const subscription = payload?.subscription || null;
 
   if (subscription?.id || String(event).startsWith("SUBSCRIPTION_")) {
-    const clinic = await findClinicBySubscription(subscription);
+    const clinic = await findClinicBySubscription(subscription, authorizedClinicId);
 
     if (!clinic?.id) {
       return NextResponse.json({ ok: true, matched: false, type: "subscription" });
@@ -308,22 +345,24 @@ export async function POST(request) {
   }
 
   const payment = payload?.payment || payload?.data || payload;
-  const paymentStatus = normalizePaymentStatus(payment?.status);
+  const operationalPaymentStatus = normalizeOperationalPaymentStatus(payment?.status);
   const paidAt = payment?.paymentDate || payment?.confirmedDate || payment?.clientPaymentDate || null;
 
-  const storeOrderUpdated = await updateStoreOrderPayment({ payment, payload, event, paymentStatus, paidAt });
+  const storeOrderUpdated = await updateStoreOrderPayment({ payment, payload, event, paymentStatus: operationalPaymentStatus, paidAt, authorizedClinicId });
   if (storeOrderUpdated) return NextResponse.json({ ok: true, matched: true, type: "store-order-payment" });
 
-  const publicBookingUpdated = await updatePublicBookingPayment({ payment, payload, event, paymentStatus, paidAt });
+  const publicBookingUpdated = await updatePublicBookingPayment({ payment, payload, event, paymentStatus: operationalPaymentStatus, paidAt, authorizedClinicId });
   if (publicBookingUpdated) {
     return NextResponse.json({ ok: true, matched: true, type: "public-booking-payment" });
   }
 
-  const clinic = await findClinicByPayment(payment);
+  const clinic = await findClinicByPayment(payment, authorizedClinicId);
 
   if (!clinic?.id) {
     return NextResponse.json({ ok: true, matched: false, type: "payment" });
   }
+
+  const paymentStatus = normalizeAsaasPaymentStatus({ event, status: payment?.status });
 
   let previousCharge = null;
   if (payment?.id) {
@@ -334,9 +373,11 @@ export async function POST(request) {
       .maybeSingle();
     previousCharge = data || null;
   }
-  const preservePaidCharge = isPaidBillingStatus(previousCharge?.status) && !["pago", "estornado"].includes(paymentStatus);
+  const financialHistoryStatuses = ["pago", "estornado", "estornado_parcial", "estorno_pendente", "contestado"];
+  const preservePaidCharge = isPaidBillingStatus(previousCharge?.status) && !financialHistoryStatuses.includes(paymentStatus);
   const effectivePaymentStatus = preservePaidCharge ? previousCharge.status : paymentStatus;
-  const effectivePaidAt = preservePaidCharge ? previousCharge.pago_em : paidAt ? new Date(paidAt).toISOString() : null;
+  const preserveHistoricalPaidAt = previousCharge?.pago_em && (preservePaidCharge || financialHistoryStatuses.includes(paymentStatus));
+  const effectivePaidAt = preserveHistoricalPaidAt ? previousCharge.pago_em : paidAt ? new Date(paidAt).toISOString() : null;
 
   const { error: billingError } = await supabaseAdmin.from("asaas_cobrancas").upsert({
     clinica_id: clinic.id,
@@ -356,7 +397,7 @@ export async function POST(request) {
     return NextResponse.json({ ok: false, error: billingError.message }, { status: 500 });
   }
 
-  const commercialStatus = commercialStatusFromPayment(payment?.status);
+  const commercialStatus = commercialStatusFromPayment(event, payment?.status);
   if (commercialStatus && payment?.subscription && payment.subscription === clinic.asaas_subscription_id) {
     const { error: clinicError } = await supabaseAdmin
       .from("clinicas")
@@ -374,34 +415,34 @@ export async function POST(request) {
 
   // Purchase Meta representa somente receita do SaaS NexaWi. Pedidos da lojinha e sinais de pacientes
   // retornam antes deste bloco e nunca alimentam o Dataset de aquisição da plataforma.
-  if (paymentStatus === "pago" && payment?.id && payment?.subscription) {
-    const { data: subscriptionClinic } = await supabaseAdmin
+  try {
+    const { data: subscriptionClinic, error: subscriptionClinicError } = await supabaseAdmin
       .from("clinicas")
-      .select("id, asaas_subscription_id")
+      .select("id, slug, email, metadata, asaas_customer_id, asaas_subscription_id")
       .eq("id", clinic.id)
       .maybeSingle();
+    if (subscriptionClinicError) throw subscriptionClinicError;
 
-    if (subscriptionClinic?.asaas_subscription_id && subscriptionClinic.asaas_subscription_id === payment.subscription) {
-      try {
-        const baseUrl = process.env.APP_URL || process.env.NEXT_PUBLIC_SITE_URL || "https://clinicas.nexawi.com.br";
-        const tracking = await enqueueClinicLifecycleMetaEvent({
-          clinicId: clinic.id,
-          eventName: "Purchase",
-          eventId: deterministicMetaEventId("purchase", payment.id),
-          eventTime: paidAt ? new Date(paidAt) : new Date(),
-          eventSourceUrl: new URL("/dashboard/assinatura", baseUrl).toString(),
-          value: Number(payment?.value || payment?.netValue || 0),
-          currency: "BRL",
-          subscriptionId: payment.subscription,
-          sourceType: "saas_payment",
-          sourceId: payment.id,
-          externalId: clinic.id,
-        });
-        scheduleTrackingDelivery(tracking, "meta_capi_purchase_delivery_failed");
-      } catch (trackingError) {
-        console.error("marketing_purchase_tracking_failed", { code: trackingError?.code || "unknown" });
-      }
+    const purchase = buildSaasPurchaseDecision({ event, payment, clinic: subscriptionClinic });
+    if (purchase.shouldTrack) {
+      const baseUrl = process.env.APP_URL || process.env.NEXT_PUBLIC_SITE_URL || "https://clinicas.nexawi.com.br";
+      const tracking = await enqueueClinicLifecycleMetaEvent({
+        clinicId: clinic.id,
+        eventName: "Purchase",
+        eventId: purchase.eventId,
+        eventTime: paidAt ? new Date(paidAt) : new Date(),
+        eventSourceUrl: new URL("/dashboard/assinatura", baseUrl).toString(),
+        value: purchase.value,
+        currency: purchase.currency,
+        subscriptionId: purchase.subscriptionId,
+        sourceType: purchase.sourceType,
+        sourceId: purchase.paymentId,
+        externalId: clinic.id,
+      });
+      scheduleTrackingDelivery(tracking, "meta_capi_purchase_delivery_failed");
     }
+  } catch (trackingError) {
+    console.error("marketing_purchase_tracking_failed", { code: trackingError?.code || "unknown" });
   }
 
   return NextResponse.json({ ok: true, matched: true, type: "payment" });

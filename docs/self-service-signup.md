@@ -1,4 +1,4 @@
-# Cadastro self-service da NexaWi Clínicas
+# Cadastro  da NexaWi Clínicas
 
 ## Funil público
 

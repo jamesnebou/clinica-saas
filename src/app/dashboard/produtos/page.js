@@ -43,7 +43,7 @@ export default async function ProdutosPage({ searchParams }) {
 
   const lojinhaAtiva = activeClinic.metadata?.site_publico?.lojinha_ativa !== false;
   const storeConfig = getStoreConfig(activeClinic.metadata?.site_publico);
-  const membership = memberships.find((item) => item.clinica_id === activeClinic.id) || memberships[0];
+  const membership = memberships.find((item) => item.clinica_id === activeClinic.id);
   const podeConfigurarLojinha = ["owner", "admin"].includes(membership?.papel);
 
   const supabase = await createClient();

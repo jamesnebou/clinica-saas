@@ -4,12 +4,24 @@
 
 O endpoint server-side e `GET /api/cron/automations`. Ele aceita somente `Authorization: Bearer <CRON_SECRET>`.
 
-O projeto esta no plano Vercel Hobby. Nesse plano, cron nativo com frequencia de poucos minutos nao e compativel: a frequencia minima e diaria e o horario pode variar. Por isso, `vercel.json` nao recebe um cron de cinco minutos nesta etapa.
+O projeto esta no plano Vercel Hobby. O worker de producao e acionado pelo GitHub Actions em `.github/workflows/automations-cron.yml`, aproximadamente a cada cinco minutos. O workflow tambem aceita execucao manual por `workflow_dispatch`.
 
-Para operacao comercial, escolha uma destas estrategias:
+O secret `CRON_SECRET` deve existir com o mesmo valor em dois lugares:
 
-1. usar um scheduler externo confiavel a cada cinco minutos, chamando o endpoint com Bearer; ou
-2. migrar o projeto para Vercel Pro e adicionar `{"path":"/api/cron/automations","schedule":"*/5 * * * *"}` sem remover os crons existentes.
+1. Vercel, como variavel server-side do ambiente Production;
+2. GitHub, em **Settings > Secrets and variables > Actions > Repository secrets**.
+
+O workflow usa `curl --fail-with-body`, timeout, retry limitado e um grupo de `concurrency` que impede dois workers deste workflow em paralelo. O segredo fica no ambiente do step e nao deve ser impresso. O GitHub Actions nao oferece garantia de horario exato; sob carga, a execucao agendada pode sofrer atraso.
+
+Para validar depois do deploy:
+
+1. abra **Actions > Automation Worker > Run workflow**;
+2. confirme resposta HTTP 200 e JSON com `ok: true`;
+3. consulte a ultima linha de `automation_worker_executions`;
+4. confirme que uma execucao sem itens retorna contadores zerados, sem erro;
+5. mantenha `AUTOMATION_ALLOW_HIGH_RISK_ACTIONS=false`.
+
+Nao adicione o segredo na URL, em query string, em `NEXT_PUBLIC_*` ou no arquivo YAML.
 
 Referencias oficiais: [uso e precos de Cron Jobs](https://vercel.com/docs/cron-jobs/usage-and-pricing) e [gerenciamento de Cron Jobs](https://vercel.com/docs/cron-jobs/manage-cron-jobs).
 
@@ -25,6 +37,13 @@ Referencias oficiais: [uso e precos de Cron Jobs](https://vercel.com/docs/cron-j
 | `RESEND_FROM_EMAIL` | Apenas para e-mail | Server-side | `NexaWi <avisos@dominio.com>` | envio nao possui remetente valido |
 
 Nunca crie `NEXT_PUBLIC_CRON_SECRET` nem exponha service role no navegador.
+
+## Respostas do endpoint
+
+- Sem `Authorization` ou com Bearer incorreto: HTTP 401 e nenhum claim executado.
+- Com `Authorization: Bearer <CRON_SECRET>` correto: HTTP 200 com o resumo do lote.
+- Lote vazio: HTTP 200, `eventsFound`, `waitsFound` e `runsFound` iguais a zero.
+- Falha fatal de banco/RPC: HTTP 500; o `curl --fail-with-body` faz o job falhar e o retry cobre somente a janela configurada.
 
 ## Homologacao isolada
 

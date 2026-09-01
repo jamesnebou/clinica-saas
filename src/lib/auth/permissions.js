@@ -55,7 +55,7 @@ export const ROLE_ACCESS = {
 };
 
 export function getCurrentMembership(memberships, clinicaId) {
-  return (memberships || []).find((item) => item.clinica_id === clinicaId) || memberships?.[0] || null;
+  return (memberships || []).find((item) => item.clinica_id === clinicaId) || null;
 }
 
 export function getCustomAccessSections(membership) {

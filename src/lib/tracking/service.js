@@ -1,6 +1,7 @@
 import "server-only";
 
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import { isDemoSaasClinic } from "@/lib/saas/payment-tracking.mjs";
 import { cleanText, deterministicMetaEventId, marketingPhoneCandidates, metaRetryDelayMinutes, normalizeMarketingAttribution } from "./core.mjs";
 import { buildMetaEventPayload, buildMetaUserData, sendMetaConversionPayload } from "./meta-capi";
 
@@ -282,7 +283,7 @@ export async function enqueueClinicLifecycleMetaEvent({
   if (!clinic?.id) return { skipped: true, reason: "clinic_not_found" };
 
   // A demo compartilhada nunca deve alimentar o algoritmo de aquisição da Meta.
-  if (clinic.slug === "demo-nexawi-clinicas" || String(clinic.email || "").toLowerCase() === "demo@nexawi.com.br" || clinic.metadata?.demo_account === true) {
+  if (isDemoSaasClinic(clinic)) {
     return { skipped: true, reason: "demo_clinic" };
   }
 

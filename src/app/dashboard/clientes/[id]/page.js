@@ -73,7 +73,7 @@ export default async function ClienteDetalhePage({ params }) {
 
   const timeZone = clinicTimeZone(activeClinic);
 
-  const membership = (memberships || []).find((item) => item.clinica_id === activeClinic.id) || memberships?.[0];
+  const membership = (memberships || []).find((item) => item.clinica_id === activeClinic.id);
   const canAccessProntuario = ["owner", "admin", "profissional"].includes(membership?.papel);
 
   if (!canAccessProntuario) {
@@ -122,7 +122,7 @@ export default async function ClienteDetalhePage({ params }) {
 
   const fotosComUrl = await Promise.all((fotos || []).map(async (foto) => ({
     ...foto,
-    displayUrl: foto.storage_path ? await createSignedPhotoUrl(foto.storage_path) : foto.url,
+    displayUrl: foto.storage_path ? await createSignedPhotoUrl(foto.storage_path, { clinicaId: activeClinic.id, clienteId: id }) : foto.url,
   })));
   const anamnese = cliente.anamnese || {};
   const whats = whatsappUrl(cliente.telefone, cliente.nome);

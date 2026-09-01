@@ -1,0 +1,45 @@
+name: Automation Worker
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: automations-worker-production
+  cancel-in-progress: false
+
+jobs:
+  process-automations:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+
+    steps:
+      - name: Processar Motor de Automacoes 2.0
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+
+        run: |
+          set -euo pipefail
+
+          if [ -z "${CRON_SECRET}" ]; then
+            echo "::error::CRON_SECRET nao configurado no repositorio."
+            exit 1
+          fi
+
+          curl --fail-with-body \
+            --silent \
+            --show-error \
+            --connect-timeout 10 \
+            --max-time 50 \
+            --retry 2 \
+            --retry-delay 10 \
+            --retry-max-time 150 \
+            --request GET \
+            --header "Authorization: Bearer ${CRON_SECRET}" \
+            --header "Accept: application/json" \
+            https://clinicas.nexawi.com.br/api/cron/automations

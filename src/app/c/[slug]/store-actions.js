@@ -1,6 +1,5 @@
 "use server";
 
-import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { supabaseAdmin } from "@/lib/supabase/admin";
@@ -9,6 +8,7 @@ import { createInfinitePayCheckout } from "@/lib/infinitepay/client";
 import { resolveClinicPaymentProvider } from "@/lib/payments/provider";
 import { decryptClinicSecrets } from "@/lib/security/clinic-secrets";
 import { getStoreConfig } from "@/lib/store/config";
+import { getTrustedAppOrigin } from "@/lib/security/app-origin";
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -34,10 +34,7 @@ function normalizePhone(value) {
 }
 
 async function getOrigin() {
-  const requestHeaders = await headers();
-  const protocol = requestHeaders.get("x-forwarded-proto") || (process.env.NODE_ENV === "production" ? "https" : "http");
-  const host = requestHeaders.get("x-forwarded-host") || requestHeaders.get("host") || "localhost:3000";
-  return `${protocol}://${host}`;
+  return getTrustedAppOrigin();
 }
 
 async function getClinicIntegration(clinicId) {

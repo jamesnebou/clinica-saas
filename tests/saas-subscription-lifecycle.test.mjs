@@ -98,8 +98,8 @@ test("cobranças pendentes não são alteradas na troca de plano", () => {
 });
 
 test("Purchase continua somente no webhook de pagamento SaaS atual confirmado", () => {
-  assert.match(webhook, /paymentStatus === "pago" && payment\?\.id && payment\?\.subscription/);
-  assert.match(webhook, /subscriptionClinic\.asaas_subscription_id === payment\.subscription/);
+  assert.match(webhook, /buildSaasPurchaseDecision\(\{ event, payment, clinic: subscriptionClinic \}\)/);
+  assert.match(webhook, /if \(purchase\.shouldTrack\)/);
 });
 
 test("booking e store continuam fora do Purchase da NexaWi", () => {

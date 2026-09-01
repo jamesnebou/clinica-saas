@@ -32,17 +32,15 @@ import {
 import { getSystemPlans } from "@/lib/saas/plans";
 import { deterministicMetaEventId } from "@/lib/tracking/core.mjs";
 import { deliverMetaConversionRecord, enqueueClinicLifecycleMetaEvent, queueAndDeliverMetaConversionEvent } from "@/lib/tracking/service";
+import { getTrustedAppOrigin } from "@/lib/security/app-origin";
 
 const OPERATION_KEY_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 async function trackingRequestContext(pathname) {
   const headerStore = await headers();
-  const host = headerStore.get("x-forwarded-host") || headerStore.get("host");
-  const protocol = headerStore.get("x-forwarded-proto") || (host?.startsWith("localhost") ? "http" : "https");
-  const baseUrl = host ? `${protocol}://${host}` : process.env.APP_URL || process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
   const forwarded = headerStore.get("x-forwarded-for")?.split(",")[0]?.trim();
   return {
-    eventSourceUrl: new URL(pathname, baseUrl).toString(),
+    eventSourceUrl: new URL(pathname, await getTrustedAppOrigin()).toString(),
     clientIpAddress: forwarded || headerStore.get("x-real-ip") || null,
     clientUserAgent: headerStore.get("user-agent") || null,
   };
@@ -89,7 +87,7 @@ function redirectSubscriptionError(error, fallback = "upgrade") {
 }
 
 function ensureCanManageSubscription(memberships, activeClinic) {
-  const membership = memberships.find((item) => item.clinica_id === activeClinic.id) || memberships[0];
+  const membership = memberships.find((item) => item.clinica_id === activeClinic.id);
   const allowed = ["owner", "admin", "financeiro"];
 
   if (!allowed.includes(membership?.papel)) {
