@@ -24,19 +24,22 @@ async function findAuthUserByEmail(email) {
 
 async function ensureDemoAuthUser() {
   const existing = await findAuthUserByEmail(DEMO_EMAIL);
-  const attributes = {
+  const identityAttributes = {
     email: DEMO_EMAIL,
-    password: DEMO_PASSWORD,
     email_confirm: true,
     user_metadata: { nome: "Usuário Demo NexaWi", tipo: "demo" },
     app_metadata: { ...(existing?.app_metadata || {}), demo_account: true },
   };
   if (existing?.id) {
-    const { data, error } = await supabaseAdmin.auth.admin.updateUserById(existing.id, attributes);
+    // Alterar a senha aqui encerraria as sessões de todos os visitantes da conta demo compartilhada.
+    const { data, error } = await supabaseAdmin.auth.admin.updateUserById(existing.id, identityAttributes);
     if (error) throw error;
     return data.user;
   }
-  const { data, error } = await supabaseAdmin.auth.admin.createUser(attributes);
+  const { data, error } = await supabaseAdmin.auth.admin.createUser({
+    ...identityAttributes,
+    password: DEMO_PASSWORD,
+  });
   if (error) throw error;
   return data.user;
 }

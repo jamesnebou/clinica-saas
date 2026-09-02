@@ -1,8 +1,58 @@
+import { createServerClient } from "@supabase/ssr";
 import { NextResponse } from "next/server";
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|api|auth|dashboard|admin|login|login-cliente|cadastro|onboarding|privacidade|termos).*)"],
+  matcher: [
+    "/dashboard/:path*",
+    "/dashboard-admin/:path*",
+    "/admin/:path*",
+    "/login/:path*",
+    "/login-cliente/:path*",
+    "/cadastro/:path*",
+    "/onboarding/:path*",
+    "/((?!_next/static|_next/image|api|auth|dashboard|admin|login|login-cliente|cadastro|onboarding|privacidade|termos).*)",
+  ],
 };
+
+const SESSION_AWARE_PREFIXES = [
+  "/dashboard",
+  "/dashboard-admin",
+  "/admin",
+  "/login",
+  "/login-cliente",
+  "/cadastro",
+  "/onboarding",
+];
+
+function isSessionAwarePath(pathname) {
+  return SESSION_AWARE_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
+}
+
+async function refreshAuthSession(request) {
+  let response = NextResponse.next({ request });
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  if (!supabaseUrl || !supabaseAnonKey) return response;
+
+  const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
+    cookies: {
+      getAll() {
+        return request.cookies.getAll();
+      },
+      setAll(cookiesToSet, headers = {}) {
+        cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
+        response = NextResponse.next({ request });
+        cookiesToSet.forEach(({ name, value, options }) => response.cookies.set(name, value, options));
+        Object.entries(headers).forEach(([name, value]) => response.headers.set(name, value));
+      },
+    },
+  });
+
+  // Server Components não conseguem persistir tokens renovados; o Proxy precisa fazê-lo antes delas.
+  await supabase.auth.getClaims();
+  return response;
+}
 
 function isPlatformHost(host) {
   const value = String(host || "").toLowerCase().split(":")[0];
@@ -42,6 +92,10 @@ async function findSlugByDomain(host) {
 }
 
 export async function proxy(request) {
+  if (isSessionAwarePath(request.nextUrl.pathname)) {
+    return refreshAuthSession(request);
+  }
+
   const host = request.headers.get("host") || "";
 
   if (isPlatformHost(host)) {

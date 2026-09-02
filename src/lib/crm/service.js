@@ -11,11 +11,16 @@ export async function getCrmWorkspace(clinicId, filters = {}) {
   const supabase = await createClient();
   const ensured = await supabase.rpc("crm_ensure_default_pipeline", { p_clinica_id: clinicId });
   if (isCrm2SchemaMissing(ensured.error)) return { available: false };
-  if (ensured.error) throw ensured.error;
+  // Instalações anteriores podiam conflitar por semantic_key ao garantir etapas já existentes.
+  // O pipeline continua válido; recupere-o abaixo enquanto o fix-forward é aplicado no banco.
+  if (ensured.error && ensured.error.code !== "23505") throw ensured.error;
   const pipelineResult = await supabase.from("crm_pipelines").select("id,nome,padrao,ativo,ordem").eq("clinica_id", clinicId).eq("ativo", true).order("ordem");
   if (pipelineResult.error) throw pipelineResult.error;
   const pipelines = pipelineResult.data || [];
-  const selectedPipelineId = pipelines.some((pipeline) => pipeline.id === filters.pipelineId) ? filters.pipelineId : ensured.data;
+  const selectedPipelineId = pipelines.some((pipeline) => pipeline.id === filters.pipelineId)
+    ? filters.pipelineId
+    : ensured.data || pipelines.find((pipeline) => pipeline.padrao)?.id || pipelines[0]?.id;
+  if (!selectedPipelineId) throw ensured.error || new Error("Nenhum pipeline ativo foi encontrado para esta clínica.");
   let opportunityQuery = supabase.from("crm_oportunidades")
     .select("id,clinica_id,cliente_id,nome,titulo,telefone,email,origem,status,valor_estimado,valor_fechado,pipeline_id,stage_id,procedimento_id,responsavel_id,temperatura,score,sort_order,observacoes,source,medium,campaign,content,term,referrer,landing_page,created_at,updated_at,won_at,lost_at,lost_reason_id,next_activity_at,first_response_at,last_activity_at")
     .eq("clinica_id", clinicId).eq("pipeline_id", selectedPipelineId).order("sort_order", { ascending: true });

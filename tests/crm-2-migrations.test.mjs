@@ -9,6 +9,7 @@ const migrations = [
   "20260828104000_crm_2_hardening.sql",
   "20260828105000_crm_2_pipeline_management.sql",
   "20260828106000_crm_2_event_idempotency_fix.sql",
+  "20260901120000_crm_default_pipeline_idempotency.sql",
 ];
 
 async function sql(file) {
@@ -71,4 +72,17 @@ test("gestão de pipelines cria etapas e troca o padrão sem conflito", async ()
   assert.match(content, /evaluation_scheduled/);
   assert.match(content, /update public\.crm_pipelines set padrao = false/i);
   assert.match(content, /update public\.crm_pipelines set padrao = true/i);
+});
+
+test("fix-forward torna a criação das etapas padrão idempotente por qualquer chave única", async () => {
+  const [migration, service] = await Promise.all([
+    sql(migrations[6]),
+    readFile(new URL("../src/lib/crm/service.js", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(migration, /create or replace function public\.crm_ensure_default_pipeline/i);
+  assert.match(migration, /on conflict do nothing/i);
+  assert.doesNotMatch(migration, /on conflict\s*\(pipeline_id\s*,\s*slug\)/i);
+  assert.match(service, /ensured\.error\.code !== "23505"/);
+  assert.match(service, /pipelines\.find\(\(pipeline\) => pipeline\.padrao\)\?\.id/);
 });

@@ -47,6 +47,18 @@ test("identidade demo exige marcadores convergentes", () => {
   }
 });
 
+test("preparo da conta demo preserva sessões existentes", async () => {
+  const service = await readFile(new URL("../src/lib/demo/service.js", import.meta.url), "utf8");
+  const existingUserBranch = service.slice(
+    service.indexOf("if (existing?.id)"),
+    service.indexOf("supabaseAdmin.auth.admin.createUser"),
+  );
+  const createUserBranch = service.slice(service.indexOf("supabaseAdmin.auth.admin.createUser"), service.indexOf("async function ensureDemoClinic"));
+
+  assert.doesNotMatch(existingUserBranch, /password\s*:/i);
+  assert.match(createUserBranch, /password:\s*DEMO_PASSWORD/);
+});
+
 test("dataset demo e deterministico e idempotente para a mesma referencia temporal", () => {
   const first = buildDemoDataset({ clinicId, userId, now: fixedNow });
   const second = buildDemoDataset({ clinicId, userId, now: fixedNow });
