@@ -31,6 +31,16 @@ export const FALLBACK_PLANS = {
     limite_clientes: 10000,
     limite_agendamentos_mes: 15000,
   },
+  ilimitado: {
+    slug: "ilimitado",
+    nome: "Ilimitado",
+    preco_mensal: 0,
+    limite_usuarios: 999,
+    limite_profissionais: 999,
+    limite_clientes: 999999,
+    limite_agendamentos_mes: 999999,
+    metadata: { capabilities: [], demo_full_access: true, internal_only: true },
+  },
 };
 
 const RESOURCE_CONFIG = {

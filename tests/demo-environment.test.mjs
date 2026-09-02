@@ -89,11 +89,13 @@ test("agenda usa datas relativas e permanece visualmente rica", () => {
   const starts = dataset.tables.agendamentos.map((item) => new Date(item.inicio));
   const reference = fixedNow.getTime();
 
-  assert.equal(starts.length, 14);
+  assert.ok(starts.length >= 180);
   assert.ok(starts.some((date) => date.getTime() < reference));
   assert.ok(starts.some((date) => date.toISOString().slice(0, 10) === "2026-08-29"));
   assert.ok(starts.some((date) => date.getTime() > reference));
-  assert.ok(starts.every((date) => Math.abs(date.getTime() - reference) < 8 * 86_400_000));
+  assert.ok(Math.min(...starts.map((date) => date.getTime())) < reference - 600 * 86_400_000);
+  assert.ok(dataset.tables.agendamentos.some((item) => item.status === "faltou"));
+  assert.ok(dataset.tables.agendamentos.some((item) => item.status === "cancelado"));
 });
 
 test("CRM demo usa entidades canonicas e nasce pronto para o Kanban", () => {
@@ -104,7 +106,7 @@ test("CRM demo usa entidades canonicas e nasce pronto para o Kanban", () => {
     assert.ok(semanticStages.has(stage), stage);
   }
   assert.equal(tables.crm_pipelines.length, 1);
-  assert.equal(tables.crm_oportunidades.length, 12);
+  assert.ok(tables.crm_oportunidades.length >= 30);
   assert.ok(tables.crm_activities.length >= 5);
   assert.ok(tables.crm_opportunity_events.length >= 20);
   assert.ok(tables.crm_opportunity_appointments.length >= 10);
@@ -147,6 +149,9 @@ test("Financeiro demo usa a fonte canonica sem duplicar pagamentos legados", () 
   assert.ok(tables.finance_pagaveis.some((item) => item.status === "aberto"));
   assert.ok(tables.finance_liquidacoes.length > 0);
   assert.ok(tables.finance_comissoes.length > 0);
+  assert.ok(tables.finance_comissao_pagamentos.length > 0);
+  assert.ok(tables.finance_transferencias.length > 0);
+  assert.ok(new Set(tables.finance_competencias.map((item) => item.competencia)).size >= 20);
 });
 
 test("dataset cobre todos os modulos registrados e nao deixa tabelas implicitas", () => {
@@ -154,12 +159,34 @@ test("dataset cobre todos os modulos registrados e nao deixa tabelas implicitas"
   assert.deepEqual(Object.keys(dataset.tables), DEMO_MUTABLE_TABLES);
 
   const counts = summarizeDemoDataset(dataset);
-  assert.ok(counts.clientes >= 10);
-  assert.ok(counts.profissionais >= 3);
-  assert.ok(counts.procedimentos >= 5);
-  assert.ok(counts.produtos_clinica >= 3);
-  assert.ok(counts.pedidos_clinica >= 2);
-  assert.ok(counts.eventos_analiticos >= 10);
+  assert.ok(counts.clientes >= 30);
+  assert.ok(counts.profissionais >= 5);
+  assert.ok(counts.procedimentos >= 10);
+  assert.ok(counts.produtos_clinica >= 8);
+  assert.ok(counts.pedidos_clinica >= 12);
+  assert.ok(counts.eventos_analiticos >= 200);
+  assert.ok(counts.cliente_consentimentos >= 20);
+  assert.ok(counts.site_agendamentos_publicos >= 5);
+  assert.ok(counts.estoque_movimentos_clinica >= 10);
+  assert.ok(counts.carrinhos_abandonados_clinica >= 3);
+});
+
+test("demo usa plano ilimitado e mantém integrações financeiras reais desligadas", async () => {
+  const [service, plans, migration] = await Promise.all([
+    readFile(new URL("../src/lib/demo/service.js", import.meta.url), "utf8"),
+    readFile(new URL("../src/lib/saas/plans.js", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/migrations/20260902130000_demo_unlimited_plan.sql", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(service, /plano:\s*"ilimitado"/);
+  assert.match(service, /asaas_customer_id:\s*null/);
+  assert.match(service, /asaas_subscription_id:\s*null/);
+  assert.match(plans, /ilimitado:\s*\{/);
+  assert.match(plans, /preco_mensal:\s*0/);
+  assert.match(migration, /'ilimitado'/);
+  assert.match(migration, /jsonb_build_object\('capabilities',\s*'\[\]'::jsonb,\s*'demo_full_access',\s*true,\s*'internal_only',\s*true\)/);
+  assert.match(migration, /greatest\(public\.planos_sistema\.limite_usuarios,\s*excluded\.limite_usuarios\)/);
+  assert.match(migration, /slug = 'demo-nexawi-clinicas'/);
 });
 
 test("migration restringe e serializa o reset atomico da demo", async () => {

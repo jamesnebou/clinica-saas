@@ -66,13 +66,14 @@ export function validateDemoDataset(dataset, { clinicId, version } = {}) {
   }
 
   const requiredMinimums = {
-    clientes: 10,
-    profissionais: 3,
-    procedimentos: 5,
-    agendamentos: 10,
-    crm_oportunidades: 7,
-    finance_recebiveis: 5,
-    finance_pagaveis: 2,
+    clientes: 30,
+    profissionais: 5,
+    procedimentos: 10,
+    agendamentos: 150,
+    crm_oportunidades: 30,
+    finance_recebiveis: 120,
+    finance_pagaveis: 60,
+    eventos_analiticos: 200,
   };
   for (const [tableName, minimum] of Object.entries(requiredMinimums)) {
     if (dataset.tables[tableName].length < minimum) {
@@ -95,6 +96,23 @@ export function validateDemoDataset(dataset, { clinicId, version } = {}) {
     ["crm_opportunity_tags", "tag_id", "crm_tags"],
     ["crm_opportunity_appointments", "opportunity_id", "crm_oportunidades"],
     ["crm_opportunity_appointments", "agendamento_id", "agendamentos"],
+    ["site_agendamentos_publicos", "cliente_id", "clientes"],
+    ["site_agendamentos_publicos", "agendamento_id", "agendamentos"],
+    ["cliente_consentimentos", "cliente_id", "clientes"],
+    ["cliente_fotos", "cliente_id", "clientes"],
+    ["cliente_pacotes", "cliente_id", "clientes"],
+    ["cliente_pacotes", "pacote_id", "pacotes_clinica"],
+    ["pedido_itens_clinica", "pedido_id", "pedidos_clinica"],
+    ["pedido_itens_clinica", "produto_id", "produtos_clinica"],
+    ["pagamentos_loja_clinica", "pedido_id", "pedidos_clinica"],
+    ["estoque_reservas_clinica", "pedido_id", "pedidos_clinica"],
+    ["estoque_reservas_clinica", "produto_id", "produtos_clinica"],
+    ["estoque_movimentos_clinica", "pedido_id", "pedidos_clinica"],
+    ["estoque_movimentos_clinica", "produto_id", "produtos_clinica"],
+    ["finance_recebiveis", "agendamento_id", "agendamentos"],
+    ["finance_comissoes", "recebivel_id", "finance_recebiveis"],
+    ["finance_comissao_pagamento_itens", "pagamento_id", "finance_comissao_pagamentos"],
+    ["finance_comissao_pagamento_itens", "comissao_id", "finance_comissoes"],
   ];
 
   for (const [sourceTable, sourceColumn, targetTable] of references) {

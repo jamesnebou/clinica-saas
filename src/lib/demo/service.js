@@ -45,16 +45,16 @@ async function ensureDemoAuthUser() {
 }
 
 async function ensureDemoClinic() {
-  const nextBilling = new Date();
-  nextBilling.setDate(nextBilling.getDate() + 22);
   const payload = {
     nome: DEMO_CLINIC_NAME, slug: DEMO_SLUG, documento: "00.000.000/0001-00",
     telefone: "77999990000", email: DEMO_EMAIL, cidade: "Vitória da Conquista", estado: "BA",
-    endereco: "Av. Demo Premium, 1200 - Centro", status: "ativa", plano: "premium",
+    endereco: "Av. Demo Premium, 1200 - Centro", status: "ativa", plano: "ilimitado",
     trial_ends_at: null, billing_email: DEMO_EMAIL, assinatura_status: "isenta",
-    proxima_cobranca_em: nextBilling.toISOString().slice(0, 10), bloqueada_em: null, bloqueio_motivo: null,
+    asaas_customer_id: null, asaas_subscription_id: null,
+    proxima_cobranca_em: null, bloqueada_em: null, bloqueio_motivo: null,
     metadata: {
       demo: true, demo_dataset_version: DEMO_DATASET_VERSION,
+      demo_full_access: true, demo_operating_since: "2023-01-15", primary_segment: "estetica", segments: ["estetica"],
       marca_cor: "#ed7009", primary_color: "#ed7009", accent_color: "#111111", brand_name: DEMO_CLINIC_NAME,
       site_publicado: true, site_titulo: "Beleza, tecnologia e gestão premium",
       site_subtitulo: "Demonstração real da NexaWi Clínicas com agenda, financeiro, CRM e site integrados.",
