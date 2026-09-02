@@ -68,8 +68,11 @@ export async function getUserClinics() {
 }
 
 export async function requireClinic() {
-  await requireUser();
   const context = await getUserClinics();
+
+  if (!context.user) {
+    redirect("/login-cliente");
+  }
 
   return context;
 }

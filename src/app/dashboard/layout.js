@@ -170,7 +170,7 @@ export default async function DashboardLayout({ children }) {
       }}
     >
       {isDemo ? <><DemoGuidedTour /><DemoConversionCta /></> : null}
-      <MobileSidebarMenu items={allowedNavItems} brandName={brandName} logoUrl={logoUrl} />
+      <MobileSidebarMenu items={allowedNavItems} brandName={brandName} logoUrl={logoUrl} forceDocumentNavigation={isDemo} />
       {clinicOptions.length > 1 ? (
         <form action={switchActiveClinicAction} className="sticky top-[65px] z-30 flex items-center gap-2 border-b border-neutral-200 bg-white/95 px-4 py-2 shadow-sm backdrop-blur md:hidden">
           <select name="clinic_id" defaultValue={activeClinic.id} aria-label="Clínica ativa" className="h-10 min-w-0 flex-1 rounded-lg border border-neutral-200 bg-white px-3 text-sm font-semibold">
@@ -217,7 +217,7 @@ export default async function DashboardLayout({ children }) {
           </form>
         ) : null}
 
-        <SidebarNav items={allowedNavItems} />
+        <SidebarNav items={allowedNavItems} forceDocumentNavigation={isDemo} />
 
         <form action={signOutAction} className="mt-3 hidden shrink-0 border-t border-neutral-200 pt-3 md:block">
           <input type="hidden" name="next" value="/login-cliente" />

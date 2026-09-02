@@ -25,7 +25,7 @@ const iconMap = {
   tutoriais: BookOpenCheck,
 };
 
-export function SidebarNav({ items }) {
+export function SidebarNav({ items, forceDocumentNavigation = false }) {
   const pathname = usePathname();
 
   return (
@@ -33,8 +33,9 @@ export function SidebarNav({ items }) {
       {items.map((item) => {
         const Icon = iconMap[item.icon] || LayoutDashboard;
         const active = item.href === "/dashboard" ? pathname === "/dashboard" : pathname === item.href || pathname.startsWith(`${item.href}/`);
+        const NavigationLink = forceDocumentNavigation ? "a" : Link;
         return (
-          <Link
+          <NavigationLink
             key={item.href}
             href={item.href}
             aria-current={active ? "page" : undefined}
@@ -52,14 +53,14 @@ export function SidebarNav({ items }) {
                 {item.badge > 99 ? "99+" : item.badge}
               </span>
             ) : null}
-          </Link>
+          </NavigationLink>
         );
       })}
     </nav>
   );
 }
 
-export function MobileSidebarMenu({ items, brandName, logoUrl }) {
+export function MobileSidebarMenu({ items, brandName, logoUrl, forceDocumentNavigation = false }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
 
@@ -110,8 +111,9 @@ export function MobileSidebarMenu({ items, brandName, logoUrl }) {
               {items.map((item) => {
                 const Icon = iconMap[item.icon] || LayoutDashboard;
                 const active = item.href === "/dashboard" ? pathname === "/dashboard" : pathname === item.href || pathname.startsWith(`${item.href}/`);
+                const NavigationLink = forceDocumentNavigation ? "a" : Link;
                 return (
-                  <Link
+                  <NavigationLink
                     key={item.href}
                     href={item.href}
                     onClick={() => setOpen(false)}
@@ -129,7 +131,7 @@ export function MobileSidebarMenu({ items, brandName, logoUrl }) {
                         {item.badge > 99 ? "99+" : item.badge}
                       </span>
                     ) : null}
-                  </Link>
+                  </NavigationLink>
                 );
               })}
             </div>
