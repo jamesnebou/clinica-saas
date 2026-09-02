@@ -121,7 +121,7 @@ test("CTAs de começar apontam para cadastro", () => {
 });
 
 test("CTAs demonstrativos continuam apontando para demo", () => {
-  assert.match(marketingPortal, /TrackedLink href="\/demo" eventName="demo_click"/);
+  assert.match(marketingPortal, /TrackedLink href="\/demo" prefetch=\{false\} eventName="demo_click"/);
 });
 
 test("login do cliente continua usando signInAction e oferece cadastro", () => {

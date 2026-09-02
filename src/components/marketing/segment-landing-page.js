@@ -93,7 +93,7 @@ function Hero({ config }) {
             <TrackedLink href={config.hero.primaryCta.href} eventName="cta_click" eventData={{ location: "hero_primary", segment: config.slug }} className="inline-flex h-13 items-center justify-center gap-2 rounded-md bg-[#ed7009] px-6 text-sm font-black text-white shadow-xl transition active:scale-[0.98]">
               {config.hero.primaryCta.label} <ArrowRight size={17} />
             </TrackedLink>
-            <TrackedLink href={config.hero.secondaryCta.href} eventName="demo_click" eventData={{ location: "hero_secondary", segment: config.slug }} className="inline-flex h-13 items-center justify-center gap-2 rounded-md border border-white/30 bg-black/25 px-6 text-sm font-black text-white backdrop-blur transition active:scale-[0.98]">
+            <TrackedLink href={config.hero.secondaryCta.href} prefetch={false} eventName="demo_click" eventData={{ location: "hero_secondary", segment: config.slug }} className="inline-flex h-13 items-center justify-center gap-2 rounded-md border border-white/30 bg-black/25 px-6 text-sm font-black text-white backdrop-blur transition active:scale-[0.98]">
               {config.hero.secondaryCta.label}
             </TrackedLink>
           </div>
@@ -204,7 +204,7 @@ function ProductSection() {
       <div className="mx-auto grid max-w-7xl gap-12 px-5 sm:px-8 lg:grid-cols-[0.82fr_1.18fr] lg:items-center lg:px-10">
         <div>
           <SectionHeading eyebrow="Produto real" title="A operação inteira visível sem perder tempo procurando informação." description="A demonstração utiliza o mesmo painel da plataforma, com dados fictícios restauráveis para você explorar agenda, CRM, prontuário, financeiro, BI e automações." />
-          <TrackedLink href="/demo" eventName="demo_click" eventData={{ location: "product_showcase", segment: "estetica" }} className="mt-7 inline-flex h-12 items-center gap-2 rounded-md bg-[#1c1c1c] px-5 text-sm font-black text-white transition active:scale-[0.98]">
+          <TrackedLink href="/demo" prefetch={false} eventName="demo_click" eventData={{ location: "product_showcase", segment: "estetica" }} className="mt-7 inline-flex h-12 items-center gap-2 rounded-md bg-[#1c1c1c] px-5 text-sm font-black text-white transition active:scale-[0.98]">
             Explorar a demonstração <ArrowRight size={17} />
           </TrackedLink>
         </div>

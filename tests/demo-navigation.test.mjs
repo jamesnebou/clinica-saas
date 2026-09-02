@@ -24,3 +24,16 @@ test("contexto da clinica valida a autenticacao com uma unica leitura", async ()
   assert.match(requireClinic, /const context = await getUserClinics\(\)/);
   assert.match(requireClinic, /if \(!context\.user\)[\s\S]*redirect\("\/login-cliente"\)/);
 });
+
+test("rotas GET da Demo com efeitos de autenticacao nunca sao antecipadas", async () => {
+  const [conversionCta, marketingPortal, segmentLanding] = await Promise.all([
+    readFile(new URL("../src/components/demo/demo-conversion-cta.js", import.meta.url), "utf8"),
+    readFile(new URL("../src/components/marketing/marketing-portal.js", import.meta.url), "utf8"),
+    readFile(new URL("../src/components/marketing/segment-landing-page.js", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(conversionCta, /href="\/auth\/leave-demo\?next=%2Fcadastro"\s+prefetch=\{false\}/);
+  assert.match(marketingPortal, /href="\/demo"\s+prefetch=\{false\}/);
+  assert.match(segmentLanding, /href=\{config\.hero\.secondaryCta\.href\}\s+prefetch=\{false\}/);
+  assert.match(segmentLanding, /href="\/demo"\s+prefetch=\{false\}/);
+});
