@@ -171,6 +171,16 @@ test("dataset cobre todos os modulos registrados e nao deixa tabelas implicitas"
   assert.ok(counts.carrinhos_abandonados_clinica >= 3);
 });
 
+test("lotes demo explicitam campos obrigatorios quando parte do historico os utiliza", () => {
+  const { tables } = buildDemoDataset({ clinicId, userId, now: fixedNow });
+
+  assert.ok(tables.produtos_clinica.every((row) => Number.isFinite(row.estoque_reservado)));
+  for (const [tableName, rows] of Object.entries(tables)) {
+    if (!rows.some((row) => Object.hasOwn(row, "created_at"))) continue;
+    assert.ok(rows.every((row) => Object.hasOwn(row, "created_at")), `${tableName}.created_at`);
+  }
+});
+
 test("demo usa plano ilimitado e mantém integrações financeiras reais desligadas", async () => {
   const [service, plans, migration] = await Promise.all([
     readFile(new URL("../src/lib/demo/service.js", import.meta.url), "utf8"),
