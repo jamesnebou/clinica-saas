@@ -34,7 +34,10 @@ function depositValue(procedimento) {
   return Math.max(0, Math.min(price, Number(signal.toFixed(2))));
 }
 
-export function PublicBookingForm({ slug, procedimentos, profissionais, query, timeZone = "America/Bahia" }) {
+export function PublicBookingForm({ slug, procedimentos, profissionais, query, timeZone = "America/Bahia", terminology = {} }) {
+  const serviceSingular = terminology.procedimento || "Procedimento";
+  const servicePlural = terminology.procedimentos || "Procedimentos";
+  const professionalSingular = terminology.profissional || "Profissional";
   const firstProcedure = procedimentos[0]?.id || "";
   const today = clinicDateKey(timeZone);
   const initialDate = addDaysToDateKey(today, 1);
@@ -148,11 +151,11 @@ export function PublicBookingForm({ slug, procedimentos, profissionais, query, t
 
       <div className="grid gap-4 md:grid-cols-2">
         <div className="relative block md:col-span-2">
-          <span className="text-sm font-semibold text-white/75">Procedimentos</span>
+          <span className="text-sm font-semibold text-white/75">{servicePlural}</span>
           {procedimentoIds.map((id) => <input key={id} type="hidden" name="procedimento_ids" value={id} />)}
           <button type="button" onClick={() => setProceduresOpen((open) => !open)} className="mt-2 flex min-h-14 w-full items-center justify-between gap-4 rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-left text-sm text-white outline-none transition hover:border-white/25">
             <span>
-              <strong className="block">{selectedProcedures.length ? `${selectedProcedures.length} procedimento(s) selecionado(s)` : "Selecionar procedimentos"}</strong>
+              <strong className="block">{selectedProcedures.length ? `${selectedProcedures.length} ${selectedProcedures.length === 1 ? serviceSingular : servicePlural} selecionado${selectedProcedures.length === 1 ? "" : "s"}` : `Selecionar ${servicePlural.toLocaleLowerCase("pt-BR")}`}</strong>
               <span className="mt-1 block text-xs text-white/55">{totals.duration || 0} min - Total {money(totals.price)} - Sinal {money(totals.deposit)}</span>
             </span>
             <span className="shrink-0 rounded-full border border-white/10 px-3 py-1 text-xs text-white/60">{proceduresOpen ? "Fechar" : "Alterar"}</span>
@@ -170,7 +173,7 @@ export function PublicBookingForm({ slug, procedimentos, profissionais, query, t
 
           {proceduresOpen ? (
             <div className="absolute left-0 right-0 top-full z-50 mt-3 overflow-hidden rounded-[1.5rem] border border-white/12 bg-[#211b18]/95 p-3 shadow-[0_28px_90px_rgba(0,0,0,0.45)] backdrop-blur-xl">
-              <input value={procedureSearch} onChange={(event) => setProcedureSearch(event.target.value)} placeholder="Buscar procedimento" className="h-11 w-full rounded-2xl border border-white/10 bg-white/10 px-4 text-sm text-white outline-none placeholder:text-white/35" />
+              <input value={procedureSearch} onChange={(event) => setProcedureSearch(event.target.value)} placeholder={`Buscar ${serviceSingular.toLocaleLowerCase("pt-BR")}`} className="h-11 w-full rounded-2xl border border-white/10 bg-white/10 px-4 text-sm text-white outline-none placeholder:text-white/35" />
               <div className="mt-3 max-h-72 space-y-2 overflow-y-auto pr-1">
                 {filteredProcedures.map((item) => {
                   const checked = procedimentoIds.includes(item.id);
@@ -184,14 +187,14 @@ export function PublicBookingForm({ slug, procedimentos, profissionais, query, t
                     </button>
                   );
                 })}
-                {!filteredProcedures.length ? <p className="px-3 py-4 text-sm text-white/50">Nenhum procedimento encontrado.</p> : null}
+                {!filteredProcedures.length ? <p className="px-3 py-4 text-sm text-white/50">Nenhum {serviceSingular.toLocaleLowerCase("pt-BR")} encontrado.</p> : null}
               </div>
             </div>
           ) : null}
         </div>
 
         <label className="block">
-          <span className="text-sm font-semibold text-white/75">Profissional</span>
+          <span className="text-sm font-semibold text-white/75">{professionalSingular}</span>
           <select name="profissional_id" value={profissionalId} onChange={(event) => setProfissionalId(event.target.value)} className="mt-2 h-12 w-full rounded-2xl border border-white/10 bg-white/10 px-4 text-sm text-white outline-none">
             <option value="" className="text-neutral-950">Primeiro disponível</option>
             {profissionais.map((item) => <option key={item.id} value={item.id} className="text-neutral-950">{item.nome}</option>)}

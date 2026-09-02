@@ -5,7 +5,7 @@ import { signOutAction } from "@/app/login/actions";
 import { getClinicBillingState, getClinicPlan } from "@/lib/saas/plans";
 import { MobileSidebarMenu, SidebarNav } from "@/components/app-shell/sidebar-nav";
 import { canAccessSection, getCurrentMembership, sectionHasCapability } from "@/lib/auth/permissions";
-import { getClinicCapabilities } from "@/lib/segments/service";
+import { getClinicCapabilities, getClinicTerminology } from "@/lib/segments/service";
 import { createClient } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { isDemoLoginEmail } from "@/lib/demo/demo-account";
@@ -142,9 +142,18 @@ export default async function DashboardLayout({ children }) {
     getNotificationBadgeCount(activeClinic),
     getClinicPlan(activeClinic),
   ]);
-  const capabilities = await getClinicCapabilities({ clinic: activeClinic, plan, client: supabase });
+  const [capabilities, terminology] = await Promise.all([
+    getClinicCapabilities({ clinic: activeClinic, plan, client: supabase }),
+    getClinicTerminology(activeClinic.id, supabase),
+  ]);
+  const terminologyBySection = {
+    clientes: terminology.clientes,
+    profissionais: terminology.profissionais,
+    procedimentos: terminology.procedimentos,
+  };
   const allowedNavItems = navItems
     .filter((item) => canAccessSection(role, item.section, membership) && sectionHasCapability(item.section, capabilities.effective))
+    .map((item) => terminologyBySection[item.section] ? { ...item, label: terminologyBySection[item.section] } : item)
     .map((item) => item.section === "notificacoes" && notificationCount > 0 ? { ...item, badge: notificationCount } : item);
   const clinicOptions = context.memberships
     .filter((item) => item.clinicas?.id)

@@ -6,6 +6,7 @@ import { isBillableRecord, paidAmount } from "@/lib/domain/finance-core.mjs";
 import { Card, EmptyClinicState, EmptyState, Notice, PageHeader } from "@/components/app-shell/ui";
 import { getClinicBillingState, getClinicPlan } from "@/lib/saas/plans";
 import { clinicTimeZone, dateKeyInTimeZone, utcRangeForClinicDate } from "@/lib/clinic/schedule";
+import { getPrimaryClinicSegment } from "@/lib/segments/service";
 
 async function countRows(supabase, table, clinicaId) {
   const { count, error } = await supabase.from(table).select("id", { count: "exact", head: true }).eq("clinica_id", clinicaId);
@@ -75,7 +76,11 @@ export default async function DashboardPage({ searchParams }) {
 
   const supabase = await createClient();
   const brandName = activeClinic.metadata?.brand_name || activeClinic.nome;
-  const plan = await getClinicPlan(activeClinic);
+  const [plan, segment] = await Promise.all([
+    getClinicPlan(activeClinic),
+    getPrimaryClinicSegment(activeClinic.id, supabase),
+  ]);
+  const terminology = segment.labels;
   const billingState = getClinicBillingState(activeClinic);
   const timeZone = clinicTimeZone(activeClinic);
   const todayRange = utcRangeForClinicDate(dateKeyInTimeZone(new Date(), timeZone), timeZone);
@@ -133,9 +138,9 @@ export default async function DashboardPage({ searchParams }) {
   const totalStatus = Math.max(1, statusRows.reduce((acc, [, value]) => acc + value, 0));
 
   const cards = [
-    { label: "Clientes", value: clientes, detail: `${plan.limite_clientes || "-"} no plano`, icon: UsersRound },
-    { label: "Profissionais", value: profissionais, detail: `${plan.limite_profissionais || "-"} no plano`, icon: UsersRound },
-    { label: "Procedimentos", value: procedimentos, detail: "serviços ativos e pacotes", icon: Scissors },
+    { label: terminology.clientes, value: clientes, detail: `${plan.limite_clientes || "-"} no plano`, icon: UsersRound },
+    { label: terminology.profissionais, value: profissionais, detail: `${plan.limite_profissionais || "-"} no plano`, icon: UsersRound },
+    { label: terminology.procedimentos, value: procedimentos, detail: "serviços ativos e pacotes", icon: Scissors },
     { label: "Agendamentos", value: agendamentos, detail: "histórico total", icon: CalendarDays },
   ];
 
@@ -148,7 +153,7 @@ export default async function DashboardPage({ searchParams }) {
   return (
     <main className="min-w-0 overflow-x-hidden px-4 py-8 sm:px-6 lg:px-8 xl:px-10">
       <section className="mx-auto max-w-[1480px] min-w-0">
-        <PageHeader eyebrow="Dashboard" title="Operação da clínica" description={`Visão executiva de ${brandName}: faturamento, agenda, clientes, equipe e status comercial.`} />
+        <PageHeader eyebrow={segment.name} title="Operação da clínica" description={`Visão executiva de ${brandName}: faturamento, agenda, ${terminology.clientes.toLocaleLowerCase("pt-BR")}, equipe e status comercial.`} />
         {params?.erro === "permissao" ? (
           <div className="mt-6">
             <Notice type="warning" title="Acesso restrito">Seu papel atual não tem permissão para abrir esta área. O menu mostra apenas os módulos liberados para o seu acesso.</Notice>
@@ -285,8 +290,8 @@ export default async function DashboardPage({ searchParams }) {
                 <EmptyState title="Agenda livre nos próximos horários" description="Cadastre um atendimento para demonstrar status, WhatsApp rápido, faturamento previsto e filtro por profissional." action={<Link href="/dashboard/agenda" className="inline-flex h-10 items-center rounded-lg bg-[var(--clinic-primary)] px-4 text-sm font-semibold text-white">Criar agendamento</Link>} />
               ) : proximos.map((item) => (
                 <div key={item.id} className="rounded-lg border border-neutral-200 p-4">
-                  <div className="flex items-start justify-between gap-3"><div><p className="font-semibold">{item.clientes?.nome || "Cliente não informado"}</p><p className="mt-1 text-sm text-neutral-600">{item.procedimentos?.nome || "Procedimento não informado"}</p></div><span className="rounded-full bg-[color-mix(in_srgb,var(--clinic-accent)_10%,white)] px-3 py-1 text-xs font-bold uppercase text-[var(--clinic-primary)]">{item.status}</span></div>
-                  <p className="mt-3 text-sm text-neutral-500">{new Date(item.inicio).toLocaleString("pt-BR", { timeZone, dateStyle: "short", timeStyle: "short" })} com {item.profissionais?.nome || "profissional não informado"}</p>
+                  <div className="flex items-start justify-between gap-3"><div><p className="font-semibold">{item.clientes?.nome || `${terminology.cliente} não informado`}</p><p className="mt-1 text-sm text-neutral-600">{item.procedimentos?.nome || `${terminology.procedimento} não informado`}</p></div><span className="rounded-full bg-[color-mix(in_srgb,var(--clinic-accent)_10%,white)] px-3 py-1 text-xs font-bold uppercase text-[var(--clinic-primary)]">{item.status}</span></div>
+                  <p className="mt-3 text-sm text-neutral-500">{new Date(item.inicio).toLocaleString("pt-BR", { timeZone, dateStyle: "short", timeStyle: "short" })} com {item.profissionais?.nome || `${terminology.profissional.toLocaleLowerCase("pt-BR")} não informado`}</p>
                 </div>
               ))}
             </div>

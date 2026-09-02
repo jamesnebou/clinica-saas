@@ -11,6 +11,7 @@ import {
 } from "@/lib/clinic/schedule";
 import { EmptyClinicState, EmptyState, Field, PageHeader, SubmitButton, TextArea } from "@/components/app-shell/ui";
 import { createAgendamentoAction, deleteAgendamentoAction, updateAgendamentoAction, updateAgendamentoStatusAction } from "../actions";
+import { getPrimaryClinicSegment } from "@/lib/segments/service";
 
 export const metadata = { title: "Agenda | Clínica SaaS" };
 
@@ -147,6 +148,8 @@ export default async function AgendaPage({ searchParams }) {
   const { days: weekDays, weekStart, weekEnd } = weekRange(selectedDate, timeZone);
 
   const supabase = await createClient();
+  const segment = await getPrimaryClinicSegment(activeClinic.id, supabase);
+  const terminology = segment.labels;
   let agendaQuery = supabase
     .from("agendamentos")
     .select("id, cliente_id, profissional_id, procedimento_id, inicio, fim, status, valor, valor_pago, pagamento_status, observacoes, clientes(nome, telefone), profissionais(nome), procedimentos(nome)")
@@ -189,7 +192,7 @@ export default async function AgendaPage({ searchParams }) {
   return (
     <main className="min-w-0 w-full px-4 py-8 sm:px-6 lg:px-8">
   <section className="w-full min-w-0 max-w-[1480px] mx-auto">
-        <PageHeader eyebrow="Agenda" title="Agenda diária" description="Visão comercial por dia, profissional, status, WhatsApp e edição de horários." />
+        <PageHeader eyebrow={segment.name} title="Agenda diária" description={`Visão por dia, ${terminology.profissional.toLocaleLowerCase("pt-BR")}, status, WhatsApp e edição de horários.`} />
 
         <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <div className="rounded-lg border border-neutral-200 bg-white p-4 shadow-sm"><p className="text-sm text-neutral-500">Atendimentos</p><strong className="mt-2 block text-2xl">{agendamentos.length}</strong></div>
@@ -204,7 +207,7 @@ export default async function AgendaPage({ searchParams }) {
             <input name="date" type="date" defaultValue={selectedDate} className="mt-2 h-11 w-full rounded-lg border border-neutral-200 px-3 text-sm" />
           </label>
           <label className="block md:w-72">
-            <span className="text-sm font-medium text-neutral-700">Profissional</span>
+            <span className="text-sm font-medium text-neutral-700">{terminology.profissional}</span>
             <select name="profissional" defaultValue={selectedProfessional} className="mt-2 h-11 w-full rounded-lg border border-neutral-200 bg-white px-3 text-sm">
               <option value="">Todos os profissionais</option>
               {profissionais.map((item) => <option key={item.id} value={item.id}>{item.nome}</option>)}
@@ -244,9 +247,9 @@ export default async function AgendaPage({ searchParams }) {
             <input type="hidden" name="profissional_filtro" value={selectedProfessional} />
             <h2 className="text-lg font-semibold">Novo agendamento</h2>
             <div className="mt-4 space-y-4">
-              <SelectField label="Cliente" name="cliente_id" required><option value="">Selecione</option>{clientes.map((item) => <option key={item.id} value={item.id}>{item.nome}</option>)}</SelectField>
-              <SelectField label="Profissional" name="profissional_id" defaultValue={selectedProfessional} required><option value="">Selecione</option>{profissionais.map((item) => <option key={item.id} value={item.id}>{item.nome}</option>)}</SelectField>
-              <SelectField label="Procedimento" name="procedimento_id" required><option value="">Selecione</option>{procedimentos.map((item) => <option key={item.id} value={item.id}>{item.nome} - {formatMoney(item.preco)} - {item.duracao_minutos} min</option>)}</SelectField>
+              <SelectField label={terminology.cliente} name="cliente_id" required><option value="">Selecione</option>{clientes.map((item) => <option key={item.id} value={item.id}>{item.nome}</option>)}</SelectField>
+              <SelectField label={terminology.profissional} name="profissional_id" defaultValue={selectedProfessional} required><option value="">Selecione</option>{profissionais.map((item) => <option key={item.id} value={item.id}>{item.nome}</option>)}</SelectField>
+              <SelectField label={terminology.procedimento} name="procedimento_id" required><option value="">Selecione</option>{procedimentos.map((item) => <option key={item.id} value={item.id}>{item.nome} - {formatMoney(item.preco)} - {item.duracao_minutos} min</option>)}</SelectField>
               <div className="grid gap-4 sm:grid-cols-2">
                 <Field label="Inicio" name="inicio" type="datetime-local" required defaultValue={`${selectedDate}T09:00`} />
                 <Field label="Fim (opcional)" name="fim" type="datetime-local" />
@@ -274,8 +277,8 @@ export default async function AgendaPage({ searchParams }) {
                   <article key={item.id} className="rounded-lg border border-neutral-200 p-4">
                     <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
                       <div>
-                        <div className="flex flex-wrap items-center gap-2"><h3 className="font-semibold">{item.clientes?.nome || "Cliente não informado"}</h3><StatusBadge status={item.status} /><PaymentBadge pagamentoStatus={item.pagamento_status} valorPago={item.valor_pago} /></div>
-                        <p className="mt-1 text-sm text-neutral-600">{item.procedimentos?.nome || "Procedimento"} com {item.profissionais?.nome || "profissional"}</p>
+                        <div className="flex flex-wrap items-center gap-2"><h3 className="font-semibold">{item.clientes?.nome || `${terminology.cliente} não informado`}</h3><StatusBadge status={item.status} /><PaymentBadge pagamentoStatus={item.pagamento_status} valorPago={item.valor_pago} /></div>
+                        <p className="mt-1 text-sm text-neutral-600">{item.procedimentos?.nome || terminology.procedimento} com {item.profissionais?.nome || terminology.profissional.toLocaleLowerCase("pt-BR")}</p>
                         <p className="mt-1 text-xs text-neutral-500">{formatClinicDateTime(item.inicio, timeZone, { hour: "2-digit", minute: "2-digit" })} - {formatClinicDateTime(item.fim, timeZone, { hour: "2-digit", minute: "2-digit" })} · {formatMoney(item.valor)} · recebido {formatMoney(item.valor_pago)}</p>
                       </div>
                       <div className="flex flex-wrap gap-2">
@@ -299,9 +302,9 @@ export default async function AgendaPage({ searchParams }) {
                         <input type="hidden" name="agenda_date" value={selectedDate} />
                         <input type="hidden" name="profissional_filtro" value={selectedProfessional} />
                         <div className="grid gap-4 md:grid-cols-3">
-                          <SelectField label="Cliente" name="cliente_id" defaultValue={item.cliente_id} required><option value="">Selecione</option>{clientes.map((cliente) => <option key={cliente.id} value={cliente.id}>{cliente.nome}</option>)}</SelectField>
-                          <SelectField label="Profissional" name="profissional_id" defaultValue={item.profissional_id} required><option value="">Selecione</option>{profissionais.map((profissional) => <option key={profissional.id} value={profissional.id}>{profissional.nome}</option>)}</SelectField>
-                          <SelectField label="Procedimento" name="procedimento_id" defaultValue={item.procedimento_id} required><option value="">Selecione</option>{procedimentos.map((procedimento) => <option key={procedimento.id} value={procedimento.id}>{procedimento.nome}</option>)}</SelectField>
+                          <SelectField label={terminology.cliente} name="cliente_id" defaultValue={item.cliente_id} required><option value="">Selecione</option>{clientes.map((cliente) => <option key={cliente.id} value={cliente.id}>{cliente.nome}</option>)}</SelectField>
+                          <SelectField label={terminology.profissional} name="profissional_id" defaultValue={item.profissional_id} required><option value="">Selecione</option>{profissionais.map((profissional) => <option key={profissional.id} value={profissional.id}>{profissional.nome}</option>)}</SelectField>
+                          <SelectField label={terminology.procedimento} name="procedimento_id" defaultValue={item.procedimento_id} required><option value="">Selecione</option>{procedimentos.map((procedimento) => <option key={procedimento.id} value={procedimento.id}>{procedimento.nome}</option>)}</SelectField>
                         </div>
                         <div className="grid gap-4 md:grid-cols-4">
                           <Field label="Inicio" name="inicio" type="datetime-local" defaultValue={toDatetimeLocal(item.inicio, timeZone)} required />
@@ -331,7 +334,6 @@ export default async function AgendaPage({ searchParams }) {
     </main>
   );
 }
-
 
 
 

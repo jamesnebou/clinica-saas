@@ -1,8 +1,24 @@
 import { createClient } from "@/lib/supabase/server";
-import { getCapabilitiesForSegments, getSegmentDefinition, getTerminologyForSegments } from "@/lib/segments/registry";
+import { getCapabilitiesForSegments, getSegmentDefinition, getTerminologyForSegments, isSupportedSegment } from "@/lib/segments/registry";
 import { resolveCapabilities, resolvePrimarySegment } from "@/lib/domain/segment-core.mjs";
 
 const LEGACY_SEGMENT = [{ principal: true, segmentos: { slug: "estetica", nome: "Estética", metadata: {} } }];
+
+function metadataSegments(metadata = {}) {
+  const primary = isSupportedSegment(metadata?.primary_segment) ? metadata.primary_segment : null;
+  const stored = Array.isArray(metadata?.segments) ? metadata.segments.filter(isSupportedSegment) : [];
+  const slugs = [...new Set([primary, ...stored].filter(Boolean))];
+  if (!slugs.length) return LEGACY_SEGMENT;
+  return slugs.map((slug, index) => {
+    const definition = getSegmentDefinition(slug);
+    return { principal: slug === primary || (!primary && index === 0), segmentos: { slug, nome: definition.name, metadata: {} } };
+  });
+}
+
+async function fallbackClinicSegments(supabase, clinicaId) {
+  const { data } = await supabase.from("clinicas").select("metadata").eq("id", clinicaId).maybeSingle();
+  return metadataSegments(data?.metadata);
+}
 
 export async function getClinicSegments(clinicaId, client = null) {
   if (!clinicaId) return [];
@@ -10,8 +26,8 @@ export async function getClinicSegments(clinicaId, client = null) {
   const { data, error } = await supabase.from("clinica_segmentos")
     .select("id, clinica_id, segmento_id, principal, configuracao, segmentos(id, slug, nome, descricao, metadata)")
     .eq("clinica_id", clinicaId).order("principal", { ascending: false }).order("created_at", { ascending: true });
-  if (error) return LEGACY_SEGMENT;
-  return data?.length ? data : LEGACY_SEGMENT;
+  if (error || !data?.length) return fallbackClinicSegments(supabase, clinicaId);
+  return data;
 }
 
 export async function getPrimaryClinicSegment(clinicaId, client = null) {

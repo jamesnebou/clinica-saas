@@ -13,6 +13,8 @@ import { PublicStorefront } from "./store-cart";
 import { availableProductStock } from "@/lib/store/config";
 import { publicImageSrcSet, publicImageUrl } from "@/lib/public-image";
 import { clinicTimeZone } from "@/lib/clinic/schedule";
+import { getSegmentDefinition } from "@/lib/segments/registry";
+import { getPrimaryClinicSegment } from "@/lib/segments/service";
 
 export const dynamic = "force-dynamic";
 
@@ -207,11 +209,12 @@ export async function generateMetadata({ params }) {
   const { slug } = await params;
   const { data } = await supabaseAdmin.from("clinicas").select("nome, metadata").eq("slug", slug).maybeSingle();
   const site = data?.metadata?.site_publico || {};
+  const segment = getSegmentDefinition(data?.metadata?.primary_segment || "estetica");
   const faviconSource = site.favicon_url || data?.metadata?.logo_url || "";
   const faviconUrl = publicImageUrl(faviconSource, { width: 128, height: 128, quality: 80, resize: "contain" });
   return {
     title: `${site.titulo_hero || data?.metadata?.brand_name || data?.nome || "Clínica"} | Agendamento`,
-    description: site.subtitulo_hero || "Conheça os procedimentos e agende seu atendimento.",
+    description: site.subtitulo_hero || `Conheça os ${segment.labels.procedimentos.toLocaleLowerCase("pt-BR")} e agende seu atendimento.`,
     icons: faviconUrl ? { icon: [{ url: faviconUrl }], shortcut: [{ url: faviconUrl }], apple: [{ url: faviconUrl }] } : undefined,
   };
 }
@@ -237,6 +240,11 @@ export default async function PublicClinicPage({ params, searchParams }) {
 
   const primaryColor = safeColor(meta.primary_color, "#2e3a2d");
   const accentColor = safeColor(meta.accent_color, "#d99bae");
+  const segment = await getPrimaryClinicSegment(clinic.id, supabaseAdmin);
+  const terminology = segment.labels;
+  const procedimentoLower = terminology.procedimento.toLocaleLowerCase("pt-BR");
+  const procedimentosLower = terminology.procedimentos.toLocaleLowerCase("pt-BR");
+  const profissionalLower = terminology.profissional.toLocaleLowerCase("pt-BR");
 
   const [{ data: procedimentos = [] }, { data: profissionais = [] }, { data: produtos = [] }] = await Promise.all([
     supabaseAdmin
@@ -274,7 +282,7 @@ export default async function PublicClinicPage({ params, searchParams }) {
   const whatsapp = String(clinic.telefone || "").replace(/\D/g, "");
   const schedule = meta.horario_funcionamento || {};
   const professionalName = site.nome_profissional || publicProfessionals[0]?.nome || brandName;
-  const professionalBio = site.bio_profissional || publicProfessionals[0]?.observacoes || "Atendimento cuidadoso, escuta ativa e plano de tratamento alinhado ao seu objetivo estético.";
+  const professionalBio = site.bio_profissional || publicProfessionals[0]?.observacoes || `Atendimento cuidadoso, escuta ativa e plano de ${procedimentoLower} alinhado às suas necessidades.`;
   const heroImage = site.hero_image_url || site.profissional_image_url || fallbackImage(brandName, true);
   const mobileHeroImage = site.hero_mobile_image_url || heroImage;
   const professionalImage = site.profissional_image_url || site.hero_image_url || fallbackImage(professionalName);
@@ -284,10 +292,10 @@ export default async function PublicClinicPage({ params, searchParams }) {
   const year = new Date().getFullYear();
 
   const fallbackTestimonials = [
-    { nome: "Mariana S.", procedimento: "Tratamento facial", texto: "Atendimento impecável, ambiente acolhedor e resultado muito natural. Me senti segura desde a primeira avaliação." },
-    { nome: "Fernanda L.", procedimento: "Harmonização", texto: "A equipe explicou tudo com clareza e respeitou meu objetivo. O resultado ficou exatamente como eu queria." },
-    { nome: "Juliana M.", procedimento: "Protocolo estético", texto: "A clínica passa muita confiança. Gostei da organização, do cuidado e do acompanhamento depois do procedimento." },
-    { nome: "Ana P.", procedimento: "Skincare", texto: "Experiência excelente, pontualidade e orientações precisas. Recomendo para quem busca cuidado sério e sofisticado." },
+    { nome: "Mariana S.", procedimento: terminology.procedimento, texto: "Atendimento cuidadoso, ambiente acolhedor e orientações claras desde a primeira avaliação." },
+    { nome: "Fernanda L.", procedimento: terminology.procedimento, texto: "A equipe explicou cada etapa com clareza e respeitou minhas necessidades durante todo o atendimento." },
+    { nome: "Juliana M.", procedimento: terminology.procedimento, texto: "A clínica transmite confiança, organização e atenção aos detalhes antes e depois do atendimento." },
+    { nome: "Ana P.", procedimento: terminology.procedimento, texto: "Experiência excelente, pontualidade e acompanhamento profissional. Recomendo o cuidado da equipe." },
   ];
   const manualTestimonials = Array.isArray(site.depoimentos) && site.depoimentos.length
     ? site.depoimentos.filter((item) => item?.nome || item?.procedimento || item?.texto)
@@ -358,15 +366,15 @@ export default async function PublicClinicPage({ params, searchParams }) {
             // eslint-disable-next-line @next/next/no-img-element
             <img src={publicImageUrl(logoUrl, { width: 224, height: 224, quality: 76, resize: "contain" })} alt={`Logo ${brandName}`} width="112" height="112" decoding="async" className="mx-auto mb-4 h-20 w-20 rounded-full object-contain shadow-[0_20px_48px_rgba(0,0,0,0.24)] sm:mb-8 sm:h-28 sm:w-28 sm:shadow-[0_24px_60px_rgba(0,0,0,0.24)]" />
           ) : null}
-          <p className="text-[10px] font-bold uppercase leading-5 tracking-[0.24em] text-white/75 sm:text-xs sm:tracking-[0.34em]">{site.eyebrow || "Estética premium e atendimento personalizado"}</p>
+          <p className="text-[10px] font-bold uppercase leading-5 tracking-[0.24em] text-white/75 sm:text-xs sm:tracking-[0.34em]">{site.eyebrow || `${segment.name} e atendimento personalizado`}</p>
           <h1 className="mx-auto mt-3 max-w-5xl text-[2.55rem] font-semibold leading-[1.02] tracking-tight sm:mt-5 sm:text-7xl sm:leading-[1.03]">
-            {site.titulo_hero || `Beleza, cuidado e tecnologia em ${brandName}`}
+            {site.titulo_hero || `Cuidado especializado em ${brandName}`}
           </h1>
           <p className="mx-auto mt-4 max-w-3xl text-base leading-7 text-white/82 sm:mt-6 sm:text-lg sm:leading-8">
-            {site.subtitulo_hero || "Conheça a clínica, veja os procedimentos e reserve seu horário online com segurança."}
+            {site.subtitulo_hero || `Conheça a clínica, veja os ${procedimentosLower} e reserve seu horário online com segurança.`}
           </p>
           <div className="mt-6 flex flex-wrap justify-center gap-3 sm:mt-8">
-            <a href="#agendar" className="rounded-full bg-[var(--clinic-accent)] px-7 py-4 text-sm font-bold text-[#17130f] shadow-[0_20px_48px_rgba(0,0,0,0.24)]">Agendar procedimento</a>
+            <a href="#agendar" className="rounded-full bg-[var(--clinic-accent)] px-7 py-4 text-sm font-bold text-[#17130f] shadow-[0_20px_48px_rgba(0,0,0,0.24)]">Agendar {procedimentoLower}</a>
             <a href="#servicos" className="rounded-full border border-white/40 bg-white/10 px-7 py-4 text-sm font-bold text-white backdrop-blur">Conheça os serviços</a>
           </div>
         </div>
@@ -384,7 +392,7 @@ export default async function PublicClinicPage({ params, searchParams }) {
           <SectionHeading eyebrow="Sobre" title={professionalName} />
           <RichText text={professionalBio} className="mt-6 text-base leading-8 text-neutral-700" />
           <div className="mt-8 flex flex-wrap gap-3">
-            {[site.credencial_1 || "Protocolos personalizados", site.credencial_2 || "Ambiente reservado", site.credencial_3 || "Acompanhamento pós-procedimento"].map((item) => (
+            {[site.credencial_1 || "Atendimento personalizado", site.credencial_2 || "Ambiente reservado", site.credencial_3 || `Acompanhamento após o ${procedimentoLower}`].map((item) => (
               <span key={item} className="inline-flex items-center gap-2 rounded-full border border-neutral-200 bg-white/60 px-4 py-2 text-sm font-semibold text-neutral-700 shadow-sm backdrop-blur">
                 <CheckCircle2 size={16} className="text-[var(--clinic-primary)]" /> {item}
               </span>
@@ -397,7 +405,7 @@ export default async function PublicClinicPage({ params, searchParams }) {
         <section className="site-campaign-section px-5 py-24 sm:px-8">
           <div className="public-card-reveal public-reveal-up site-dark-glass-card mx-auto grid max-w-7xl gap-8 p-6 text-white lg:grid-cols-[1.05fr_0.95fr] lg:p-10 lg:items-center">
             <div>
-              <SectionHeading eyebrow="Campanha" title={site.campanha_titulo || "Protocolo em campanha"} description={site.campanha_subtitulo || "Uma condição especial para iniciar seu cuidado com orientação profissional."} tone="dark" />
+              <SectionHeading eyebrow="Campanha" title={site.campanha_titulo || `${terminology.procedimento} em campanha`} description={site.campanha_subtitulo || "Uma condição especial para iniciar seu cuidado com orientação profissional."} tone="dark" />
               <RichText text={site.campanha_texto || "Destaque aqui o produto, serviço ou protocolo que a clínica deseja vender mais neste momento."} className="mt-6 text-base leading-8 text-white/70" />
               <a href={campaignCtaHref} data-lead-popup={campaignCtaOpensLead ? "true" : undefined} className="mt-8 inline-flex rounded-full bg-[var(--clinic-accent)] px-6 py-3 text-sm font-black text-[#17130f]">{site.campanha_cta_label || "Quero saber mais"}</a>
             </div>
@@ -422,12 +430,12 @@ export default async function PublicClinicPage({ params, searchParams }) {
         </div>
       </section>
 
-      <PublicServicesSection procedimentos={publicProcedures} />
+      <PublicServicesSection procedimentos={publicProcedures} terminology={terminology} />
 
       {lojinhaAtiva && publicProducts.length ? <PublicStorefront slug={clinic.slug} products={publicProducts.map((produto) => ({ ...produto, estoque_disponivel: availableProductStock(produto) }))} recoveryToken={query?.carrinho || ""} /> : null}
 
       <section id="depoimentos" className="public-section-soft mx-auto max-w-7xl px-5 py-24 sm:px-8">
-        <SectionHeading eyebrow="Depoimentos" title="O que pacientes dizem:" description="A satisfação dos pacientes são o maior reconhecimento." center />
+        <SectionHeading eyebrow="Depoimentos" title={`O que ${terminology.clientes.toLocaleLowerCase("pt-BR")} dizem`} description={`A satisfação de ${terminology.clientes.toLocaleLowerCase("pt-BR")} é o nosso maior reconhecimento.`} center />
         {googleReviewsUrl || googleReviews.rating ? (
           <div className="mt-6 flex flex-wrap justify-center gap-3 text-center">
             {googleReviews.rating ? (
@@ -451,7 +459,7 @@ export default async function PublicClinicPage({ params, searchParams }) {
               <div className="mt-7 flex items-end justify-between gap-4">
                 <div>
                   <strong>{item.nome || "Paciente"}</strong>
-                  <p className="mt-1 text-xs text-neutral-500">{item.procedimento || "Atendimento estético"}</p>
+                  <p className="mt-1 text-xs text-neutral-500">{item.procedimento || terminology.procedimento}</p>
                 </div>
                 <span className="text-amber-400">{"★".repeat(Math.max(1, Math.min(5, Number(item.rating || 5))))}</span>
               </div>
@@ -502,7 +510,7 @@ export default async function PublicClinicPage({ params, searchParams }) {
 
       <section id="agendar" className="public-booking-section mx-auto grid max-w-7xl gap-8 px-5 py-24 sm:px-8 lg:grid-cols-[0.9fr_1.1fr]">
         <div className="public-card-reveal public-reveal-left public-hover-card rounded-[1.75rem] border border-white/70 bg-white/72 p-7 shadow-[0_20px_54px_rgba(20,18,15,0.09)] backdrop-blur">
-          <SectionHeading eyebrow="Agendamento" title="Reserve seu horário" description="Escolha procedimento, profissional e horário. A disponibilidade é validada com a agenda real da clínica." />
+          <SectionHeading eyebrow="Agendamento" title="Reserve seu horário" description={`Escolha ${procedimentoLower}, ${profissionalLower} e horário. A disponibilidade é validada com a agenda real da clínica.`} />
           <div className="mt-8 space-y-4 text-sm text-neutral-700">
             <p className="flex gap-3"><Clock size={18} className="text-[var(--clinic-primary)]" /> Atendimento de 8:00 às 18:00 de segunda a quinta e dàs 08:00 às 17:00 na sexta, conforme disponibilidade.</p>
             <p className="flex gap-3"><CreditCard size={18} className="text-[var(--clinic-primary)]" /> Quando houver sinal, você será direcionado para um checkout seguro.</p>
@@ -512,7 +520,7 @@ export default async function PublicClinicPage({ params, searchParams }) {
         </div>
 
         <div className="public-card-reveal public-reveal-right">
-          <PublicBookingForm slug={clinic.slug} procedimentos={procedimentos} profissionais={profissionais} query={query} timeZone={clinicTimeZone(clinic)} />
+          <PublicBookingForm slug={clinic.slug} procedimentos={procedimentos} profissionais={profissionais} query={query} timeZone={clinicTimeZone(clinic)} terminology={terminology} />
         </div>
       </section>
 
@@ -543,7 +551,7 @@ export default async function PublicClinicPage({ params, searchParams }) {
             ) : null}
             <h3 className="mt-5 text-xl font-semibold">{brandName}</h3>
             <p className="mt-3 max-w-sm text-sm leading-7 text-white/65">{professionalName}</p>
-            <p className="mt-1 text-sm text-white/55">{site.eyebrow || "Estética premium e atendimento personalizado"}</p>
+            <p className="mt-1 text-sm text-white/55">{site.eyebrow || `${segment.name} e atendimento personalizado`}</p>
           </div>
           <div>
             <h4 className="font-semibold">Links rápidos</h4>

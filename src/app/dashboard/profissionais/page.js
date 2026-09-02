@@ -4,6 +4,7 @@ import { clinicTimeZone } from "@/lib/clinic/schedule";
 import { requireClinicSection } from "@/lib/auth/session";
 import { EmptyClinicState, EmptyState, Field, PageHeader, SubmitButton, TextArea } from "@/components/app-shell/ui";
 import { createProfissionalAction, deleteProfissionalAction, toggleProfissionalAction } from "../actions";
+import { getPrimaryClinicSegment } from "@/lib/segments/service";
 
 export const metadata = { title: "Profissionais | Clínica SaaS" };
 
@@ -45,6 +46,9 @@ export default async function ProfissionaisPage({ searchParams }) {
   const timeZone = clinicTimeZone(activeClinic);
 
   const supabase = await createClient();
+  const segment = await getPrimaryClinicSegment(activeClinic.id, supabase);
+  const terminology = segment.labels;
+  const profissionalLower = terminology.profissional.toLocaleLowerCase("pt-BR");
   const ranges = periodRanges();
   const [{ data: profissionais = [] }, { data: agendamentosFinanceiros = [] }] = await Promise.all([
     supabase
@@ -78,7 +82,7 @@ export default async function ProfissionaisPage({ searchParams }) {
   return (
     <main className="min-w-0 w-full px-4 py-8 sm:px-6 lg:px-8">
   <section className="w-full min-w-0 max-w-[1480px] mx-auto">
-        <PageHeader eyebrow="Equipe" title="Profissionais" description="Cadastre especialistas, comissões e status de atendimento." />
+        <PageHeader eyebrow={segment.name} title={terminology.profissionais} description={`Cadastre ${terminology.profissionais.toLocaleLowerCase("pt-BR")}, comissões e status de atendimento.`} />
 
         {params?.erro === "limite" ? (
           <div className="mt-6 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
@@ -90,15 +94,15 @@ export default async function ProfissionaisPage({ searchParams }) {
 
         <div className="mt-8 grid gap-6 lg:grid-cols-[420px_1fr]">
           <form action={createProfissionalAction} className="rounded-lg border border-neutral-200 bg-white p-5 shadow-sm">
-            <h2 className="text-lg font-semibold">Novo profissional</h2>
+            <h2 className="text-lg font-semibold">Novo {profissionalLower}</h2>
             <div className="mt-4 space-y-4">
               <Field label="Nome" name="nome" required />
               <Field label="Telefone" name="telefone" />
               <Field label="E-mail" name="email" type="email" />
-              <Field label="Especialidade" name="especialidade" placeholder="Esteticista, biomédica, fisioterapeuta..." />
+              <Field label="Especialidade" name="especialidade" placeholder={terminology.especialidadeExemplos} />
               <Field label="Comissão (%)" name="comissao_percentual" type="number" defaultValue="0" />
               <TextArea label="Observações" name="observacoes" />
-              <SubmitButton>Cadastrar profissional</SubmitButton>
+              <SubmitButton>Cadastrar {profissionalLower}</SubmitButton>
             </div>
           </form>
 
@@ -106,7 +110,7 @@ export default async function ProfissionaisPage({ searchParams }) {
             <h2 className="text-lg font-semibold">Equipe cadastrada</h2>
             <div className="mt-4 space-y-3">
               {profissionais.length === 0 ? (
-                <EmptyState title="Equipe ainda não cadastrada" description="Inclua profissionais para filtrar a agenda, calcular comissões e evitar conflitos de horário." />
+                <EmptyState title="Equipe ainda não cadastrada" description={`Inclua ${terminology.profissionais.toLocaleLowerCase("pt-BR")} para filtrar a agenda, calcular comissões e evitar conflitos de horário.`} />
               ) : profissionais.map((item) => {
                 const metrics = metricsByProfessional.get(item.id) || {
                   rows: [],
@@ -167,8 +171,8 @@ export default async function ProfissionaisPage({ searchParams }) {
                           return (
                             <div key={agendamento.id} className="grid gap-2 px-4 py-3 text-sm md:grid-cols-[1fr_150px_150px_150px] md:items-center">
                               <div>
-                                <p className="font-semibold text-neutral-950">{agendamento.clientes?.nome || "Cliente"}</p>
-                                <p className="mt-1 text-xs text-neutral-500">{agendamento.procedimentos?.nome || "Procedimento"} - {new Date(agendamento.inicio).toLocaleDateString("pt-BR", { timeZone })}</p>
+                                <p className="font-semibold text-neutral-950">{agendamento.clientes?.nome || terminology.cliente}</p>
+                                <p className="mt-1 text-xs text-neutral-500">{agendamento.procedimentos?.nome || terminology.procedimento} - {new Date(agendamento.inicio).toLocaleDateString("pt-BR", { timeZone })}</p>
                               </div>
                               <p className="text-neutral-600">Previsto: <strong className="text-neutral-950">{money(agendamento.valor)}</strong></p>
                               <p className="text-neutral-600">Pago: <strong className="text-neutral-950">{money(pago)}</strong></p>

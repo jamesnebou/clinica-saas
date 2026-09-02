@@ -15,6 +15,7 @@ import {
 } from "../../actions";
 import { ConsentimentoForm } from "./consentimento-form";
 import { clinicTimeZone } from "@/lib/clinic/schedule";
+import { getPrimaryClinicSegment } from "@/lib/segments/service";
 
 export const metadata = { title: "Ficha do cliente | Clínica SaaS" };
 
@@ -72,6 +73,11 @@ export default async function ClienteDetalhePage({ params }) {
   }
 
   const timeZone = clinicTimeZone(activeClinic);
+  const supabase = await createClient();
+  const segment = await getPrimaryClinicSegment(activeClinic.id, supabase);
+  const terminology = segment.labels;
+  const clienteLower = terminology.cliente.toLocaleLowerCase("pt-BR");
+  const clientesLower = terminology.clientes.toLocaleLowerCase("pt-BR");
 
   const membership = (memberships || []).find((item) => item.clinica_id === activeClinic.id);
   const canAccessProntuario = ["owner", "admin", "profissional"].includes(membership?.papel);
@@ -80,15 +86,14 @@ export default async function ClienteDetalhePage({ params }) {
     return (
       <main className="px-5 py-8 sm:px-8 lg:px-10">
         <section className="mx-auto max-w-3xl rounded-lg border border-amber-200 bg-amber-50 p-6 text-amber-950">
-          <Link href="/dashboard/clientes" className="inline-flex items-center gap-2 text-sm font-semibold"><ArrowLeft size={16} /> Voltar para clientes</Link>
+          <Link href="/dashboard/clientes" className="inline-flex items-center gap-2 text-sm font-semibold"><ArrowLeft size={16} /> Voltar para {clientesLower}</Link>
           <h1 className="mt-6 text-2xl font-semibold">Prontuário restrito</h1>
-          <p className="mt-3 text-sm leading-6">Dados sensíveis, anamnese, consentimentos e fotos antes/depois ficam disponíveis apenas para owner, admin e profissional da clínica.</p>
+          <p className="mt-3 text-sm leading-6">Dados sensíveis, anamnese, consentimentos e documentos clínicos ficam disponíveis apenas para owner, admin e {terminology.profissional.toLocaleLowerCase("pt-BR")} da clínica.</p>
         </section>
       </main>
     );
   }
 
-  const supabase = await createClient();
   const [{ data: cliente }, { data: agendamentos = [] }, { data: fotos = [] }, { data: pacotes = [] }, { data: consentimentos = [] }] = await Promise.all([
     supabase.from("clientes").select("*").eq("clinica_id", activeClinic.id).eq("id", id).maybeSingle(),
     supabase
@@ -132,12 +137,12 @@ export default async function ClienteDetalhePage({ params }) {
     <main className="px-5 py-8 sm:px-8 lg:px-10">
       <section className="mx-auto max-w-7xl">
         <Link href="/dashboard/clientes" className="inline-flex items-center gap-2 text-sm font-semibold text-neutral-600 hover:text-neutral-950">
-          <ArrowLeft size={16} /> Voltar para clientes
+          <ArrowLeft size={16} /> Voltar para {clientesLower}
         </Link>
 
         <div className="mt-5">
           <PageHeader
-            eyebrow="Ficha do cliente"
+            eyebrow={`Ficha de ${clienteLower}`}
             title={cliente.nome}
             description={`${cliente.telefone || "Sem telefone"}${cliente.email ? ` · ${cliente.email}` : ""}`}
             action={whats ? <a className="inline-flex h-11 items-center gap-2 rounded-lg border border-[color-mix(in_srgb,var(--clinic-primary)_24%,#e5e5e5)] bg-[color-mix(in_srgb,var(--clinic-accent)_10%,white)] px-4 text-sm font-semibold text-[var(--clinic-primary)]" href={whats} target="_blank" rel="noreferrer"><MessageCircle size={17} /> WhatsApp</a> : null}
@@ -177,7 +182,7 @@ export default async function ClienteDetalhePage({ params }) {
                 <TextArea label="Alergias" name="alergias" defaultValue={cliente.alergias || ""} />
                 <TextArea label="Contraindicações" name="contraindicacoes" defaultValue={cliente.contraindicacoes || ""} />
                 <TextArea label="Medicamentos em uso" name="medicamentos_uso" defaultValue={cliente.medicamentos_uso || ""} />
-                <TextArea label="Procedimentos prévios" name="procedimentos_previos" defaultValue={cliente.procedimentos_previos || ""} />
+                <TextArea label={`${terminology.procedimentos} prévios`} name="procedimentos_previos" defaultValue={cliente.procedimentos_previos || ""} />
               </div>
               <div className="mt-4 grid gap-4 md:grid-cols-2">
                 <Field label="Retorno recomendado" name="retorno_recomendado_em" type="date" defaultValue={cliente.retorno_recomendado_em || ""} />
@@ -187,7 +192,7 @@ export default async function ClienteDetalhePage({ params }) {
               <div className="mt-4 space-y-4">
                 <label className="flex items-start gap-3 rounded-lg bg-neutral-50 p-3 text-sm text-neutral-700">
                   <input className="mt-1" name="termo_consentimento_aceito" type="checkbox" defaultChecked={cliente.termo_consentimento_aceito} />
-                  Cliente assinou/aceitou o termo de consentimento para procedimentos e uso de imagens.
+                  {terminology.cliente} assinou/aceitou o termo de consentimento para {terminology.procedimentos.toLocaleLowerCase("pt-BR")} e uso de imagens.
                 </label>
                 <TextArea label="Observação do termo" name="termo_consentimento_observacao" defaultValue={cliente.termo_consentimento_observacao || ""} />
               </div>
@@ -196,7 +201,7 @@ export default async function ClienteDetalhePage({ params }) {
 
             <form action={updateClienteAnamneseAction} className="rounded-lg border border-neutral-200 bg-white p-5 shadow-sm">
               <input type="hidden" name="id" value={cliente.id} />
-              <div className="flex items-center gap-2"><HeartPulse size={20} className="text-[var(--clinic-primary)]" /><h2 className="text-lg font-semibold">Anamnese estética</h2></div>
+              <div className="flex items-center gap-2"><HeartPulse size={20} className="text-[var(--clinic-primary)]" /><h2 className="text-lg font-semibold">{terminology.anamnese}</h2></div>
               <div className="mt-5 grid gap-4 md:grid-cols-2">
                 <TextArea label="Objetivo principal" name="objetivo_principal" defaultValue={anamnese.objetivo_principal || ""} />
                 <TextArea label="Queixa principal" name="queixa_principal" defaultValue={anamnese.queixa_principal || ""} />
@@ -208,12 +213,12 @@ export default async function ClienteDetalhePage({ params }) {
                 <CheckboxField name="hipertensao" label="Hipertensão" defaultChecked={anamnese.hipertensao} />
                 <CheckboxField name="marcapasso" label="Marcapasso" defaultChecked={anamnese.marcapasso} />
                 <CheckboxField name="cancer_tratamento" label="Tratamento oncológico" defaultChecked={anamnese.cancer_tratamento} />
-                <CheckboxField name="tendencia_queloide" label="Tendência a queloide" defaultChecked={anamnese.tendencia_queloide} />
-                <CheckboxField name="usa_acidos" label="Usa ácidos" defaultChecked={anamnese.usa_acidos} />
+                {segment.slug === "estetica" ? <CheckboxField name="tendencia_queloide" label="Tendência a queloide" defaultChecked={anamnese.tendencia_queloide} /> : null}
+                {segment.slug === "estetica" ? <CheckboxField name="usa_acidos" label="Usa ácidos" defaultChecked={anamnese.usa_acidos} /> : null}
               </div>
               <div className="mt-4 grid gap-4 md:grid-cols-3">
-                <TextArea label="Exposição solar" name="exposicao_solar" defaultValue={anamnese.exposicao_solar || ""} />
-                <TextArea label="Rotina de skincare" name="rotina_skincare" defaultValue={anamnese.rotina_skincare || ""} />
+                {segment.slug === "estetica" ? <TextArea label="Exposição solar" name="exposicao_solar" defaultValue={anamnese.exposicao_solar || ""} /> : null}
+                {segment.slug === "estetica" ? <TextArea label="Rotina de skincare" name="rotina_skincare" defaultValue={anamnese.rotina_skincare || ""} /> : null}
                 <TextArea label="Observações da anamnese" name="anamnese_observacoes" defaultValue={anamnese.observacoes || ""} />
               </div>
               <div className="mt-5"><SubmitButton>Salvar anamnese</SubmitButton></div>
@@ -226,8 +231,8 @@ export default async function ClienteDetalhePage({ params }) {
               <div className="mt-4 space-y-3">
                 {agendamentos.length === 0 ? <p className="rounded-lg bg-neutral-50 px-4 py-3 text-sm text-neutral-600">Sem histórico.</p> : agendamentos.map((item) => (
                   <div key={item.id} className="rounded-lg border border-neutral-200 p-3">
-                    <p className="text-sm font-semibold">{item.procedimentos?.nome || "Procedimento"}</p>
-                    <p className="mt-1 text-xs text-neutral-500">{formatDateTime(item.inicio, timeZone)} · {item.profissionais?.nome || "Profissional"}</p>
+                    <p className="text-sm font-semibold">{item.procedimentos?.nome || terminology.procedimento}</p>
+                    <p className="mt-1 text-xs text-neutral-500">{formatDateTime(item.inicio, timeZone)} · {item.profissionais?.nome || terminology.profissional}</p>
                     <p className="mt-1 text-xs text-neutral-500">{item.status} · {formatMoney(item.valor)} · Pagamento: {item.pagamento_status || "pendente"}</p>
                   </div>
                 ))}
@@ -235,7 +240,7 @@ export default async function ClienteDetalhePage({ params }) {
             </section>
 
             <section className="rounded-lg border border-neutral-200 bg-white p-5 shadow-sm">
-              <div className="flex items-center gap-2"><Camera size={20} className="text-[var(--clinic-primary)]" /><h2 className="text-lg font-semibold">Fotos antes/depois</h2></div>
+              <div className="flex items-center gap-2"><Camera size={20} className="text-[var(--clinic-primary)]" /><h2 className="text-lg font-semibold">{segment.slug === "estetica" ? "Fotos antes/depois" : "Documentos e imagens clínicas"}</h2></div>
               <form action={createClienteFotoUploadAction} className="mt-4 space-y-3 rounded-lg bg-neutral-50 p-3">
                 <input type="hidden" name="cliente_id" value={cliente.id} />
                 <SelectField label="Tipo" name="tipo" defaultValue="evolucao">
@@ -261,7 +266,7 @@ export default async function ClienteDetalhePage({ params }) {
                 <Field label="Data da foto" name="data_foto" type="date" defaultValue={new Date().toISOString().slice(0, 10)} />
                 <label className="flex items-start gap-3 rounded-lg border border-neutral-200 bg-white p-3 text-sm text-neutral-700">
                   <input className="mt-1" name="autorizacao_uso_imagem" type="checkbox" />
-                  Cliente autorizou o armazenamento/uso da imagem conforme termo vinculado.
+                  {terminology.cliente} autorizou o armazenamento/uso da imagem conforme termo vinculado.
                 </label>
                 <TextArea label="Observações" name="observacoes" />
                 <SubmitButton>Enviar foto</SubmitButton>
@@ -291,7 +296,7 @@ export default async function ClienteDetalhePage({ params }) {
                   <Field label="Data da foto" name="data_foto" type="date" defaultValue={new Date().toISOString().slice(0, 10)} />
                   <label className="flex items-start gap-3 rounded-lg border border-neutral-200 bg-white p-3 text-sm text-neutral-700">
                     <input className="mt-1" name="autorizacao_uso_imagem" type="checkbox" />
-                    Cliente autorizou o armazenamento/uso da imagem conforme termo vinculado.
+                    {terminology.cliente} autorizou o armazenamento/uso da imagem conforme termo vinculado.
                   </label>
                   <TextArea label="Observações" name="observacoes" />
                   <SubmitButton>Adicionar por URL</SubmitButton>
@@ -337,7 +342,7 @@ export default async function ClienteDetalhePage({ params }) {
 
             <section className="rounded-lg border border-[color-mix(in_srgb,var(--clinic-primary)_24%,#e5e5e5)] bg-[color-mix(in_srgb,var(--clinic-accent)_10%,white)] p-5 text-neutral-950">
               <div className="flex items-center gap-2"><ShieldCheck size={20} /><h2 className="text-lg font-semibold">Termos e consentimentos</h2></div>
-              <p className="mt-3 text-sm leading-6">Registre aceite formal de procedimento, LGPD, anamnese e uso de imagem. Este registro complementa a ficha e cria histórico de versão/data.</p>
+              <p className="mt-3 text-sm leading-6">Registre aceite formal de {terminology.procedimento.toLocaleLowerCase("pt-BR")}, LGPD, anamnese e uso de imagem. Este registro complementa a ficha e cria histórico de versão/data.</p>
               <ConsentimentoForm action={createClienteConsentimentoAction} clienteId={cliente.id} clienteNome={cliente.nome} />
               <div className="mt-4 space-y-3">
                 {consentimentos.length === 0 ? <p className="rounded-lg bg-white/70 px-4 py-3 text-sm text-neutral-600">Nenhum consentimento formal registrado.</p> : consentimentos.map((termo) => (

@@ -8,6 +8,8 @@ import { normalizeSchedule } from "@/lib/clinic/schedule";
 import { ACCESS_SECTION_LABELS, ROLE_ACCESS } from "@/lib/auth/permissions";
 import { BioEditor } from "./bio-editor";
 import { SiteFaqEditor } from "./site-faq-editor";
+import { SEGMENT_OPTIONS } from "@/lib/segments/registry";
+import { getPrimaryClinicSegment } from "@/lib/segments/service";
 
 export const metadata = { title: "Configurações | Clínica SaaS" };
 export const dynamic = "force-dynamic";
@@ -129,6 +131,7 @@ export default async function ConfiguracoesPage({ searchParams }) {
   const activeClinic = freshClinic || initialClinic;
   const membership = context.memberships?.find((item) => item.clinica_id === activeClinic.id) || null;
   const meta = activeClinic.metadata || {};
+  const primarySegment = await getPrimaryClinicSegment(activeClinic.id, supabaseAdmin);
   const site = meta.site_publico || {};
   const schedule = normalizeSchedule(meta.horario_funcionamento || {});
   const inactiveDates = [...(schedule.datas_inativas || []), ...Array.from({ length: 5 }, () => ({ data: "", motivo: "" }))].slice(0, 12);
@@ -182,6 +185,13 @@ export default async function ConfiguracoesPage({ searchParams }) {
                 <Field label="Cidade" name="cidade" defaultValue={activeClinic.cidade || ""} />
                 <Field label="UF" name="estado" defaultValue={activeClinic.estado || ""} />
               </div>
+              <label className="block md:col-span-2">
+                <span className="text-sm font-medium text-neutral-700">Área principal de atuação</span>
+                <select name="segmento_principal" defaultValue={primarySegment.slug} className="mt-2 h-11 w-full rounded-lg border border-neutral-200 bg-white px-3 text-sm outline-none transition focus:border-[var(--clinic-primary)] focus:ring-2 focus:ring-[color-mix(in_srgb,var(--clinic-primary)_18%,transparent)]">
+                  {SEGMENT_OPTIONS.map((item) => <option key={item.slug} value={item.slug}>{item.name}</option>)}
+                </select>
+                <span className="mt-2 block text-xs leading-5 text-neutral-500">Define os nomes usados no sistema, como {primarySegment.labels.clientes}, {primarySegment.labels.procedimentos} e {primarySegment.labels.profissionais}.</span>
+              </label>
             </div>
             <div className="mt-6 rounded-lg border border-[color-mix(in_srgb,var(--clinic-primary)_20%,#e5e5e5)] bg-[color-mix(in_srgb,var(--clinic-accent)_7%,white)] p-4">
               <h3 className="text-base font-black tracking-tight text-neutral-950">Dados de acesso do usuário logado</h3>
@@ -232,7 +242,7 @@ export default async function ConfiguracoesPage({ searchParams }) {
                   </div>
                   {meta.logo_storage_path ? <p className="mt-3 truncate rounded-md bg-white/70 px-3 py-2 text-xs text-neutral-500">Logo armazenada: {meta.logo_storage_path}</p> : null}
                   <div className="mt-5 grid grid-cols-2 gap-3">
-                    <div className="rounded-lg bg-white p-3 shadow-sm"><p className="text-xs text-neutral-500">Clientes</p><strong className="mt-1 block text-xl">128</strong></div>
+                    <div className="rounded-lg bg-white p-3 shadow-sm"><p className="text-xs text-neutral-500">{primarySegment.labels.clientes}</p><strong className="mt-1 block text-xl">128</strong></div>
                     <div className="rounded-lg p-3 text-white shadow-sm" style={{ background: "var(--clinic-primary)" }}><p className="text-xs text-white/75">Hoje</p><strong className="mt-1 block text-xl">R$ 890</strong></div>
                   </div>
                 </div>

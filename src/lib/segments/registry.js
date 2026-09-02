@@ -7,6 +7,9 @@ export const CORE_CAPABILITIES = Object.freeze([
 const DEFAULT_TERMINOLOGY = Object.freeze({
   cliente: "Cliente", clientes: "Clientes", procedimento: "Procedimento",
   procedimentos: "Procedimentos", profissional: "Profissional", profissionais: "Profissionais",
+  anamnese: "Anamnese estética",
+  categoriaExemplos: "Facial, corporal, injetável...",
+  especialidadeExemplos: "Esteticista, biomédica, fisioterapeuta...",
 });
 
 /**
@@ -31,49 +34,49 @@ export const SEGMENT_REGISTRY = Object.freeze({
   }),
   fisioterapia: Object.freeze({
     slug: "fisioterapia", name: "Fisioterapia",
-    labels: Object.freeze({ ...DEFAULT_TERMINOLOGY, cliente: "Paciente", clientes: "Pacientes", procedimento: "Atendimento", procedimentos: "Atendimentos", profissional: "Fisioterapeuta", profissionais: "Fisioterapeutas" }),
+    labels: Object.freeze({ ...DEFAULT_TERMINOLOGY, cliente: "Paciente", clientes: "Pacientes", procedimento: "Atendimento", procedimentos: "Atendimentos", profissional: "Fisioterapeuta", profissionais: "Fisioterapeutas", anamnese: "Avaliação fisioterapêutica", categoriaExemplos: "Ortopédico, respiratório, neurológico...", especialidadeExemplos: "Ortopedia, neurologia, respiratória..." }),
     capabilities: Object.freeze([...CORE_CAPABILITIES, "evolucao_fisioterapeutica", "avaliacao_funcional", "plano_terapeutico", "perimetria"]),
     defaultModules: Object.freeze(["agenda", "clientes", "financeiro", "bi"]), clinicalForms: Object.freeze(["avaliacao_funcional", "evolucao_fisioterapeutica"]),
     priorityKpis: Object.freeze(["ocupacao", "retencao_30", "sessoes_realizadas", "receita_recebida"]),
   }),
   odontologia: Object.freeze({
     slug: "odontologia", name: "Odontologia",
-    labels: Object.freeze({ ...DEFAULT_TERMINOLOGY, cliente: "Paciente", clientes: "Pacientes", procedimento: "Tratamento", procedimentos: "Tratamentos", profissional: "Dentista", profissionais: "Dentistas" }),
+    labels: Object.freeze({ ...DEFAULT_TERMINOLOGY, cliente: "Paciente", clientes: "Pacientes", procedimento: "Tratamento", procedimentos: "Tratamentos", profissional: "Dentista", profissionais: "Dentistas", anamnese: "Anamnese odontológica", categoriaExemplos: "Preventivo, restaurador, ortodontia...", especialidadeExemplos: "Clínico geral, ortodontia, implantodontia..." }),
     capabilities: Object.freeze([...CORE_CAPABILITIES, "odontograma", "plano_tratamento_odonto", "receituario", "prescricoes"]),
     defaultModules: Object.freeze(["agenda", "clientes", "financeiro", "bi"]), clinicalForms: Object.freeze(["odontograma", "anamnese_odontologica"]),
     priorityKpis: Object.freeze(["planos_tratamento", "conversao_crm", "receita_recebida", "retencao_180"]),
   }),
   medicina: Object.freeze({
     slug: "medicina", name: "Medicina / Consultório",
-    labels: Object.freeze({ ...DEFAULT_TERMINOLOGY, cliente: "Paciente", clientes: "Pacientes", procedimento: "Consulta", procedimentos: "Consultas" }),
+    labels: Object.freeze({ ...DEFAULT_TERMINOLOGY, cliente: "Paciente", clientes: "Pacientes", procedimento: "Consulta", procedimentos: "Consultas", anamnese: "Anamnese clínica", categoriaExemplos: "Primeira consulta, retorno, teleconsulta...", especialidadeExemplos: "Clínica médica, dermatologia, pediatria..." }),
     capabilities: Object.freeze([...CORE_CAPABILITIES, "receituario", "prescricoes", "teleatendimento"]),
     defaultModules: Object.freeze(["agenda", "clientes", "financeiro", "bi"]), clinicalForms: Object.freeze(["anamnese_clinica", "evolucao_clinica"]),
     priorityKpis: Object.freeze(["ocupacao", "retencao_90", "no_show", "receita_recebida"]),
   }),
   psicologia: Object.freeze({
     slug: "psicologia", name: "Psicologia",
-    labels: Object.freeze({ ...DEFAULT_TERMINOLOGY, cliente: "Paciente", clientes: "Pacientes", procedimento: "Sessão", procedimentos: "Sessões", profissional: "Psicólogo", profissionais: "Psicólogos" }),
+    labels: Object.freeze({ ...DEFAULT_TERMINOLOGY, cliente: "Paciente", clientes: "Pacientes", procedimento: "Sessão", procedimentos: "Sessões", profissional: "Psicólogo", profissionais: "Psicólogos", anamnese: "Avaliação psicológica", categoriaExemplos: "Individual, casal, infantil...", especialidadeExemplos: "Clínica, infantil, neuropsicologia..." }),
     capabilities: Object.freeze([...CORE_CAPABILITIES, "teleatendimento", "plano_terapeutico"]),
     defaultModules: Object.freeze(["agenda", "clientes", "financeiro", "bi"]), clinicalForms: Object.freeze(["evolucao_psicologica"]),
     priorityKpis: Object.freeze(["retencao_30", "no_show", "ocupacao", "receita_recebida"]),
   }),
   nutricao: Object.freeze({
     slug: "nutricao", name: "Nutrição",
-    labels: Object.freeze({ ...DEFAULT_TERMINOLOGY, cliente: "Paciente", clientes: "Pacientes", procedimento: "Consulta", procedimentos: "Consultas", profissional: "Nutricionista", profissionais: "Nutricionistas" }),
+    labels: Object.freeze({ ...DEFAULT_TERMINOLOGY, cliente: "Paciente", clientes: "Pacientes", procedimento: "Consulta", procedimentos: "Consultas", profissional: "Nutricionista", profissionais: "Nutricionistas", anamnese: "Anamnese nutricional", categoriaExemplos: "Primeira consulta, retorno, avaliação...", especialidadeExemplos: "Clínica, esportiva, materno-infantil..." }),
     capabilities: Object.freeze([...CORE_CAPABILITIES, "avaliacao_funcional", "plano_terapeutico", "teleatendimento"]),
     defaultModules: Object.freeze(["agenda", "clientes", "financeiro", "bi"]), clinicalForms: Object.freeze(["anamnese_nutricional", "evolucao_nutricional"]),
     priorityKpis: Object.freeze(["retencao_30", "retencao_90", "ocupacao", "receita_recebida"]),
   }),
   pilates: Object.freeze({
     slug: "pilates", name: "Pilates",
-    labels: Object.freeze({ ...DEFAULT_TERMINOLOGY, cliente: "Aluno", clientes: "Alunos", procedimento: "Aula", procedimentos: "Aulas", profissional: "Instrutor", profissionais: "Instrutores" }),
+    labels: Object.freeze({ ...DEFAULT_TERMINOLOGY, cliente: "Aluno", clientes: "Alunos", procedimento: "Aula", procedimentos: "Aulas", profissional: "Instrutor", profissionais: "Instrutores", anamnese: "Avaliação funcional", categoriaExemplos: "Individual, dupla, grupo...", especialidadeExemplos: "Pilates clínico, funcional, reabilitação..." }),
     capabilities: Object.freeze([...CORE_CAPABILITIES, "avaliacao_funcional", "plano_terapeutico", "perimetria"]),
     defaultModules: Object.freeze(["agenda", "clientes", "financeiro", "bi"]), clinicalForms: Object.freeze(["avaliacao_funcional", "evolucao_pilates"]),
     priorityKpis: Object.freeze(["ocupacao", "retencao_30", "sessoes_realizadas", "inadimplencia"]),
   }),
   multidisciplinar: Object.freeze({
     slug: "multidisciplinar", name: "Multidisciplinar",
-    labels: Object.freeze({ ...DEFAULT_TERMINOLOGY, cliente: "Paciente", clientes: "Pacientes", procedimento: "Atendimento", procedimentos: "Atendimentos" }),
+    labels: Object.freeze({ ...DEFAULT_TERMINOLOGY, cliente: "Paciente", clientes: "Pacientes", procedimento: "Atendimento", procedimentos: "Atendimentos", anamnese: "Avaliação clínica", categoriaExemplos: "Consulta, sessão, tratamento...", especialidadeExemplos: "Informe a área de atuação..." }),
     capabilities: Object.freeze([...CORE_CAPABILITIES, "multiunidade"]),
     defaultModules: Object.freeze(["agenda", "clientes", "crm", "financeiro", "bi"]), clinicalForms: Object.freeze([]),
     priorityKpis: Object.freeze(["receita_recebida", "ocupacao", "retencao_90", "participacao_profissional"]),
@@ -84,6 +87,10 @@ export const SEGMENT_OPTIONS = Object.freeze(Object.values(SEGMENT_REGISTRY).map
 
 export function getSegmentDefinition(slug = "estetica") {
   return SEGMENT_REGISTRY[slug] || SEGMENT_REGISTRY.estetica;
+}
+
+export function isSupportedSegment(slug) {
+  return Boolean(SEGMENT_REGISTRY[slug]);
 }
 
 export function getTerminologyForSegments(slugs = []) {

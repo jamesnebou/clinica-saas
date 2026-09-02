@@ -33,7 +33,10 @@ function fallbackImage(label, dark = false) {
   return `https://placehold.co/1200x900/${bg}/${fg}?text=${encodeURIComponent(label)}`;
 }
 
-export function PublicServicesSection({ procedimentos = [] }) {
+export function PublicServicesSection({ procedimentos = [], terminology = {} }) {
+  const serviceSingular = terminology.procedimento || "Procedimento";
+  const servicePlural = terminology.procedimentos || "Procedimentos";
+  const professionalLower = String(terminology.profissional || "Profissional").toLocaleLowerCase("pt-BR");
   const [selected, setSelected] = useState(null);
   const viewportRef = useRef(null);
   const trackRef = useRef(null);
@@ -189,8 +192,8 @@ export function PublicServicesSection({ procedimentos = [] }) {
       <div className="relative z-10">
         <div className="mx-auto max-w-3xl text-center">
           <p className="text-xs font-bold uppercase tracking-[0.32em] text-[var(--clinic-accent)]">Nossos serviços</p>
-          <h2 className="mt-3 text-4xl font-semibold tracking-tight text-white sm:text-5xl">Protocolos em destaque</h2>
-          <p className="mt-4 text-base leading-8 text-white/68">Clique no procedimento para saber mais.</p>
+          <h2 className="mt-3 text-4xl font-semibold tracking-tight text-white sm:text-5xl">{servicePlural} em destaque</h2>
+          <p className="mt-4 text-base leading-8 text-white/68">Clique para conhecer cada {serviceSingular.toLocaleLowerCase("pt-BR")}.</p>
         </div>
       </div>
 
@@ -234,7 +237,7 @@ export function PublicServicesSection({ procedimentos = [] }) {
                   />
                 ) : (
                   <div className="flex h-full w-full flex-col items-center justify-center bg-[radial-gradient(circle_at_30%_20%,color-mix(in_srgb,var(--clinic-accent)_20%,transparent),transparent_45%),linear-gradient(145deg,#17130f,#24201c)] px-10 text-center">
-                    <span className="text-xs font-black uppercase tracking-[0.28em] text-[var(--clinic-accent)]">{item.categoria || "Procedimento"}</span>
+                    <span className="text-xs font-black uppercase tracking-[0.28em] text-[var(--clinic-accent)]">{item.categoria || serviceSingular}</span>
                     <strong className="mt-4 text-2xl font-semibold text-white/88">{item.nome}</strong>
                   </div>
                 )}
@@ -242,7 +245,7 @@ export function PublicServicesSection({ procedimentos = [] }) {
               <div className="flex h-[370px] flex-col p-6">
                 <div className="flex items-start justify-between gap-4">
                   <div className="min-w-0 flex-1">
-                    <p className="text-xs font-bold uppercase tracking-[0.22em] text-[var(--clinic-accent)]">{item.categoria || "Procedimento"}</p>
+                    <p className="text-xs font-bold uppercase tracking-[0.22em] text-[var(--clinic-accent)]">{item.categoria || serviceSingular}</p>
                     <h3
                       className="mt-3 h-16 overflow-hidden text-2xl font-semibold text-white"
                       style={{ display: "-webkit-box", WebkitBoxOrient: "vertical", WebkitLineClamp: 2 }}
@@ -256,7 +259,7 @@ export function PublicServicesSection({ procedimentos = [] }) {
                   className="mt-5 h-[5.25rem] text-sm leading-7 text-white/62"
                   style={{ display: "-webkit-box", WebkitBoxOrient: "vertical", WebkitLineClamp: 3, overflow: "hidden" }}
                 >
-                  {item.descricao || "Procedimento com avaliação profissional e orientações personalizadas."}
+                  {item.descricao || `${serviceSingular} com avaliação e orientações personalizadas.`}
                 </p>
                 <span className="mt-3 inline-flex text-xs font-black text-[var(--clinic-accent)]">Ver mais...</span>
                 <div className="mt-auto flex items-end justify-between gap-4 border-t border-white/10 pt-5">
@@ -278,7 +281,7 @@ export function PublicServicesSection({ procedimentos = [] }) {
               type="button"
               onClick={() => navigateServices(-1)}
               className="public-services-arrow pointer-events-auto grid size-12 place-items-center rounded-full border border-white/15 bg-black/72 text-white shadow-[0_16px_42px_rgba(0,0,0,0.42)] backdrop-blur-xl sm:size-14"
-              aria-label="Ver procedimento anterior"
+              aria-label={`Ver ${serviceSingular.toLocaleLowerCase("pt-BR")} anterior`}
             >
               <ChevronLeft className="size-6" aria-hidden="true" />
             </button>
@@ -286,7 +289,7 @@ export function PublicServicesSection({ procedimentos = [] }) {
               type="button"
               onClick={() => navigateServices(1)}
               className="public-services-arrow pointer-events-auto grid size-12 place-items-center rounded-full border border-white/15 bg-black/72 text-white shadow-[0_16px_42px_rgba(0,0,0,0.42)] backdrop-blur-xl sm:size-14"
-              aria-label="Ver próximo procedimento"
+              aria-label={`Ver próximo ${serviceSingular.toLocaleLowerCase("pt-BR")}`}
             >
               <ChevronRight className="size-6" aria-hidden="true" />
             </button>
@@ -319,11 +322,11 @@ export function PublicServicesSection({ procedimentos = [] }) {
                 />
               </div>
               <div className="pr-0 lg:pr-6">
-                <p className="text-xs font-bold uppercase tracking-[0.24em] text-[var(--clinic-accent)]">{selected.categoria || "Procedimento"}</p>
+                <p className="text-xs font-bold uppercase tracking-[0.24em] text-[var(--clinic-accent)]">{selected.categoria || serviceSingular}</p>
                 <h3 className="mt-3 text-4xl font-black tracking-tight">{selected.nome}</h3>
                 <div className="mt-5 rounded-2xl border border-white/10 bg-white/5 p-4">
                   <p className="text-xs uppercase tracking-[0.18em] text-white/42">O que é</p>
-                  <p className="mt-2 whitespace-pre-line text-sm leading-7 text-white/72">{selected.descricao || "Procedimento com avaliação profissional e orientações personalizadas."}</p>
+                  <p className="mt-2 whitespace-pre-line text-sm leading-7 text-white/72">{selected.descricao || `${serviceSingular} com avaliação e orientações personalizadas.`}</p>
                 </div>
                 <div className="mt-6 grid gap-4 sm:grid-cols-2">
                   <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
@@ -332,12 +335,12 @@ export function PublicServicesSection({ procedimentos = [] }) {
                   </div>
                   <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
                     <p className="text-xs uppercase tracking-[0.18em] text-white/42">Cuidados depois</p>
-                    <p className="mt-2 whitespace-pre-line text-sm leading-6 text-white/72">{selected.cuidados_depois || "Após o atendimento, siga as orientações da profissional para melhores resultados."}</p>
+                    <p className="mt-2 whitespace-pre-line text-sm leading-6 text-white/72">{selected.cuidados_depois || `Após o atendimento, siga as orientações do ${professionalLower}.`}</p>
                   </div>
                 </div>
                 <div className="mt-6 flex flex-wrap items-center justify-between gap-4 border-t border-white/10 pt-5">
                   <strong className="text-2xl">{money(displayPrice(selected))}</strong>
-                  <a href="#agendar" onClick={handleBookingClick} className="public-modal-booking-cta relative z-20 inline-flex items-center justify-center rounded-full border border-white/15 bg-[var(--clinic-accent)] px-6 py-3 text-sm font-black text-white shadow-[0_18px_42px_color-mix(in_srgb,var(--clinic-accent)_38%,transparent)] transition duration-300">Agendar este procedimento</a>
+                  <a href="#agendar" onClick={handleBookingClick} className="public-modal-booking-cta relative z-20 inline-flex items-center justify-center rounded-full border border-white/15 bg-[var(--clinic-accent)] px-6 py-3 text-sm font-black text-white shadow-[0_18px_42px_color-mix(in_srgb,var(--clinic-accent)_38%,transparent)] transition duration-300">Agendar este {serviceSingular.toLocaleLowerCase("pt-BR")}</a>
                 </div>
               </div>
             </div>

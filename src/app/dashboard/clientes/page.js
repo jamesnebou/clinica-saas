@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { requireClinicSection } from "@/lib/auth/session";
 import { EmptyClinicState, EmptyState, Field, PageHeader, SubmitButton, TextArea } from "@/components/app-shell/ui";
 import { createClienteAction, deleteClienteAction, updateClienteStatusAction } from "../actions";
+import { getPrimaryClinicSegment } from "@/lib/segments/service";
 
 export const metadata = { title: "Clientes | Clínica SaaS" };
 
@@ -14,6 +15,10 @@ export default async function ClientesPage() {
   }
 
   const supabase = await createClient();
+  const segment = await getPrimaryClinicSegment(activeClinic.id, supabase);
+  const terminology = segment.labels;
+  const clienteLower = terminology.cliente.toLocaleLowerCase("pt-BR");
+  const clientesLower = terminology.clientes.toLocaleLowerCase("pt-BR");
   const { data: clientes = [] } = await supabase
     .from("clientes")
     .select("id, nome, telefone, email, cpf, status, origem, consentimento_lgpd, termo_consentimento_aceito, retorno_recomendado_em, created_at")
@@ -23,11 +28,11 @@ export default async function ClientesPage() {
   return (
     <main className="min-w-0 w-full px-4 py-8 sm:px-6 lg:px-8">
   <section className="w-full min-w-0 max-w-[1480px] mx-auto">
-        <PageHeader eyebrow="Clientes" title="Clientes e leads" description="Cadastro inicial dos clientes da clínica, com consentimento LGPD e origem." />
+        <PageHeader eyebrow={segment.name} title={`${terminology.clientes} e leads`} description={`Cadastro de ${clientesLower}, com consentimento LGPD e origem.`} />
 
         <div className="mt-8 grid gap-6 lg:grid-cols-[420px_1fr]">
           <form action={createClienteAction} className="rounded-lg border border-neutral-200 bg-white p-5 shadow-sm">
-            <h2 className="text-lg font-semibold">Novo cliente</h2>
+            <h2 className="text-lg font-semibold">Novo {clienteLower}</h2>
             <div className="mt-4 space-y-4">
               <Field label="Nome" name="nome" required />
               <Field label="Telefone/WhatsApp" name="telefone" />
@@ -40,17 +45,17 @@ export default async function ClientesPage() {
               <TextArea label="Observações" name="observacoes" />
               <label className="flex items-start gap-3 rounded-lg bg-neutral-50 p-3 text-sm text-neutral-700">
                 <input className="mt-1" name="consentimento_lgpd" type="checkbox" />
-                Cliente autorizou o cadastro e tratamento dos dados pela clínica.
+                {terminology.cliente} autorizou o cadastro e tratamento dos dados pela clínica.
               </label>
-              <SubmitButton>Cadastrar cliente</SubmitButton>
+              <SubmitButton>Cadastrar {clienteLower}</SubmitButton>
             </div>
           </form>
 
           <section className="rounded-lg border border-neutral-200 bg-white p-5 shadow-sm">
-            <h2 className="text-lg font-semibold">Lista de clientes</h2>
+            <h2 className="text-lg font-semibold">Lista de {clientesLower}</h2>
             <div className="mt-4 space-y-3">
               {clientes.length === 0 ? (
-                <EmptyState title="Nenhum cliente cadastrado ainda" description="Cadastre o primeiro cliente para liberar ficha, anamnese, fotos de evolução, histórico de agenda e retorno recomendado." />
+                <EmptyState title={`Nenhum ${clienteLower} cadastrado ainda`} description={`Cadastre o primeiro ${clienteLower} para liberar ficha, ${terminology.anamnese.toLocaleLowerCase("pt-BR")}, histórico de agenda e retorno recomendado.`} />
               ) : clientes.map((cliente) => (
                 <article key={cliente.id} className="rounded-lg border border-neutral-200 p-4">
                   <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
@@ -95,5 +100,4 @@ export default async function ClientesPage() {
     </main>
   );
 }
-
 

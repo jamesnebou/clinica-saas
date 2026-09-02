@@ -24,6 +24,7 @@ import { getAsaasBaseUrl, removeAsaasWebhook, upsertAsaasWebhook, validateAsaasC
 import { getTrustedAppOrigin } from "@/lib/security/app-origin";
 import { normalizeInfinitePayHandle } from "@/lib/infinitepay/client";
 import { emitDomainEvent } from "@/lib/whatsapp/events";
+import { SEGMENT_OPTIONS } from "@/lib/segments/registry";
 import {
   cancelCanonicalReceivableByOrigin,
   syncCanonicalAppointmentPayment,
@@ -1558,6 +1559,17 @@ export async function updateClinicSettingsAction(formData) {
   requireClinicManager(memberships, clinicaId, "/dashboard/configuracoes");
 
   const metadata = activeClinic.metadata || {};
+  const validSegments = new Set(SEGMENT_OPTIONS.map((item) => item.slug));
+  const primarySegment = validSegments.has(text(formData, "segmento_principal"))
+    ? text(formData, "segmento_principal")
+    : (validSegments.has(metadata.primary_segment) ? metadata.primary_segment : "estetica");
+  const [{ data: selectedSegment, error: selectedSegmentError }, { data: previousPrimary }] = await Promise.all([
+    supabaseAdmin.from("segmentos").select("id, slug").eq("slug", primarySegment).maybeSingle(),
+    supabaseAdmin.from("clinica_segmentos").select("segmento_id").eq("clinica_id", clinicaId).eq("principal", true).maybeSingle(),
+  ]);
+  if (selectedSegmentError || !selectedSegment?.id) {
+    redirectWithMessage("/dashboard/configuracoes", "segmento", "Não foi possível validar a área de atuação selecionada.");
+  }
   const logoFile = formData.get("logo_file");
   let uploadedLogo = null;
   const siteUploads = {};
@@ -1597,6 +1609,8 @@ export async function updateClinicSettingsAction(formData) {
 
   const nextMetadata = {
     ...metadata,
+    primary_segment: primarySegment,
+    segments: [...new Set([primarySegment, ...(Array.isArray(metadata.segments) ? metadata.segments.filter((slug) => validSegments.has(slug)) : [])])],
     brand_name: nullableText(formData, "brand_name") || requireValue(text(formData, "nome"), "Informe o nome da clínica."),
     logo_url: uploadedLogo?.publicUrl || metadata.logo_url || "",
     logo_storage_path: uploadedLogo?.path || metadata.logo_storage_path || null,
@@ -1681,6 +1695,23 @@ export async function updateClinicSettingsAction(formData) {
   if (error) throw error;
   if (!updatedClinic?.id) {
     redirectWithMessage("/dashboard/configuracoes", "salvar", "As configurações não foram gravadas. Tente novamente.");
+  }
+
+  const { error: clearPrimaryError } = await supabaseAdmin
+    .from("clinica_segmentos")
+    .update({ principal: false })
+    .eq("clinica_id", clinicaId)
+    .eq("principal", true);
+  if (clearPrimaryError) throw clearPrimaryError;
+
+  const { error: primarySegmentError } = await supabaseAdmin
+    .from("clinica_segmentos")
+    .upsert({ clinica_id: clinicaId, segmento_id: selectedSegment.id, principal: true }, { onConflict: "clinica_id,segmento_id" });
+  if (primarySegmentError) {
+    if (previousPrimary?.segmento_id) {
+      await supabaseAdmin.from("clinica_segmentos").update({ principal: true }).eq("clinica_id", clinicaId).eq("segmento_id", previousPrimary.segmento_id);
+    }
+    throw primarySegmentError;
   }
 
   const { error: integrationError } = await supabaseAdmin

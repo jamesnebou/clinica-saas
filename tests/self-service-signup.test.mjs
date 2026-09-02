@@ -21,6 +21,7 @@ const loginPage = source("src/app/login-cliente/page.js");
 const onboarding = source("src/app/onboarding/actions.js");
 const onboardingPage = source("src/app/onboarding/page.js");
 const homepage = source("src/app/page.js");
+const marketingPortal = source("src/components/marketing/marketing-portal.js");
 const planCta = source("src/components/marketing/plan-cta.js");
 const demoCta = source("src/components/demo/demo-conversion-cta.js");
 const demoRoute = source("src/app/demo/route.js");
@@ -114,12 +115,13 @@ test("redirecionamentos externos e barras invertidas são bloqueados", () => {
 });
 
 test("CTAs de começar apontam para cadastro", () => {
-  assert.match(homepage, /TrackedLink href="\/cadastro" eventName="signup_click"/);
+  assert.match(homepage, /MarketingPortal/);
+  assert.match(marketingPortal, /TrackedLink href="\/cadastro" eventName="signup_click"/);
   assert.match(planCta, /\/cadastro\?plan=/);
 });
 
 test("CTAs demonstrativos continuam apontando para demo", () => {
-  assert.match(homepage, /TrackedLink href="\/demo" eventName="demo_click"/);
+  assert.match(marketingPortal, /TrackedLink href="\/demo" eventName="demo_click"/);
 });
 
 test("login do cliente continua usando signInAction e oferece cadastro", () => {

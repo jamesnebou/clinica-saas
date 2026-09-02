@@ -76,6 +76,7 @@ export async function createClinicAction(_prevState, formData) {
   const validSegments = new Set(SEGMENT_OPTIONS.map((item) => item.slug));
   const primarySegment = validSegments.has(text(formData, "segmento_principal")) ? text(formData, "segmento_principal") : "estetica";
   const additionalSegments = [...new Set(formData.getAll("segmentos_adicionais").map(String).filter((slug) => validSegments.has(slug) && slug !== primarySegment))];
+  const selectedSlugs = [primarySegment, ...additionalSegments];
 
   if (!nome) {
     return { ok: false, message: "Informe o nome da clínica." };
@@ -112,6 +113,8 @@ export async function createClinicAction(_prevState, formData) {
       metadata: {
         selected_plan_intent: selectedPlan,
         signup_source: user.user_metadata?.signup_source || "onboarding",
+        primary_segment: primarySegment,
+        segments: selectedSlugs,
       },
     })
     .select("id")
@@ -138,20 +141,24 @@ export async function createClinicAction(_prevState, formData) {
     return { ok: false, message: membershipError.message || "Clínica criada, mas não foi possível vincular usuário." };
   }
 
-  const selectedSlugs = [primarySegment, ...additionalSegments];
   const { data: segmentRows, error: segmentQueryError } = await supabaseAdmin
     .from("segmentos")
     .select("id, slug")
     .in("slug", selectedSlugs);
 
-  if (!segmentQueryError && segmentRows?.length) {
-    const { error: segmentInsertError } = await supabaseAdmin.from("clinica_segmentos").insert(
-      segmentRows.map((segment) => ({ clinica_id: clinica.id, segmento_id: segment.id, principal: segment.slug === primarySegment })),
-    );
-    if (segmentInsertError) {
-      await supabaseAdmin.from("clinicas").delete().eq("id", clinica.id);
-      return { ok: false, message: "Não foi possível salvar os segmentos da clínica." };
-    }
+  const foundSlugs = new Set((segmentRows || []).map((segment) => segment.slug));
+  const missingSegment = selectedSlugs.some((slug) => !foundSlugs.has(slug));
+  if (segmentQueryError || missingSegment || !foundSlugs.has(primarySegment)) {
+    await supabaseAdmin.from("clinicas").delete().eq("id", clinica.id);
+    return { ok: false, message: "Não foi possível configurar a área de atuação. Tente novamente antes de acessar o sistema." };
+  }
+
+  const { error: segmentInsertError } = await supabaseAdmin.from("clinica_segmentos").insert(
+    segmentRows.map((segment) => ({ clinica_id: clinica.id, segmento_id: segment.id, principal: segment.slug === primarySegment })),
+  );
+  if (segmentInsertError) {
+    await supabaseAdmin.from("clinicas").delete().eq("id", clinica.id);
+    return { ok: false, message: "Não foi possível salvar os segmentos da clínica." };
   }
 
 

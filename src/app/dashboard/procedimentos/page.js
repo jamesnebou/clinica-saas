@@ -2,6 +2,7 @@
 import { requireClinicSection } from "@/lib/auth/session";
 import { EmptyClinicState, EmptyState, Field, PageHeader, SubmitButton, TextArea } from "@/components/app-shell/ui";
 import { createProcedimentoAction, deleteProcedimentoAction, toggleProcedimentoAction, updateProcedimentoAction } from "../actions";
+import { getPrimaryClinicSegment } from "@/lib/segments/service";
 
 export const metadata = { title: "Procedimentos | Clínica SaaS" };
 
@@ -13,6 +14,10 @@ export default async function ProcedimentosPage() {
   }
 
   const supabase = await createClient();
+  const segment = await getPrimaryClinicSegment(activeClinic.id, supabase);
+  const terminology = segment.labels;
+  const procedimentoLower = terminology.procedimento.toLocaleLowerCase("pt-BR");
+  const procedimentosLower = terminology.procedimentos.toLocaleLowerCase("pt-BR");
   const { data: procedimentos = [] } = await supabase
     .from("procedimentos")
     .select("id, nome, categoria, descricao, duracao_minutos, intervalo_minutos, preco, preco_promocional, ativo, publicado_site, destaque_site, sinal_percentual, sinal_valor, ordem_site, cuidados_antes, cuidados_depois, imagem_url, imagem_storage_path")
@@ -22,14 +27,14 @@ export default async function ProcedimentosPage() {
   return (
     <main className="min-w-0 w-full px-4 py-8 sm:px-6 lg:px-8">
   <section className="w-full min-w-0 max-w-[1480px] mx-auto">
-        <PageHeader eyebrow="Serviços" title="Procedimentos" description="Tabela de serviços, duração, preço e orientações." />
+        <PageHeader eyebrow={segment.name} title={terminology.procedimentos} description={`Tabela de ${procedimentosLower}, duração, preço e orientações.`} />
 
         <div className="mt-8 grid gap-6 lg:grid-cols-[420px_1fr]">
           <form action={createProcedimentoAction} className="rounded-lg border border-neutral-200 bg-white p-5 shadow-sm">
-            <h2 className="text-lg font-semibold">Novo procedimento</h2>
+            <h2 className="text-lg font-semibold">Novo {procedimentoLower}</h2>
             <div className="mt-4 space-y-4">
               <Field label="Nome" name="nome" required />
-              <Field label="Categoria" name="categoria" placeholder="Facial, corporal, injetável..." />
+              <Field label="Categoria" name="categoria" placeholder={terminology.categoriaExemplos} />
               <div className="grid gap-4 sm:grid-cols-2">
                 <Field label="Duração (min)" name="duracao_minutos" type="number" defaultValue="60" />
                 <Field label="Intervalo após (min)" name="intervalo_minutos" type="number" defaultValue="0" />
@@ -55,7 +60,7 @@ export default async function ProcedimentosPage() {
               <TextArea label="Cuidados antes" name="cuidados_antes" />
               <TextArea label="Cuidados depois" name="cuidados_depois" />
               <label className="block">
-                <span className="text-sm font-medium text-neutral-700">Imagem do procedimento</span>
+                <span className="text-sm font-medium text-neutral-700">Imagem do {procedimentoLower}</span>
                 <input
                   name="imagem_file"
                   type="file"
@@ -64,15 +69,15 @@ export default async function ProcedimentosPage() {
                 />
                 <span className="mt-2 block text-xs leading-5 text-neutral-500">Opcional. Recomendado: 1200x900 px. Limite máximo de 10 MB.</span>
               </label>
-              <SubmitButton>Cadastrar procedimento</SubmitButton>
+              <SubmitButton>Cadastrar {procedimentoLower}</SubmitButton>
             </div>
           </form>
 
           <section className="rounded-lg border border-neutral-200 bg-white p-5 shadow-sm">
-            <h2 className="text-lg font-semibold">Procedimentos cadastrados</h2>
+            <h2 className="text-lg font-semibold">{terminology.procedimentos} cadastrados</h2>
             <div className="mt-4 space-y-3">
               {procedimentos.length === 0 ? (
-                <EmptyState title="Nenhum procedimento criado" description="Cadastre serviços com duração e preço para acelerar agendamentos, pacotes e faturamento previsto." />
+                <EmptyState title={`Nenhum ${procedimentoLower} criado`} description={`Cadastre ${procedimentosLower} com duração e preço para acelerar agendamentos, pacotes e faturamento previsto.`} />
               ) : procedimentos.map((item) => (
                 <article key={item.id} className="rounded-lg border border-neutral-200 p-4">
                   <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
@@ -102,12 +107,12 @@ export default async function ProcedimentosPage() {
                     </div>
                   </div>
                   <details id={`editar-${item.id}`} className="mt-4 rounded-lg border border-neutral-200 bg-neutral-50 p-4">
-                    <summary className="cursor-pointer text-sm font-bold text-neutral-800">Editar procedimento</summary>
+                    <summary className="cursor-pointer text-sm font-bold text-neutral-800">Editar {procedimentoLower}</summary>
                     <form action={updateProcedimentoAction} className="mt-4 grid gap-4">
                       <input type="hidden" name="id" value={item.id} />
                       <div className="grid gap-4 md:grid-cols-2">
                         <Field label="Nome" name="nome" defaultValue={item.nome || ""} required />
-                        <Field label="Categoria" name="categoria" defaultValue={item.categoria || ""} placeholder="Facial, corporal, injetável..." />
+                        <Field label="Categoria" name="categoria" defaultValue={item.categoria || ""} placeholder={terminology.categoriaExemplos} />
                       </div>
                       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                         <Field label="Duração (min)" name="duracao_minutos" type="number" defaultValue={String(item.duracao_minutos || 60)} />
