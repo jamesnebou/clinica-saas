@@ -4,6 +4,7 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 import { getClinicUsage, getSystemPlans } from "@/lib/saas/plans";
 import { expectedAmount, paidAmount, summarizeFinancialRecords } from "@/lib/domain/finance-core.mjs";
 import { createClinicWithOwnerAction, updateClinicCommercialAction, upsertSystemPlanAction } from "../admin/actions";
+import { ClinicDeleteForm } from "./clinicas/clinic-delete-form";
 
 export function formatMoney(value) {
   return Number(value || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -347,6 +348,11 @@ export function ClinicEditCard({ clinic, plans }) {
           <SubmitButton>Salvar clínica</SubmitButton>
         </div>
       </form>
+      <ClinicDeleteForm
+        clinicId={clinic.id}
+        clinicName={clinic.nome}
+        isProtected={clinic.slug === "demo-nexawi-clinicas"}
+      />
     </details>
   );
 }

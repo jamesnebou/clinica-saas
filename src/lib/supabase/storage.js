@@ -4,6 +4,8 @@ export const CLIENT_PHOTOS_BUCKET = "cliente-fotos";
 export const CLINIC_LOGOS_BUCKET = "clinica-logos";
 export const CLINIC_SITE_IMAGES_BUCKET = "clinica-site-images";
 
+const CLINIC_STORAGE_BUCKETS = [CLIENT_PHOTOS_BUCKET, CLINIC_LOGOS_BUCKET, CLINIC_SITE_IMAGES_BUCKET];
+
 const MAX_CLIENT_PHOTO_BYTES = 10 * 1024 * 1024;
 const MAX_CLINIC_LOGO_BYTES = 30 * 1024 * 1024;
 const MAX_CLINIC_SITE_IMAGE_BYTES = 50 * 1024 * 1024;
@@ -19,6 +21,55 @@ function sanitizeFileName(name = "foto") {
     .replace(/[^a-z0-9._-]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 90) || "foto";
+}
+
+async function listStoragePaths(bucket, prefix) {
+  const paths = [];
+  let offset = 0;
+  let entries = [];
+
+  do {
+    const result = await supabaseAdmin.storage.from(bucket).list(prefix, {
+      limit: 100,
+      offset,
+      sortBy: { column: "name", order: "asc" },
+    });
+
+    if (result.error) throw result.error;
+    entries = result.data || [];
+
+    for (const entry of entries) {
+      const path = `${prefix}/${entry.name}`;
+      if (entry.id || entry.metadata) {
+        paths.push(path);
+      } else {
+        paths.push(...await listStoragePaths(bucket, path));
+      }
+    }
+
+    offset += entries.length;
+  } while (entries.length === 100);
+
+  return paths;
+}
+
+export async function removeClinicStorage({ clinicaId }) {
+  const prefix = String(clinicaId || "").trim();
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(prefix)) {
+    throw new Error("Identificador de clínica inválido para limpeza de arquivos.");
+  }
+
+  const results = await Promise.allSettled(CLINIC_STORAGE_BUCKETS.map(async (bucket) => {
+    const paths = await listStoragePaths(bucket, prefix);
+    for (let index = 0; index < paths.length; index += 100) {
+      const { error } = await supabaseAdmin.storage.from(bucket).remove(paths.slice(index, index + 100));
+      if (error) throw error;
+    }
+  }));
+
+  return {
+    failures: results.flatMap((result, index) => result.status === "rejected" ? [CLINIC_STORAGE_BUCKETS[index]] : []),
+  };
 }
 
 export async function uploadClientPhoto({ clinicaId, clienteId, file }) {

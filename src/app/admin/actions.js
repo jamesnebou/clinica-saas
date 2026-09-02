@@ -2,9 +2,10 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { requireInternalAdmin } from "@/lib/auth/session";
+import { isInternalAdminUser, requireInternalAdmin } from "@/lib/auth/session";
+import { isAsaasNotFoundError, removeAsaasSubscription } from "@/lib/asaas/client";
 import { supabaseAdmin } from "@/lib/supabase/admin";
-import { uploadMarketingHomeImage } from "@/lib/supabase/storage";
+import { removeClinicStorage, uploadMarketingHomeImage } from "@/lib/supabase/storage";
 import { MARKETING_HOME_CONFIG_KEY, normalizeMarketingHomeConfig } from "@/lib/marketing/home-config";
 
 function text(formData, key) {
@@ -209,6 +210,134 @@ export async function updateClinicCommercialAction(formData) {
   revalidatePath("/dashboard-admin/clinicas");
   revalidatePath("/dashboard-admin/alertas");
   revalidatePath("/dashboard");
+}
+
+function deleteClinicError(code) {
+  redirect(`/dashboard-admin/clinicas?erro=${encodeURIComponent(code)}`);
+}
+
+function safeErrorDetails(error) {
+  return {
+    name: error?.name || null,
+    code: error?.code || null,
+    status: error?.status || null,
+  };
+}
+
+export async function deleteClinicAction(formData) {
+  const adminUser = await requireInternalAdmin();
+  const clinicId = text(formData, "clinica_id");
+  const confirmationName = text(formData, "confirm_name");
+  const deletionScope = text(formData, "delete_scope");
+
+  if (!clinicId || !confirmationName || !["clinic", "full"].includes(deletionScope)) {
+    deleteClinicError("dados_invalidos");
+  }
+
+  const { data: clinic, error: clinicError } = await supabaseAdmin
+    .from("clinicas")
+    .select("id,nome,slug,asaas_subscription_id")
+    .eq("id", clinicId)
+    .maybeSingle();
+
+  if (clinicError || !clinic) {
+    console.error("admin_clinic_delete_load_failed", safeErrorDetails(clinicError));
+    deleteClinicError("clinica_nao_encontrada");
+  }
+
+  const { data: readiness, error: readinessError } = await supabaseAdmin.rpc("admin_delete_clinic_v1", {
+    p_clinica_id: clinic.id,
+    p_expected_name: confirmationName,
+    p_execute: false,
+  });
+
+  if (readinessError || readiness?.ready !== true) {
+    console.error("admin_clinic_delete_validation_failed", safeErrorDetails(readinessError));
+    const errorCode = String(readinessError?.message || "").includes("DEMO_CLINIC_PROTECTED")
+      ? "demo_protegida"
+      : String(readinessError?.message || "").includes("CLINIC_CONFIRMATION_MISMATCH")
+        ? "confirmacao_incorreta"
+        : "migration_pendente";
+    deleteClinicError(errorCode);
+  }
+
+  const { data: memberships, error: membershipsError } = await supabaseAdmin
+    .from("usuarios_clinica")
+    .select("user_id")
+    .eq("clinica_id", clinic.id)
+    .not("user_id", "is", null);
+
+  if (membershipsError) {
+    console.error("admin_clinic_delete_memberships_failed", safeErrorDetails(membershipsError));
+    deleteClinicError("membros_indisponiveis");
+  }
+
+  if (clinic.asaas_subscription_id) {
+    try {
+      await removeAsaasSubscription(clinic.asaas_subscription_id);
+    } catch (error) {
+      if (!isAsaasNotFoundError(error)) {
+        console.error("admin_clinic_delete_asaas_failed", safeErrorDetails(error));
+        deleteClinicError("asaas_cancelamento");
+      }
+    }
+  }
+
+  const { data: deletion, error: deletionError } = await supabaseAdmin.rpc("admin_delete_clinic_v1", {
+    p_clinica_id: clinic.id,
+    p_expected_name: confirmationName,
+    p_execute: true,
+  });
+
+  if (deletionError || deletion?.deleted !== true) {
+    console.error("admin_clinic_delete_database_failed", safeErrorDetails(deletionError));
+    deleteClinicError("banco_de_dados");
+  }
+
+  let warnings = 0;
+  const storageResult = await removeClinicStorage({ clinicaId: clinic.id });
+  warnings += storageResult.failures.length;
+
+  if (deletionScope === "full") {
+    const memberUserIds = [...new Set((memberships || []).map((membership) => membership.user_id).filter(Boolean))];
+
+    for (const userId of memberUserIds) {
+      if (userId === adminUser.id) continue;
+
+      const { count, error: countError } = await supabaseAdmin
+        .from("usuarios_clinica")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", userId);
+
+      if (countError) {
+        warnings += 1;
+        console.error("admin_clinic_delete_auth_check_failed", safeErrorDetails(countError));
+        continue;
+      }
+
+      if ((count || 0) === 0) {
+        const { data: authData, error: authLookupError } = await supabaseAdmin.auth.admin.getUserById(userId);
+        if (authLookupError) {
+          warnings += 1;
+          console.error("admin_clinic_delete_auth_lookup_failed", safeErrorDetails(authLookupError));
+          continue;
+        }
+
+        if (isInternalAdminUser(authData?.user)) continue;
+
+        const { error: authError } = await supabaseAdmin.auth.admin.deleteUser(userId);
+        if (authError) {
+          warnings += 1;
+          console.error("admin_clinic_delete_auth_failed", safeErrorDetails(authError));
+        }
+      }
+    }
+  }
+
+  revalidatePath("/admin");
+  revalidatePath("/dashboard-admin");
+  revalidatePath("/dashboard-admin/clinicas");
+  redirect(`/dashboard-admin/clinicas?ok=excluida&scope=${deletionScope}&warnings=${warnings}`);
 }
 
 export async function upsertSystemPlanAction(formData) {
