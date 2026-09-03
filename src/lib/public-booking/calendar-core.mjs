@@ -75,6 +75,11 @@ export function formatBrazilianDate(value) {
   return date ? new Intl.DateTimeFormat("pt-BR", { timeZone: "UTC", dateStyle: "long" }).format(date) : "";
 }
 
+export function formatBrazilianNumericDate(value) {
+  const date = dateFromKey(value);
+  return date ? new Intl.DateTimeFormat("pt-BR", { timeZone: "UTC", day: "2-digit", month: "2-digit", year: "numeric" }).format(date) : "";
+}
+
 export function formatCalendarMonth(value) {
   const match = String(value || "").match(/^(\d{4})-(\d{2})$/);
   if (!match) return "";

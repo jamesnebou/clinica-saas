@@ -183,6 +183,21 @@ export default async function AgendaPage({ searchParams }) {
   const procedimentos = procedimentosResult.data || [];
   const agendamentos = agendamentosResult.data || [];
   const agendamentosSemana = weekResult.data || [];
+  let publicBookingRows = [];
+  if (agendamentos.length) {
+    const publicBookingsResult = await supabase
+      .from("site_agendamentos_publicos")
+      .select("agendamento_id, payload")
+      .eq("clinica_id", activeClinic.id)
+      .in("agendamento_id", agendamentos.map((item) => item.id));
+    publicBookingRows = publicBookingsResult.data || [];
+  }
+  const procedureNamesByAppointment = new Map(publicBookingRows.map((item) => [
+    item.agendamento_id,
+    Array.isArray(item.payload?.procedimentos)
+      ? item.payload.procedimentos.map((procedure) => procedure?.nome).filter(Boolean)
+      : [],
+  ]));
   const faturamentoPrevisto = agendamentos
     .filter((item) => !["cancelado", "faltou"].includes(item.status))
     .reduce((acc, item) => acc + Number(item.valor || 0), 0);
@@ -267,10 +282,14 @@ export default async function AgendaPage({ searchParams }) {
               {agendamentos.length === 0 ? (
                 <EmptyState title="Agenda livre neste dia" description="Crie um atendimento para demonstrar confirmação, status visual, WhatsApp rápido e faturamento previsto." />
               ) : agendamentos.map((item) => {
+                const publicProcedureNames = procedureNamesByAppointment.get(item.id) || [];
+                const procedureText = publicProcedureNames.length
+                  ? publicProcedureNames.join(", ")
+                  : item.procedimentos?.nome || terminology.procedimento;
                 const whatsMessage = fillWhatsAppTemplate(activeClinic.metadata?.whatsapp_mensagem_padrao, {
                   cliente: item.clientes?.nome,
                   data: formatClinicDateTime(item.inicio, timeZone, { dateStyle: "short", timeStyle: "short" }),
-                  procedimento: item.procedimentos?.nome,
+                  procedimento: procedureText,
                 });
                 const whats = whatsappUrl(item.clientes?.telefone, whatsMessage);
                 return (
@@ -278,7 +297,8 @@ export default async function AgendaPage({ searchParams }) {
                     <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
                       <div>
                         <div className="flex flex-wrap items-center gap-2"><h3 className="font-semibold">{item.clientes?.nome || `${terminology.cliente} não informado`}</h3><StatusBadge status={item.status} /><PaymentBadge pagamentoStatus={item.pagamento_status} valorPago={item.valor_pago} /></div>
-                        <p className="mt-1 text-sm text-neutral-600">{item.procedimentos?.nome || terminology.procedimento} com {item.profissionais?.nome || terminology.profissional.toLocaleLowerCase("pt-BR")}</p>
+                        <p className="mt-1 text-sm text-neutral-600">{procedureText} com {item.profissionais?.nome || terminology.profissional.toLocaleLowerCase("pt-BR")}</p>
+                        {publicProcedureNames.length > 1 ? <span className="mt-2 inline-flex rounded-full bg-[color-mix(in_srgb,var(--clinic-accent)_18%,white)] px-2.5 py-1 text-xs font-semibold text-[var(--clinic-primary)]">{publicProcedureNames.length} {terminology.procedimentos.toLocaleLowerCase("pt-BR")}</span> : null}
                         <p className="mt-1 text-xs text-neutral-500">{formatClinicDateTime(item.inicio, timeZone, { hour: "2-digit", minute: "2-digit" })} - {formatClinicDateTime(item.fim, timeZone, { hour: "2-digit", minute: "2-digit" })} · {formatMoney(item.valor)} · recebido {formatMoney(item.valor_pago)}</p>
                       </div>
                       <div className="flex flex-wrap gap-2">

@@ -5,6 +5,7 @@ import {
   buildCalendarMonth,
   clinicDateKey,
   formatBrazilianDate,
+  formatBrazilianNumericDate,
   monthKeyFromDateKey,
   shiftMonthKey,
 } from "../src/lib/public-booking/calendar-core.mjs";
@@ -35,6 +36,7 @@ test("grade mensal possui seis semanas estáveis e datas consecutivas", () => {
 test("formata a data selecionada para português e rejeita entradas inválidas", () => {
   assert.equal(monthKeyFromDateKey("2026-09-15"), "2026-09");
   assert.match(formatBrazilianDate("2026-09-15"), /15 de setembro de 2026/);
+  assert.equal(formatBrazilianNumericDate("2026-09-15"), "15/09/2026");
   assert.equal(addDaysToDateKey("2026-02-31", 1), "");
   assert.deepEqual(buildCalendarMonth("2026-13"), []);
 });

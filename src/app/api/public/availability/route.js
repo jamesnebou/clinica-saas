@@ -11,6 +11,7 @@ import {
   weekdayFromDateKey,
 } from "@/lib/clinic/schedule";
 import { intervalsOverlap, totalAppointmentMinutes } from "@/lib/domain/schedule-core.mjs";
+import { buildCalendarMonth, shiftMonthKey } from "@/lib/public-booking/calendar-core.mjs";
 
 function pad(value) {
   return String(value).padStart(2, "0");
@@ -33,6 +34,47 @@ function overlaps(startMinutes, endMinutes, booking, date, timeZone) {
   return intervalsOverlap(startMinutes, endMinutes, bookingStart, bookingEnd);
 }
 
+function slotsForDate({ date, schedule, timeZone, duration, profissionais, bookings, now }) {
+  const inactiveDate = inactiveDateFor(schedule, date, timeZone);
+  if (inactiveDate) return { slots: [], message: inactiveDate.motivo || "Clínica sem atendimento nesta data." };
+
+  const periods = getWorkingPeriods(schedule, weekdayFromDateKey(date));
+  if (!periods.length) return { slots: [], message: "A clínica não atende nesta data." };
+  if (!periods.some((period) => period.end >= period.start + duration)) {
+    return { slots: [], message: "Expediente insuficiente para os procedimentos selecionados." };
+  }
+
+  const bookingsByProfessional = new Map();
+  bookings.forEach((booking) => {
+    const current = bookingsByProfessional.get(booking.profissional_id) || [];
+    current.push(booking);
+    bookingsByProfessional.set(booking.profissional_id, current);
+  });
+
+  const slots = [];
+  for (const period of periods) {
+    for (let minutes = period.start; minutes + duration <= period.end; minutes += 30) {
+      const value = localDateTime(date, minutes);
+      const slotDate = dateFromClinicLocal(value, timeZone);
+      if (!slotDate || slotDate <= now) continue;
+
+      const availableProfessional = profissionais.find((professional) => (
+        !(bookingsByProfessional.get(professional.id) || []).some((booking) => overlaps(minutes, minutes + duration, booking, date, timeZone))
+      ));
+      if (!availableProfessional) continue;
+
+      slots.push({
+        value,
+        label: `${pad(Math.floor(minutes / 60))}:${pad(minutes % 60)}`,
+        profissional_id: availableProfessional.id,
+        profissional_nome: availableProfessional.nome,
+      });
+    }
+  }
+
+  return { slots, message: slots.length ? "" : "Nenhum horário disponível para esta data." };
+}
+
 export async function GET(request) {
   const { searchParams } = new URL(request.url);
   const slug = String(searchParams.get("slug") || "").trim();
@@ -42,8 +84,11 @@ export async function GET(request) {
   ].map((item) => String(item || "").trim()).filter(Boolean)));
   const profissionalId = String(searchParams.get("profissional_id") || "").trim();
   const date = String(searchParams.get("date") || "").trim();
+  const month = String(searchParams.get("month") || "").trim();
+  const validDate = /^\d{4}-\d{2}-\d{2}$/.test(date);
+  const validMonth = /^\d{4}-\d{2}$/.test(month);
 
-  if (!slug || !procedimentoIds.length || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+  if (!slug || !procedimentoIds.length || (!validDate && !validMonth)) {
     return NextResponse.json({ slots: [], message: "Parametros invalidos." }, { status: 400 });
   }
 
@@ -85,28 +130,17 @@ export async function GET(request) {
 
   const schedule = clinic.metadata?.horario_funcionamento || {};
   const timeZone = clinicTimeZone(clinic);
-  const inactiveDate = inactiveDateFor(schedule, date, timeZone);
-  if (inactiveDate) {
-    return NextResponse.json({ slots: [], message: inactiveDate.motivo || "Clínica sem atendimento nesta data." });
-  }
-
-  const day = weekdayFromDateKey(date);
-  const periods = getWorkingPeriods(schedule, day);
-
-  if (!periods.length) {
-    return NextResponse.json({ slots: [], message: "A clínica não atende nesta data." });
-  }
-
   const duration = totalAppointmentMinutes(procedimentos, { defaultDuration: 60, includeIntervals: true });
-
-  if (!periods.some((period) => period.end >= period.start + duration)) {
-    return NextResponse.json({ slots: [], message: "Expediente insuficiente para os procedimentos selecionados." });
-  }
-
-  const dateRange = utcRangeForClinicDate(date, timeZone);
-  if (!dateRange) {
-    return NextResponse.json({ slots: [], message: "Data inválida." }, { status: 400 });
-  }
+  const dates = validMonth
+    ? buildCalendarMonth(month).filter((day) => day.inMonth).map((day) => day.date)
+    : [date];
+  const firstDate = dates[0];
+  const nextMonth = validMonth ? shiftMonthKey(month, 1) : "";
+  const startRange = utcRangeForClinicDate(firstDate, timeZone);
+  const endRange = validMonth
+    ? utcRangeForClinicDate(`${nextMonth}-01`, timeZone)
+    : utcRangeForClinicDate(date, timeZone);
+  if (!startRange || !endRange) return NextResponse.json({ slots: [], message: "Data inválida." }, { status: 400 });
 
   const { data: bookings = [], error: bookingsError } = await supabaseAdmin
     .from("agendamentos")
@@ -114,36 +148,31 @@ export async function GET(request) {
     .eq("clinica_id", clinic.id)
     .in("profissional_id", profissionais.map((item) => item.id))
     .not("status", "eq", "cancelado")
-    .gte("inicio", dateRange.start.toISOString())
-    .lt("inicio", dateRange.end.toISOString());
+    .gte("inicio", startRange.start.toISOString())
+    .lt("inicio", validMonth ? endRange.start.toISOString() : endRange.end.toISOString());
 
   if (bookingsError) throw bookingsError;
 
   const now = new Date();
-  const slots = [];
-
-  for (const period of periods) {
-    for (let minutes = period.start; minutes + duration <= period.end; minutes += 30) {
-      const value = localDateTime(date, minutes);
-      const slotDate = dateFromClinicLocal(value, timeZone);
-      if (!slotDate) continue;
-      if (slotDate <= now) continue;
-
-      const availableProfessional = profissionais.find((professional) => {
-        const professionalBookings = bookings.filter((booking) => booking.profissional_id === professional.id);
-        return !professionalBookings.some((booking) => overlaps(minutes, minutes + duration, booking, date, timeZone));
-      });
-
-      if (!availableProfessional) continue;
-
-      slots.push({
-        value,
-        label: `${pad(Math.floor(minutes / 60))}:${pad(minutes % 60)}`,
-        profissional_id: availableProfessional.id,
-        profissional_nome: availableProfessional.nome,
-      });
-    }
+  if (validMonth) {
+    const bookingsByDate = new Map();
+    bookings.forEach((booking) => {
+      const bookingDate = dateKeyInTimeZone(new Date(booking.inicio), timeZone);
+      const current = bookingsByDate.get(bookingDate) || [];
+      current.push(booking);
+      bookingsByDate.set(bookingDate, current);
+    });
+    const availableDates = dates.filter((item) => slotsForDate({
+      date: item,
+      schedule,
+      timeZone,
+      duration,
+      profissionais,
+      bookings: bookingsByDate.get(item) || [],
+      now,
+    }).slots.length > 0);
+    return NextResponse.json({ available_dates: availableDates });
   }
 
-  return NextResponse.json({ slots });
+  return NextResponse.json(slotsForDate({ date, schedule, timeZone, duration, profissionais, bookings, now }));
 }
