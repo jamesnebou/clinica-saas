@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { after, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import {
+  allowsMarketing,
   cleanText,
   isValidMetaEventId,
   normalizeMarketingAttribution,
@@ -13,6 +14,7 @@ export const runtime = "nodejs";
 
 const EVENTS = new Set([
   "landing_view",
+  "cta_click",
   "demo_click",
   "demo_access",
   "pricing_click",
@@ -23,6 +25,8 @@ const EVENTS = new Set([
   "demo_cta_click",
   "hero_secondary_click",
   "signup_click",
+  "signup_started",
+  "signup_completed",
 ]);
 
 function requestIp(request) {
@@ -51,24 +55,30 @@ export async function POST(request) {
     const page = cleanText(body.page, 500) || attribution.last_touch?.landing_page || attribution.first_page || "/";
     const eventId = isValidMetaEventId(body.meta_event_id) ? body.meta_event_id : null;
 
-    const { error } = await supabaseAdmin.from("clinica_marketing_eventos").insert({
-      event_name: body.event_name,
-      session_id: cleanText(body.session_id, 100),
-      pagina: page,
-      referrer: cleanText(body.referrer, 500),
-      utm_source: attribution.utm_source || null,
-      utm_medium: attribution.utm_medium || null,
-      utm_campaign: attribution.utm_campaign || null,
-      utm_content: attribution.utm_content || null,
-      utm_term: attribution.utm_term || null,
-      metadata: { ...metadata, ...(eventId ? { meta_event_id: eventId } : {}) },
-      ip_hash: ipHash,
-    });
-    if (error) throw error;
+    if (body.external_only !== true) {
+      const { error } = await supabaseAdmin.from("clinica_marketing_eventos").insert({
+        event_name: body.event_name,
+        session_id: cleanText(body.session_id, 100),
+        pagina: page,
+        referrer: cleanText(body.referrer, 500),
+        utm_source: attribution.utm_source || null,
+        utm_medium: attribution.utm_medium || null,
+        utm_campaign: attribution.utm_campaign || null,
+        utm_content: attribution.utm_content || null,
+        utm_term: attribution.utm_term || null,
+        gclid: attribution.gclid || null,
+        gbraid: attribution.gbraid || null,
+        wbraid: attribution.wbraid || null,
+        consent: attribution.consent,
+        metadata: { ...metadata, ...(eventId ? { meta_event_id: eventId } : {}) },
+        ip_hash: ipHash,
+      });
+      if (error) throw error;
+    }
 
     // Somente a visualização de uma superfície de aquisição vira evento padrão Meta aqui.
     // Eventos internos como demo_click/pricing_click continuam apenas no analytics da NexaWi.
-    if (body.event_name === "landing_view" && eventId) {
+    if (body.event_name === "landing_view" && eventId && allowsMarketing(attribution)) {
       const viewInput = {
         eventName: "ViewContent",
         eventId,

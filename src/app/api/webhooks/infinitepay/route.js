@@ -99,6 +99,10 @@ async function updateBooking({ id, payload }) {
     infinitepay_verificacao: verified.verification,
   };
 
+  await syncCanonicalAppointmentPayment({ clinicId: booking.clinica_id, appointmentId: booking.agendamento_id,
+    value: Number(booking.valor_total || booking.valor_sinal || 0), paidValue: Number(booking.valor_sinal || 0),
+    clientId: booking.cliente_id, professionalId: booking.profissional_id, procedureId: booking.procedimento_id, description: "Sinal de agendamento",
+    provider: "infinitepay", providerReference: verified.transactionNsu || verified.orderNsu, paidAt, paymentMethod: "infinitepay", metadata: { webhook: true } });
   const { error: bookingError } = await supabaseAdmin
     .from("site_agendamentos_publicos")
     .update({
@@ -111,23 +115,6 @@ async function updateBooking({ id, payload }) {
     })
     .eq("id", booking.id);
   if (bookingError) throw bookingError;
-
-  const { error: agendaError } = await supabaseAdmin
-    .from("agendamentos")
-    .update({
-      pagamento_status: "parcial",
-      forma_pagamento: "outro",
-      valor_pago: Number(booking.valor_sinal || 0),
-      data_pagamento: paidAt,
-      status: "confirmado",
-    })
-    .eq("id", booking.agendamento_id)
-    .eq("clinica_id", booking.clinica_id);
-  if (agendaError) throw agendaError;
-  await syncCanonicalAppointmentPayment({ clinicId: booking.clinica_id, appointmentId: booking.agendamento_id,
-    value: Number(booking.valor_total || booking.valor_sinal || 0), paidValue: Number(booking.valor_sinal || 0),
-    clientId: booking.cliente_id, professionalId: booking.profissional_id, procedureId: booking.procedimento_id, description: "Sinal de agendamento",
-    provider: "infinitepay", providerReference: verified.transactionNsu || verified.orderNsu, paidAt, paymentMethod: "infinitepay", metadata: { webhook: true } });
   await notifyPublicBookingPaymentConfirmedById(booking.id).catch((notificationError) => {
     console.error("Erro ao enviar confirmação de pagamento da InfinitePay:", notificationError);
   });
@@ -178,33 +165,10 @@ async function updateStoreOrder({ id, payload }) {
   }).eq("id", order.id).eq("clinica_id", order.clinica_id);
   if (updateError) throw updateError;
 
-  const { error: confirmError } = await supabaseAdmin.rpc("confirmar_pagamento_pedido_loja", {
-    p_pedido_id: order.id,
-    p_asaas_payment_id: null,
-    p_payload: storedPayload,
-    p_pago_em: paidAt,
-  });
-  if (confirmError) throw confirmError;
-
   const captureMethod = String(verified.verification?.capture_method || payload?.capture_method || "").toUpperCase();
-  const { error: paymentError } = await supabaseAdmin.from("pagamentos_loja_clinica").upsert({
-    clinica_id: order.clinica_id,
-    cliente_id: order.cliente_id,
-    pedido_id: order.id,
-    valor: Number(order.total || 0),
-    forma: captureMethod.includes("PIX") ? "pix" : "cartao_credito",
-    status: "pago",
-    provedor: "infinitepay",
-    provedor_pagamento_id: verified.transactionNsu,
-    link_pagamento: verified.receiptUrl || null,
-    pago_em: paidAt,
-    payload: storedPayload,
-    observacoes: "Pagamento confirmado pela verificação oficial da InfinitePay.",
-  }, { onConflict: "clinica_id,provedor,provedor_pagamento_id" });
-  if (paymentError) throw paymentError;
   await syncCanonicalOrderPayment({ clinicId: order.clinica_id, orderId: order.id, value: Number(order.total || 0),
     paidValue: Number(order.total || 0), clientId: order.cliente_id, description: `Pedido ${order.id}`, provider: "infinitepay",
-    providerReference: verified.transactionNsu || verified.orderNsu, paidAt, paymentMethod: captureMethod.includes("PIX") ? "pix" : "cartao_credito", metadata: { webhook: true } });
+    providerReference: verified.transactionNsu || verified.orderNsu, paidAt, paymentMethod: captureMethod.includes("PIX") ? "pix" : "cartao_credito", metadata: { webhook: true, payload: storedPayload } });
   return true;
 }
 

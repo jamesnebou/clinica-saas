@@ -1,57 +1,70 @@
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { isFinanceSchemaMissing } from "@/lib/finance/service";
 
-async function defaults(clinicId, categoryCode) {
-  const [category, account, center] = await Promise.all([
-    supabaseAdmin.from("finance_categorias").select("id").eq("clinica_id",clinicId).eq("codigo",categoryCode).maybeSingle(),
-    supabaseAdmin.from("finance_contas").select("id").eq("clinica_id",clinicId).eq("padrao",true).eq("ativa",true).maybeSingle(),
-    supabaseAdmin.from("finance_centros_custo").select("id").eq("clinica_id",clinicId).eq("codigo","CLINICA").maybeSingle(),
-  ]);
-  const error=[category.error,account.error,center.error].find(Boolean);
-  if(error) throw error;
-  return {categoryId:category.data?.id,accountId:account.data?.id,centerId:center.data?.id};
-}
-
-async function syncCanonical({clinicId,originType,originId,description,value,paidValue,clientId,professionalId,procedureId,appointmentId,orderId,categoryCode,provider,providerReference,paidAt,paymentMethod,metadata}) {
+export async function syncCanonicalAppointmentPayment({clinicId,appointmentId,value,paidValue,clientId,professionalId,procedureId,description,provider,providerReference,paidAt,paymentMethod,metadata}) {
+  void clientId; void professionalId; void procedureId;
   try {
-    const d=await defaults(clinicId,categoryCode);
-    if(!d.categoryId) throw new Error(`Categoria financeira ${categoryCode} não configurada.`);
-    const dueDate=(paidAt||new Date().toISOString()).slice(0,10);
-    const {data:receivable,error}=await supabaseAdmin.from("finance_recebiveis").upsert({clinica_id:clinicId,cliente_id:clientId||null,profissional_id:professionalId||null,procedimento_id:procedureId||null,agendamento_id:appointmentId||null,pedido_id:orderId||null,categoria_id:d.categoryId,centro_custo_id:d.centerId||null,descricao:description,origem_tipo:originType,origem_id:String(originId),valor_original:Number(value||0),vencimento:dueDate,provider:provider||null,provider_reference:providerReference||null,metadata:{...(metadata||{}),dual_write:true}},{onConflict:"clinica_id,origem_tipo,origem_id"}).select("id,valor_total,valor_recebido,status").single();
-    if(error) throw error;
-    const {data:installment,error:installmentReadError}=await supabaseAdmin.from("finance_recebivel_parcelas").select("id").eq("clinica_id",clinicId).eq("recebivel_id",receivable.id).eq("numero",1).maybeSingle();
-    if(installmentReadError) throw installmentReadError;
-    if(!installment && Number(receivable.valor_total||0)>0) {
-      const {error:installmentError}=await supabaseAdmin.from("finance_recebivel_parcelas").insert({clinica_id:clinicId,recebivel_id:receivable.id,numero:1,vencimento:dueDate,valor:Number(receivable.valor_total||0)});
-      if(installmentError && installmentError.code!=="23505") throw installmentError;
-    }
-    if(receivable.status==="cancelado") {
-      const {error:reopenError}=await supabaseAdmin.from("finance_recebiveis").update({status:"aberto"}).eq("clinica_id",clinicId).eq("id",receivable.id);
-      if(reopenError) throw reopenError;
-      receivable.status="aberto";
-    }
-    const open=Math.max(0,Number(receivable.valor_total||0)-Number(receivable.valor_recebido||0));
-    const amount=Math.min(open,Number(paidValue||0));
-    if(amount<=0) return {receivableId:receivable.id,settled:false};
-    const {error:settleError}=await supabaseAdmin.rpc("finance_liquidar_recebivel",{p_clinica_id:clinicId,p_recebivel_id:receivable.id,p_valor:amount,p_conta_id:d.accountId||null,p_forma_pagamento:paymentMethod||null,p_data_liquidacao:paidAt||new Date().toISOString(),p_taxa:0,p_provider:provider||null,p_provider_reference:providerReference||null,p_idempotency_key:`${provider||"manual"}:${providerReference||originType+":"+originId}:${amount}`,p_metadata:{...(metadata||{}),dual_write:true}});
-    if(settleError) throw settleError;
-    return {receivableId:receivable.id,settled:true};
-  } catch(error) {
-    if(isFinanceSchemaMissing(error)) return {skipped:true,reason:"schema_missing"};
+    const { data, error } = await supabaseAdmin.rpc("finance_registrar_pagamento_agendamento_v2", {
+      p_clinica_id: clinicId,
+      p_agendamento_id: appointmentId,
+      p_valor_total: Number(value || 0),
+      p_valor_pago: Number(paidValue || 0),
+      p_descricao: description || "Atendimento",
+      p_provider: provider || "manual",
+      p_provider_reference: providerReference || `agendamento:${appointmentId}:${paidValue}`,
+      p_pago_em: paidAt || new Date().toISOString(),
+      p_forma_pagamento: paymentMethod || null,
+      p_metadata: { ...(metadata || {}), canonical: true },
+    });
+    if (error) throw error;
+    return data;
+  } catch (error) {
+    if (isFinanceSchemaMissing(error)) return { skipped: true, reason: "schema_missing" };
     throw error;
   }
 }
+export async function setCanonicalAppointmentPayment({clinicId,appointmentId,value,paidValue,description,paidAt,paymentMethod,metadata}) {
+  const { data, error } = await supabaseAdmin.rpc("finance_definir_pagamento_agendamento_v2", {
+    p_clinica_id: clinicId,
+    p_agendamento_id: appointmentId,
+    p_valor_total: Number(value || 0),
+    p_valor_pago_acumulado: Number(paidValue || 0),
+    p_descricao: description || "Atendimento",
+    p_pago_em: paidAt || new Date().toISOString(),
+    p_forma_pagamento: paymentMethod || null,
+    p_metadata: { ...(metadata || {}), canonical: true },
+  });
+  if (error) throw error;
+  return data;
+}
 
-export async function syncCanonicalAppointmentPayment({clinicId,appointmentId,value,paidValue,clientId,professionalId,procedureId,description,provider,providerReference,paidAt,paymentMethod,metadata}) {
-  return syncCanonical({clinicId,originType:"agendamento",originId:appointmentId,description:description||"Atendimento",value,paidValue,clientId,professionalId,procedureId,appointmentId,categoryCode:"REC_SERVICOS",provider,providerReference,paidAt,paymentMethod,metadata});
+export async function cancelCanonicalAppointmentPayment({clinicId,appointmentId,reason}) {
+  const { data, error } = await supabaseAdmin.rpc("finance_cancelar_pagamento_agendamento_v2", {
+    p_clinica_id: clinicId,
+    p_agendamento_id: appointmentId,
+    p_motivo: reason || "Cancelamento do pagamento",
+  });
+  if (error) throw error;
+  return data;
 }
 export async function syncCanonicalOrderPayment({clinicId,orderId,value,paidValue,clientId,description,provider,providerReference,paidAt,paymentMethod,metadata}) {
-  return syncCanonical({clinicId,originType:"ecommerce",originId:orderId,description:description||`Pedido ${orderId}`,value,paidValue,clientId,orderId,categoryCode:"REC_PRODUTOS",provider,providerReference,paidAt,paymentMethod,metadata});
-}
-export async function syncCanonicalPackagePayment({clinicId,clientPackageId,value,paidValue,clientId,description,paidAt,paymentMethod,metadata}) {
-  return syncCanonical({clinicId,originType:"cliente_pacote",originId:clientPackageId,description, value,paidValue,clientId,categoryCode:"REC_PACOTES",provider:"manual",providerReference:`pacote:${clientPackageId}:${paidValue}`,paidAt,paymentMethod,metadata:{...(metadata||{}),cliente_pacote_id:clientPackageId}});
+  void paidValue; void clientId; void description;
+  const { data, error } = await supabaseAdmin.rpc("finance_registrar_pagamento_pedido_v2", {
+    p_clinica_id: clinicId, p_pedido_id: orderId, p_valor: Number(value || 0), p_provider: provider,
+    p_provider_reference: providerReference, p_pago_em: paidAt || new Date().toISOString(),
+    p_forma: paymentMethod || "link", p_payload: metadata || {},
+  });
+  if (error) throw error;
+  return data;
 }
 
+export async function cancelCanonicalOrderPayment({clinicId,orderId,reason,refund=false}) {
+  const { data, error } = await supabaseAdmin.rpc("finance_cancelar_pagamento_pedido_v2", {
+    p_clinica_id: clinicId, p_pedido_id: orderId, p_motivo: reason, p_estorno: refund,
+  });
+  if (error) throw error;
+  return data;
+}
 export async function cancelCanonicalReceivableByOrigin({clinicId,originType,originId,reason}) {
   try {
     const { data, error } = await supabaseAdmin.rpc("finance_cancelar_recebivel_origem", {

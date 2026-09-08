@@ -8,6 +8,7 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 import { decryptClinicSecrets } from "@/lib/security/clinic-secrets";
 import { refundAsaasPayment } from "@/lib/asaas/client";
 import { getTrustedAppOrigin } from "@/lib/security/app-origin";
+import { cancelCanonicalOrderPayment, syncCanonicalOrderPayment } from "@/lib/finance/canonical";
 
 function text(formData, key, max = 500) {
   return String(formData.get(key) || "").trim().slice(0, max);
@@ -67,27 +68,13 @@ export async function confirmPickupPaymentAction(formData) {
   if (order.pagamento_status === "pago") redirectMessage("ok", "Este pedido já está pago.");
 
   const manualId = `retirada:${id}`;
-  const { error: rpcError } = await supabaseAdmin.rpc("confirmar_pagamento_pedido_loja", {
-    p_pedido_id: id,
-    p_asaas_payment_id: null,
-    p_payload: { origem: "dashboard", forma: "retirada" },
-    p_pago_em: new Date().toISOString(),
-  });
-  if (rpcError) redirectMessage("erro", rpcError.message);
-
-  const { error: paymentError } = await supabaseAdmin.from("pagamentos_loja_clinica").upsert({
-    clinica_id: clinicId,
-    cliente_id: order.cliente_id,
-    pedido_id: id,
-    valor: order.total,
-    forma: "dinheiro",
-    status: "pago",
-    provedor: "manual",
-    provedor_pagamento_id: manualId,
-    pago_em: new Date().toISOString(),
-    observacoes: "Pagamento na retirada confirmado pelo dashboard.",
-  }, { onConflict: "clinica_id,provedor,provedor_pagamento_id" });
-  if (paymentError) redirectMessage("erro", paymentError.message);
+  try {
+    await syncCanonicalOrderPayment({ clinicId, orderId: id, value: order.total, paidValue: order.total,
+      clientId: order.cliente_id, provider: "manual", providerReference: manualId,
+      paidAt: new Date().toISOString(), paymentMethod: "dinheiro", metadata: { origem: "dashboard", forma: "retirada" } });
+  } catch (paymentError) {
+    redirectMessage("erro", paymentError.message);
+  }
   revalidatePath("/dashboard/pedidos");
   revalidatePath("/dashboard/produtos");
   redirectMessage("ok", "Pagamento confirmado e estoque baixado.");
@@ -109,8 +96,7 @@ export async function requestStoreOrderRefundAction(formData) {
   try {
     const result = await refundAsaasPayment(order.asaas_payment_id, { clinica_id: clinicId, asaas_ativo: true, baseUrl: integration.asaas_configuracao_publica?.baseUrl || integration.asaas_base_url, apiKey });
     if (String(result?.status || "").toUpperCase() === "REFUNDED") {
-      const { error: refundError } = await supabaseAdmin.rpc("estornar_pedido_loja", { p_pedido_id: id, p_motivo: "Estorno confirmado pelo Asaas." });
-      if (refundError) throw refundError;
+      await cancelCanonicalOrderPayment({ clinicId, orderId: id, reason: "Estorno confirmado pelo Asaas.", refund: true });
     } else {
       await supabaseAdmin.from("pedidos_clinica").update({ observacoes: [order.observacoes, "Estorno solicitado ao Asaas; aguardando confirmação."].filter(Boolean).join("\n") }).eq("id", id);
     }

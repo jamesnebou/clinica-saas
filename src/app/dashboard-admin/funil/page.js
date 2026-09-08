@@ -8,6 +8,9 @@ export default async function DashboardAdminFunilPage() {
   const stats = getOverviewStats({ clinics, plans, analytics });
   const marketingLeads = analytics.marketingLeads.slice(0, 100);
   const recentCrm = analytics.crm.slice(0, 40);
+  const metaPending = analytics.metaEvents.filter((item) => ["pending", "processing", "retry"].includes(item.status)).length;
+  const metaDead = analytics.metaEvents.filter((item) => item.status === "dead").length;
+  const googleReady = analytics.googleEvents.filter((item) => item.status === "ready").length;
 
   return (
     <div className="space-y-6">
@@ -33,6 +36,12 @@ export default async function DashboardAdminFunilPage() {
             <strong className="mt-2 block text-2xl font-black">{value}</strong>
           </div>
         ))}
+      </section>
+
+      <section className="grid gap-3 rounded-[1.75rem] border border-neutral-200 bg-white p-5 shadow-sm sm:grid-cols-3">
+        <div><p className="text-xs font-black uppercase tracking-wider text-neutral-400">Meta pendentes/retry</p><strong className="mt-2 block text-2xl font-black">{metaPending}</strong></div>
+        <div><p className="text-xs font-black uppercase tracking-wider text-neutral-400">Meta encerrados com erro</p><strong className={`mt-2 block text-2xl font-black ${metaDead ? "text-red-600" : "text-neutral-950"}`}>{metaDead}</strong></div>
+        <div><p className="text-xs font-black uppercase tracking-wider text-neutral-400">Google offline preparados</p><strong className="mt-2 block text-2xl font-black">{googleReady}</strong></div>
       </section>
 
       <section className="rounded-[1.75rem] border border-neutral-200 bg-white p-5 shadow-sm">
@@ -72,6 +81,9 @@ export default async function DashboardAdminFunilPage() {
               <div className="mt-3 flex flex-wrap gap-3 text-xs text-neutral-500">
                 <span>{lead.profissionais_qtd} {lead.profissionais_qtd === 1 ? "profissional" : "profissionais"}</span>
                 <span>{lead.utm_campaign ? `Campanha: ${lead.utm_campaign}` : "Sem campanha"}</span>
+                <span>{lead.gclid || lead.gbraid || lead.wbraid ? "Clique Google atribuído" : "Sem ID de clique Google"}</span>
+                <span>{lead.consent?.marketing ? "Marketing autorizado" : "Marketing não autorizado"}</span>
+                <span>{lead.registered_clinica_id ? "Clínica criada" : "Ainda não cadastrado"}</span>
                 <span>{formatDate(lead.created_at)}</span>
               </div>
             </details>

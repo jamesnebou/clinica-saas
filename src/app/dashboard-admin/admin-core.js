@@ -120,7 +120,7 @@ export async function loadAdminAnalytics() {
   const nextMonthStart = nextMonthStartISO();
   const last30Days = daysAgoISO(30);
 
-  const [siteBookings, crm, appointments, asaasCharges, users, payments, clients, marketingLeads, marketingEvents] = await Promise.all([
+  const [siteBookings, crm, appointments, asaasCharges, users, payments, clients, marketingLeads, marketingEvents, metaEvents, googleEvents] = await Promise.all([
     supabaseAdmin
       .from("site_agendamentos_publicos")
       .select("id, clinica_id, nome, telefone, pagamento_status, valor_total, valor_sinal, invoice_url, created_at")
@@ -149,13 +149,16 @@ export async function loadAdminAnalytics() {
     supabaseAdmin.from("usuarios_clinica").select("id, clinica_id, email, ativo, accepted_at, created_at").order("created_at", { ascending: false }).limit(1200),
     supabaseAdmin.from("pagamentos_clinica").select("id, clinica_id, status, valor, valor_pago, created_at, data_pagamento").gte("created_at", last30Days).order("created_at", { ascending: false }).limit(1200),
     supabaseAdmin.from("clientes").select("id, clinica_id, status, origem, created_at").gte("created_at", last30Days).order("created_at", { ascending: false }).limit(1200),
-    supabaseAdmin.from("clinica_marketing_leads").select("id, nome, whatsapp, email, clinica_nome, profissionais_qtd, plano_interesse, origem, status, observacoes, utm_source, utm_medium, utm_campaign, pagina, created_at").order("created_at", { ascending: false }).limit(1200),
-    supabaseAdmin.from("clinica_marketing_eventos").select("id, event_name, session_id, lead_id, pagina, utm_source, utm_medium, utm_campaign, metadata, created_at").gte("created_at", last30Days).order("created_at", { ascending: false }).limit(3000),
+    supabaseAdmin.from("clinica_marketing_leads").select("id, nome, whatsapp, email, clinica_nome, profissionais_qtd, plano_interesse, origem, status, observacoes, utm_source, utm_medium, utm_campaign, gclid, gbraid, wbraid, consent, registered_clinica_id, pagina, created_at").order("created_at", { ascending: false }).limit(1200),
+    supabaseAdmin.from("clinica_marketing_eventos").select("id, event_name, session_id, lead_id, pagina, utm_source, utm_medium, utm_campaign, gclid, gbraid, wbraid, consent, metadata, created_at").gte("created_at", last30Days).order("created_at", { ascending: false }).limit(3000),
+    supabaseAdmin.from("meta_conversion_events").select("id, event_name, status, created_at").gte("created_at", last30Days).order("created_at", { ascending: false }).limit(3000),
+    supabaseAdmin.from("google_offline_conversion_events").select("id, event_name, status, created_at").gte("created_at", last30Days).order("created_at", { ascending: false }).limit(3000),
   ]);
 
-  for (const result of [siteBookings, crm, appointments, asaasCharges, users, payments, clients, marketingLeads, marketingEvents]) {
+  for (const result of [siteBookings, crm, appointments, asaasCharges, users, payments, clients, marketingLeads, marketingEvents, metaEvents]) {
     if (result.error) throw result.error;
   }
+  if (googleEvents.error && !["42P01", "PGRST205"].includes(googleEvents.error.code)) throw googleEvents.error;
 
   return {
     siteBookings: siteBookings.data || [],
@@ -167,6 +170,8 @@ export async function loadAdminAnalytics() {
     clients: clients.data || [],
     marketingLeads: marketingLeads.data || [],
     marketingEvents: marketingEvents.data || [],
+    metaEvents: metaEvents.data || [],
+    googleEvents: googleEvents.data || [],
   };
 }
 

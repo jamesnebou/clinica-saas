@@ -13,6 +13,7 @@ const authSession = source("src/lib/auth/session.js");
 const clinicActions = source("src/app/dashboard/clinic-actions.js");
 const publicBookingActions = source("src/app/c/[slug]/actions.js");
 const hardeningMigration = source("supabase/migrations/20260901100000_auth_rpc_security_hardening.sql");
+const phase0bMigration = source("supabase/migrations/20260908100000_agenda_atomic_finance_canonical.sql");
 
 test("origem configurada prevalece sobre Host não confiável", () => {
   assert.equal(resolveTrustedAppOrigin({
@@ -100,13 +101,15 @@ test("token Asaas por clínica exige identificação e restringe consultas", () 
 test("baixa financeira deriva vínculos do agendamento validado no tenant", () => {
   assert.match(dashboardActions, /updateAgendamentoFinanceiroAction[\s\S]*getScopedSectionSupabase\("financeiro"\)/);
   assert.match(dashboardActions, /from\("agendamentos"\)[\s\S]*eq\("clinica_id", clinicaId\)[\s\S]*if \(!agendamento\)/);
-  assert.match(dashboardActions, /const clienteId = agendamento\.cliente_id/);
-  assert.match(dashboardActions, /from\("pagamentos_clinica"\)\.update\(pagamentoPayload\)[\s\S]*eq\("clinica_id", clinicaId\)/);
+  assert.match(dashboardActions, /setCanonicalAppointmentPayment\(/);
+  assert.doesNotMatch(dashboardActions.slice(dashboardActions.indexOf("export async function updateAgendamentoFinanceiroAction"), dashboardActions.indexOf("export async function createPacoteAction")), /from\("pagamentos_clinica"\)/);
+  assert.match(phase0bMigration, /finance_registrar_pagamento_agendamento_v2[\s\S]*set cliente_id=v_a\.cliente_id[\s\S]*agendamento_id=v_a\.id/);
 });
 
 test("estorno de sinal zera o financeiro sem gerar confirmação", () => {
   assert.match(asaasWebhook, /\["cancelado", "estornado"\]\.includes\(paymentStatus\)/);
-  assert.match(asaasWebhook, /pagamento_status: "cancelado", valor_pago: 0, data_pagamento: null/);
+  assert.match(asaasWebhook, /cancelCanonicalAppointmentPayment\(/);
+  assert.match(phase0bMigration, /finance_cancelar_pagamento_agendamento_v2[\s\S]*valor_pago=0[\s\S]*pagamento_status='cancelado'/);
 });
 
 test("fotos privadas só são assinadas dentro do prefixo clínica e paciente", () => {

@@ -1,6 +1,7 @@
 "use client";
 
-import { buildFbc, normalizeMarketingAttribution, UTM_KEYS } from "./core.mjs";
+import { buildFbc, GOOGLE_CLICK_ID_KEYS, normalizeMarketingAttribution, UTM_KEYS } from "./core.mjs";
+import { getTrackingConsent } from "./consent";
 
 const ATTRIBUTION_KEY = "nexawi_marketing_attribution";
 const SESSION_KEY = "nexawi_marketing_session";
@@ -19,6 +20,24 @@ function saveStorage(storage, key, value) {
   } catch {
     // Storage pode estar bloqueado; tracking continua com o contexto da requisição atual.
   }
+}
+
+function removeStorage(storage, key) {
+  try { storage.removeItem(key); } catch {}
+}
+
+function touchAllowedByConsent(touch = {}, consent = {}) {
+  const result = {};
+  for (const key of ["landing_page", "captured_at", "segment", "page_type"]) {
+    if (touch[key]) result[key] = touch[key];
+  }
+  if (consent.analytics || consent.marketing) {
+    for (const key of [...UTM_KEYS, "referrer"]) if (touch[key]) result[key] = touch[key];
+  }
+  if (consent.marketing) {
+    for (const key of ["fbclid", "fbc", "fbp", ...GOOGLE_CLICK_ID_KEYS]) if (touch[key]) result[key] = touch[key];
+  }
+  return result;
 }
 
 function readCookie(name) {
@@ -45,6 +64,11 @@ function currentTouch({ segment, pageType } = {}) {
   for (const key of UTM_KEYS) {
     const value = query.get(key)?.trim();
     if (value) touch[key] = value.slice(0, 160);
+  }
+
+  for (const key of GOOGLE_CLICK_ID_KEYS) {
+    const value = query.get(key)?.trim();
+    if (value) touch[key] = value.slice(0, 500);
   }
 
   const fbclid = query.get("fbclid")?.trim() || null;
@@ -82,24 +106,40 @@ export function captureMarketingAttribution(context = {}) {
   if (typeof window === "undefined") return {};
   const previous = getMarketingAttribution();
   const touch = currentTouch(context);
+  const consent = getTrackingConsent();
+  if (!consent.analytics && !consent.marketing) {
+    removeStorage(window.localStorage, ATTRIBUTION_KEY);
+    return normalizeMarketingAttribution({ segment: context.segment, page_type: context.pageType, consent });
+  }
+  const permittedTouch = {
+    landing_page: touch.landing_page,
+    captured_at: touch.captured_at,
+    segment: touch.segment,
+    page_type: touch.page_type,
+    ...(consent.analytics || consent.marketing ? Object.fromEntries(UTM_KEYS.map((key) => [key, touch[key]]).filter(([, value]) => value)) : {}),
+    ...(consent.marketing ? Object.fromEntries(["fbclid", "fbc", "fbp", ...GOOGLE_CLICK_ID_KEYS].map((key) => [key, touch[key]]).filter(([, value]) => value)) : {}),
+    ...(consent.analytics || consent.marketing ? { referrer: touch.referrer } : {}),
+  };
   // Cookie _fbc pode sobreviver a uma visita paga anterior. Só uma UTM nova ou um fbclid novo
   // deve substituir o last-touch; uma revisita direta não apaga a campanha que trouxe o usuário.
-  const hasCampaign = Boolean(touch.utm_source || touch.utm_medium || touch.utm_campaign || touch.fbclid);
-  const firstTouch = Object.keys(previous.first_touch || {}).length ? previous.first_touch : touch;
-  const lastTouch = hasCampaign || !Object.keys(previous.last_touch || {}).length ? touch : previous.last_touch;
+  const hasCampaign = Boolean(permittedTouch.utm_source || permittedTouch.utm_medium || permittedTouch.utm_campaign || permittedTouch.fbclid || GOOGLE_CLICK_ID_KEYS.some((key) => permittedTouch[key]));
+  const previousFirst = touchAllowedByConsent(previous.first_touch, consent);
+  const previousLast = touchAllowedByConsent(previous.last_touch, consent);
+  const firstTouch = Object.keys(previousFirst).length ? previousFirst : permittedTouch;
+  const lastTouch = hasCampaign || !Object.keys(previousLast).length ? permittedTouch : previousLast;
 
   // _fbp pode nascer logo após o bootstrap do Pixel. Atualizamos o identificador atual sem alterar a origem da campanha.
-  const fbp = touch.fbp || previous.fbp || previous.last_touch?.fbp || previous.first_touch?.fbp || null;
-  const fbc = touch.fbc || previous.fbc || previous.last_touch?.fbc || previous.first_touch?.fbc || null;
+  const fbp = consent.marketing ? permittedTouch.fbp || previousLast.fbp || previousFirst.fbp || null : null;
+  const fbc = consent.marketing ? permittedTouch.fbc || previousLast.fbc || previousFirst.fbc || null : null;
 
   const attribution = normalizeMarketingAttribution({
-    ...previous,
     first_touch: { ...firstTouch, ...(firstTouch.fbp ? {} : fbp ? { fbp } : {}), ...(firstTouch.fbc ? {} : fbc ? { fbc } : {}) },
     last_touch: { ...lastTouch, ...(fbp ? { fbp } : {}), ...(fbc ? { fbc } : {}) },
     fbp,
     fbc,
     segment: context.segment || previous.segment || touch.segment,
     page_type: context.pageType || previous.page_type || touch.page_type,
+    consent,
   });
 
   saveStorage(window.localStorage, ATTRIBUTION_KEY, JSON.stringify(attribution));
@@ -117,6 +157,7 @@ export function createMarketingEventId(prefix = "event") {
 
 export function fireMetaBrowserEvent(eventName, parameters = {}, eventId) {
   if (typeof window === "undefined" || !eventName) return false;
+  if (!getTrackingConsent().marketing) return false;
   const execute = () => {
     if (typeof window.fbq !== "function") return false;
     window.fbq("track", eventName, parameters, eventId ? { eventID: eventId } : undefined);

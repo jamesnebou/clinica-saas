@@ -14,6 +14,9 @@ test("seleção pública usa diálogos para procedimentos e calendário", async 
   assert.match(source, /Data selecionada:/);
   assert.match(source, /availableDateSet\.has\(day\.date\)/);
   assert.match(source, /event\.target === event\.currentTarget/);
+  assert.match(source, /readableDialogAccent/);
+  assert.match(source, /--dialog-accent/);
+  assert.match(source, /className="fixed inset-0[^\"]*text-white/);
 });
 
 test("disponibilidade mensal retorna somente datas com horários", async () => {

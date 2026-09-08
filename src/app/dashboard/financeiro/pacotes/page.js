@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { Field, PageHeader, SelectField, SubmitButton, TextArea } from "@/components/app-shell/ui";
 import { requireClinicSection } from "@/lib/auth/session";
 import { money } from "@/lib/finance/service";
@@ -45,6 +46,7 @@ export default async function PacotesPage() {
         </form>
 
         <form action={sellClientePacoteAction} className="premium-panel rounded-lg p-5">
+          <input type="hidden" name="operation_key" value={randomUUID()} />
           <h2 className="text-lg font-black">Vender pacote</h2>
           <div className="mt-4 space-y-4">
             <SelectField label="Cliente" name="cliente_id" required><option value="">Selecione</option>{(clients.data || []).map((item) => <option key={item.id} value={item.id}>{item.nome}</option>)}</SelectField>

@@ -4,11 +4,12 @@ import { requireClinicSection } from "@/lib/auth/session";
 import { EmptyClinicState, EmptyState, Field, PageHeader, SubmitButton, TextArea } from "@/components/app-shell/ui";
 import { createClienteAction, deleteClienteAction, updateClienteStatusAction } from "../actions";
 import { getPrimaryClinicSegment } from "@/lib/segments/service";
+import { canAccessProntuario } from "@/lib/auth/permissions";
 
 export const metadata = { title: "Clientes | Clínica SaaS" };
 
 export default async function ClientesPage() {
-  const { activeClinic } = await requireClinicSection("clientes");
+  const { activeClinic, memberships } = await requireClinicSection("clientes");
 
   if (!activeClinic) {
     return <main className="px-5 py-8 sm:px-8 lg:px-10"><EmptyClinicState /></main>;
@@ -19,9 +20,11 @@ export default async function ClientesPage() {
   const terminology = segment.labels;
   const clienteLower = terminology.cliente.toLocaleLowerCase("pt-BR");
   const clientesLower = terminology.clientes.toLocaleLowerCase("pt-BR");
+  const membership = memberships.find((item) => item.clinica_id === activeClinic.id);
+  const canDeleteClient = ["owner", "admin"].includes(membership?.papel) && canAccessProntuario(membership);
   const { data: clientes = [] } = await supabase
     .from("clientes")
-    .select("id, nome, telefone, email, cpf, status, origem, consentimento_lgpd, termo_consentimento_aceito, retorno_recomendado_em, created_at")
+    .select("id, nome, telefone, email, cpf, status, origem, consentimento_lgpd, created_at")
     .eq("clinica_id", activeClinic.id)
     .order("created_at", { ascending: false });
 
@@ -63,13 +66,8 @@ export default async function ClientesPage() {
                       <h3 className="font-semibold">{cliente.nome}</h3>
                       <p className="mt-1 text-sm text-neutral-600">{cliente.telefone || "Sem telefone"} {cliente.email ? `· ${cliente.email}` : ""}</p>
                       <p className="mt-1 text-xs text-neutral-500">
-                        Origem: {cliente.origem || "-"} · LGPD: {cliente.consentimento_lgpd ? "sim" : "não"} · Termo: {cliente.termo_consentimento_aceito ? "aceito" : "pendente"}
+                        Origem: {cliente.origem || "-"} · LGPD cadastral: {cliente.consentimento_lgpd ? "sim" : "não"}
                       </p>
-                      {cliente.retorno_recomendado_em ? (
-                        <p className="mt-1 text-xs font-semibold text-[var(--clinic-primary)]">
-                          Retorno recomendado: {new Date(`${cliente.retorno_recomendado_em}T12:00:00`).toLocaleDateString("pt-BR")}
-                        </p>
-                      ) : null}
                     </div>
                     <div className="flex flex-wrap gap-2">
                       <Link href={`/dashboard/clientes/${cliente.id}`} className="inline-flex h-9 items-center rounded-lg border border-[color-mix(in_srgb,var(--clinic-primary)_24%,#e5e5e5)] px-3 text-sm font-semibold text-[var(--clinic-primary)]">
@@ -85,10 +83,10 @@ export default async function ClientesPage() {
                         </select>
                         <button type="submit" className="h-9 rounded-lg border border-neutral-200 px-3 text-sm font-semibold">Salvar</button>
                       </form>
-                      <form action={deleteClienteAction}>
+                      {canDeleteClient ? <form action={deleteClienteAction}>
                         <input type="hidden" name="id" value={cliente.id} />
                         <button type="submit" className="h-9 rounded-lg border border-red-200 px-3 text-sm font-semibold text-red-700">Excluir</button>
-                      </form>
+                      </form> : null}
                     </div>
                   </div>
                 </article>

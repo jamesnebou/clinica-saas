@@ -520,7 +520,7 @@ export default async function PublicClinicPage({ params, searchParams }) {
         </div>
 
         <div className="public-card-reveal public-reveal-right">
-          <PublicBookingForm slug={clinic.slug} procedimentos={procedimentos} profissionais={profissionais} query={query} timeZone={clinicTimeZone(clinic)} terminology={terminology} />
+          <PublicBookingForm slug={clinic.slug} procedimentos={procedimentos} profissionais={profissionais} query={query} timeZone={clinicTimeZone(clinic)} terminology={terminology} primaryColor={primaryColor} accentColor={accentColor} />
         </div>
       </section>
 

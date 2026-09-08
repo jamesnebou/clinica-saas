@@ -65,6 +65,10 @@ async function recordSignupEvent({ eventName, ipHash, attribution, sessionId, se
     utm_campaign: attribution.utm_campaign || null,
     utm_content: attribution.utm_content || null,
     utm_term: attribution.utm_term || null,
+    gclid: attribution.gclid || null,
+    gbraid: attribution.gbraid || null,
+    wbraid: attribution.wbraid || null,
+    consent: attribution.consent,
     ip_hash: ipHash,
     metadata: {
       selected_plan: selectedPlan,
@@ -115,7 +119,7 @@ export async function signUpAction(_previousState, formData) {
   });
 
   const supabase = await createClient();
-  const onboardingPath = `/onboarding?plan=${encodeURIComponent(selectedPlan)}`;
+  const onboardingPath = `/onboarding?plan=${encodeURIComponent(selectedPlan)}&signup=completed`;
   const emailRedirectTo = `${context.baseUrl}/auth/callback?next=${encodeURIComponent(onboardingPath)}`;
   const metadata = {
     ...buildSelfServiceUserMetadata({ name, phone, selectedPlan }),

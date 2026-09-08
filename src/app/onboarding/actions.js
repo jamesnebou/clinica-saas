@@ -209,6 +209,10 @@ export async function createClinicAction(_prevState, formData) {
         utm_campaign: savedAttribution.attribution?.utm_campaign || null,
         utm_content: savedAttribution.attribution?.utm_content || null,
         utm_term: savedAttribution.attribution?.utm_term || null,
+        gclid: savedAttribution.attribution?.gclid || null,
+        gbraid: savedAttribution.attribution?.gbraid || null,
+        wbraid: savedAttribution.attribution?.wbraid || null,
+        consent: savedAttribution.attribution?.consent || {},
         metadata: { clinica_id: clinica.id, segment: primarySegment, meta_event_id: registrationEventId },
       });
     }

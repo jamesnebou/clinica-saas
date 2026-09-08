@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { CheckCircle2, LoaderCircle, MessageCircle } from "lucide-react";
 import { createMarketingEventId, getMarketingAttribution, getMarketingSessionId } from "@/lib/tracking/client-attribution";
 import { trackMarketingEvent, trackMetaStandardEvent } from "./conversion-tracker";
+import { fireGoogleAdsConversion, fireGoogleAnalyticsEvent, setGoogleEnhancedUserData } from "@/lib/tracking/google-client";
 
 const WHATSAPP_URL = "https://wa.me/5577988656394?text=Ol%C3%A1%2C%20quero%20conhecer%20a%20NexaWi%20Cl%C3%ADnicas.";
 
@@ -50,7 +51,10 @@ export function LeadCaptureForm({
       if (!response.ok) throw new Error(data.error || "Não foi possível enviar agora.");
       setState({ status: "success", message: "Recebemos seus dados. Nossa equipe vai chamar você no WhatsApp." });
       trackMetaStandardEvent("Lead", { plan, segment: segment || attribution.segment || "geral" }, data.event_id || metaEventId);
-      window.gtag?.("event", "generate_lead", { plan });
+      const nameParts = String(payload.name || "").trim().split(/\s+/);
+      setGoogleEnhancedUserData({ email: payload.email, phone: payload.whatsapp, firstName: nameParts[0], lastName: nameParts.slice(1).join(" ") });
+      fireGoogleAnalyticsEvent("lead_submit", { plan, segment: segment || "geral" });
+      fireGoogleAdsConversion("lead_submit", { value: 1, currency: "BRL", transaction_id: data.lead_id });
       formElement.reset();
     } catch (error) {
       setState({ status: "error", message: error.message || "Tente novamente em alguns instantes." });

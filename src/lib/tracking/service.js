@@ -2,7 +2,8 @@ import "server-only";
 
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { isDemoSaasClinic } from "@/lib/saas/payment-tracking.mjs";
-import { cleanText, deterministicMetaEventId, marketingPhoneCandidates, metaRetryDelayMinutes, normalizeMarketingAttribution } from "./core.mjs";
+import { allowsMarketing, cleanText, deterministicMetaEventId, marketingPhoneCandidates, metaRetryDelayMinutes, normalizeMarketingAttribution, splitPersonName } from "./core.mjs";
+import { buildGoogleEnhancedUserData, buildGoogleOfflineConversion } from "./google-core.mjs";
 import { buildMetaEventPayload, buildMetaUserData, sendMetaConversionPayload } from "./meta-capi";
 
 const MAX_ATTEMPTS = 6;
@@ -178,6 +179,21 @@ export async function getClinicMarketingAttribution(clinicId) {
   return data;
 }
 
+export async function enqueueGoogleOfflineConversion({ clinicId, marketingLeadId, sourceType, sourceId, eventName, eventId, eventTime, attribution, value, currency, contactEmail, contactPhone, fullName } = {}) {
+  if (!allowsMarketing(attribution)) return { skipped: true, reason: "marketing_consent_required" };
+  const { firstName, lastName } = splitPersonName(fullName);
+  const payload = buildGoogleOfflineConversion({ eventName, eventId, eventTime, attribution, value, currency, userData: buildGoogleEnhancedUserData({ email: contactEmail, phone: contactPhone, firstName, lastName }) });
+  const row = { event_name: eventName, event_id: eventId, clinica_id: clinicId || null, marketing_lead_id: marketingLeadId || null, source_type: cleanText(sourceType, 80) || "system", source_id: cleanText(sourceId, 240), payload, status: "ready" };
+  const { data, error } = await supabaseAdmin.from("google_offline_conversion_events").insert(row).select("id, status").single();
+  if (!error) return { queued: true, created: true, record: data };
+  if (error.code === "23505") {
+    const { data: existing } = await supabaseAdmin.from("google_offline_conversion_events").select("id, status").eq("event_name", eventName).eq("event_id", eventId).maybeSingle();
+    return { queued: Boolean(existing), created: false, record: existing || null };
+  }
+  if (["42P01", "PGRST205"].includes(error.code)) return { queued: false, migrationRequired: true };
+  throw error;
+}
+
 export async function saveClinicMarketingAttribution({
   clinicId,
   email,
@@ -192,7 +208,7 @@ export async function saveClinicMarketingAttribution({
   const normalizedEmail = cleanText(email, 320)?.toLowerCase() || null;
   const phoneCandidates = marketingPhoneCandidates(phone);
 
-  const leadFields = "id, first_touch, last_touch, utm_source, utm_medium, utm_campaign, utm_content, utm_term, fbclid, fbc, fbp, segmento_interesse, pagina, referrer";
+  const leadFields = "id, first_touch, last_touch, utm_source, utm_medium, utm_campaign, utm_content, utm_term, fbclid, fbc, fbp, gclid, gbraid, wbraid, consent, segmento_interesse, pagina, referrer";
   if (normalizedEmail) {
     const { data } = await supabaseAdmin.from("clinica_marketing_leads").select(leadFields).eq("email", normalizedEmail).order("created_at", { ascending: false }).limit(1);
     lead = data?.[0] || null;
@@ -214,6 +230,10 @@ export async function saveClinicMarketingAttribution({
     fbclid: lead.fbclid,
     fbc: lead.fbc,
     fbp: lead.fbp,
+    gclid: lead.gclid,
+    gbraid: lead.gbraid,
+    wbraid: lead.wbraid,
+    consent: lead.consent,
     segment: lead.segmento_interesse,
     first_page: lead.pagina,
     first_referrer: lead.referrer,
@@ -236,6 +256,10 @@ export async function saveClinicMarketingAttribution({
     fbclid: effective.fbclid || null,
     fbc: effective.fbc || null,
     fbp: effective.fbp || null,
+    gclid: effective.gclid || null,
+    gbraid: effective.gbraid || null,
+    wbraid: effective.wbraid || null,
+    consent: effective.consent || {},
     segmento_interesse: segment || effective.segment || lead?.segmento_interesse || null,
     landing_page: effective.first_page || effective.first_touch?.landing_page || lead?.pagina || null,
     referrer: effective.first_referrer || effective.first_touch?.referrer || lead?.referrer || null,
@@ -287,6 +311,10 @@ export async function enqueueClinicLifecycleMetaEvent({
     return { skipped: true, reason: "demo_clinic" };
   }
 
+  if (!allowsMarketing(attribution || {})) {
+    return { skipped: true, reason: "marketing_consent_required", attribution, clinic };
+  }
+
   const safeEventId = eventId || deterministicMetaEventId(eventName, sourceId || clinic.id);
   const userData = userDataFromAttribution({
     email: contactEmail || clinic.billing_email || clinic.email,
@@ -319,7 +347,13 @@ export async function enqueueClinicLifecycleMetaEvent({
   };
   try {
     const queued = await enqueueMetaConversionEvent(input);
-    return { ...queued, input, attribution, clinic };
+    let google = null;
+    try {
+      google = await enqueueGoogleOfflineConversion({ clinicId: clinic.id, marketingLeadId: attribution?.marketing_lead_id || null, sourceType, sourceId: sourceId || clinic.id, eventName, eventId: safeEventId, eventTime, attribution, value, currency, contactEmail: contactEmail || clinic.billing_email || clinic.email, contactPhone: contactPhone || clinic.telefone, fullName });
+    } catch (googleError) {
+      console.error("google_offline_conversion_enqueue_failed", { code: googleError?.code || "unknown", eventName });
+    }
+    return { ...queued, input, attribution, clinic, google };
   } catch (error) {
     if (error?.trackingQueueUnavailable) {
       return { queued: false, record: null, input, attribution, clinic, queueUnavailable: true };

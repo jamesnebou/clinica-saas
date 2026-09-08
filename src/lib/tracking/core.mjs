@@ -9,12 +9,14 @@ export const META_STANDARD_EVENTS = Object.freeze([
 
 const META_STANDARD_EVENT_SET = new Set(META_STANDARD_EVENTS);
 export const UTM_KEYS = Object.freeze(["utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term"]);
+export const GOOGLE_CLICK_ID_KEYS = Object.freeze(["gclid", "gbraid", "wbraid"]);
 
 const TOUCH_KEYS = Object.freeze([
   ...UTM_KEYS,
   "fbclid",
   "fbc",
   "fbp",
+  ...GOOGLE_CLICK_ID_KEYS,
   "landing_page",
   "referrer",
   "captured_at",
@@ -92,7 +94,7 @@ export function normalizeTouch(input = {}) {
   if (!input || typeof input !== "object" || Array.isArray(input)) return {};
   const output = {};
   for (const key of TOUCH_KEYS) {
-    const max = key === "landing_page" || key === "referrer" ? 500 : key === "fbclid" || key === "fbc" || key === "fbp" ? 500 : 160;
+    const max = key === "landing_page" || key === "referrer" ? 500 : ["fbclid", "fbc", "fbp", ...GOOGLE_CLICK_ID_KEYS].includes(key) ? 500 : 160;
     const value = cleanText(input[key], max);
     if (value) output[key] = value;
   }
@@ -100,7 +102,26 @@ export function normalizeTouch(input = {}) {
 }
 
 export function hasPaidAttributionSignal(touch = {}) {
-  return Boolean(touch.utm_source || touch.utm_medium || touch.utm_campaign || touch.fbclid || touch.fbc);
+  return Boolean(touch.utm_source || touch.utm_medium || touch.utm_campaign || touch.fbclid || touch.fbc || GOOGLE_CLICK_ID_KEYS.some((key) => touch[key]));
+}
+
+export function normalizeConsent(input = {}) {
+  const raw = input && typeof input === "object" && !Array.isArray(input) ? input : {};
+  return {
+    necessary: true,
+    analytics: raw.analytics === true,
+    marketing: raw.marketing === true,
+    decided: raw.decided === true,
+    updated_at: cleanText(raw.updated_at, 40),
+  };
+}
+
+export function allowsAnalytics(input = {}) {
+  return normalizeConsent(input.consent || input).analytics;
+}
+
+export function allowsMarketing(input = {}) {
+  return normalizeConsent(input.consent || input).marketing;
 }
 
 export function normalizeMarketingAttribution(input = {}) {
@@ -113,6 +134,9 @@ export function normalizeMarketingAttribution(input = {}) {
     fbclid: raw.fbclid,
     fbc: raw.fbc,
     fbp: raw.fbp,
+    gclid: raw.gclid,
+    gbraid: raw.gbraid,
+    wbraid: raw.wbraid,
     landing_page: raw.first_page || raw.landing_page || raw.page,
     referrer: raw.first_referrer || raw.referrer,
     captured_at: raw.captured_at,
@@ -125,7 +149,7 @@ export function normalizeMarketingAttribution(input = {}) {
   const source = Object.keys(effectiveLast).length ? effectiveLast : effectiveFirst;
 
   const output = {
-    attribution_version: 2,
+    attribution_version: 3,
     first_touch: effectiveFirst,
     last_touch: effectiveLast,
   };
@@ -135,7 +159,7 @@ export function normalizeMarketingAttribution(input = {}) {
     if (value) output[key] = value;
   }
 
-  for (const key of ["fbclid", "fbc", "fbp", "segment", "page_type"]) {
+  for (const key of ["fbclid", "fbc", "fbp", ...GOOGLE_CLICK_ID_KEYS, "segment", "page_type"]) {
     const value = cleanText(source[key] || raw[key] || effectiveFirst[key], key.startsWith("fb") ? 500 : 160);
     if (value) output[key] = value;
   }
@@ -144,6 +168,7 @@ export function normalizeMarketingAttribution(input = {}) {
   const firstReferrer = cleanText(raw.first_referrer || effectiveFirst.referrer, 500);
   if (firstPage) output.first_page = firstPage;
   if (firstReferrer) output.first_referrer = firstReferrer;
+  output.consent = normalizeConsent(raw.consent);
 
   return output;
 }
@@ -187,7 +212,7 @@ export function sanitizeInternalMetadata(input = {}, maxKeys = 24) {
   const output = {};
   for (const [key, rawValue] of Object.entries(input).slice(0, maxKeys)) {
     if (!/^[A-Za-z0-9_.-]{1,64}$/.test(key)) continue;
-    if (["cpf", "documento", "diagnostico", "prontuario", "anamnese", "health", "medical"].includes(key.toLowerCase())) continue;
+    if (["cpf", "documento", "diagnostico", "prontuario", "anamnese", "health", "medical", "email", "e-mail", "phone", "telefone", "whatsapp", "name", "nome", "password", "senha", "token", "authorization"].includes(key.toLowerCase())) continue;
     if (["string", "number", "boolean"].includes(typeof rawValue)) {
       output[key] = typeof rawValue === "string" ? rawValue.slice(0, 300) : rawValue;
     }

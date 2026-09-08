@@ -2,6 +2,8 @@ import { redirect } from "next/navigation";
 import { getUserClinics, requireUser } from "@/lib/auth/session";
 import { normalizeSelectedPlan } from "@/lib/auth/self-service.mjs";
 import ClinicForm from "./clinic-form";
+import { MarketingTracking } from "@/components/marketing/marketing-tracking";
+import { SignupCompletionTracker } from "@/components/marketing/signup-completion-tracker";
 
 export const metadata = { title: "Criar clínica | NexaWi Clínicas" };
 
@@ -9,6 +11,7 @@ export default async function OnboardingPage({ searchParams }) {
   const params = await searchParams;
   const user = await requireUser("/login-cliente");
   const { activeClinic } = await getUserClinics();
+  const selectedPlan = normalizeSelectedPlan(params?.plan || user.user_metadata?.selected_plan);
 
   if (activeClinic) {
     redirect("/dashboard");
@@ -16,6 +19,8 @@ export default async function OnboardingPage({ searchParams }) {
 
   return (
     <main className="min-h-screen bg-[#f7f7f4] px-5 py-10 text-neutral-950">
+      <MarketingTracking segment="geral" pageType="onboarding" contentName="Onboarding NexaWi Clínicas" />
+      <SignupCompletionTracker enabled={params?.signup === "completed"} plan={selectedPlan} />
       <section className="mx-auto max-w-3xl">
         <p className="text-xs font-bold uppercase tracking-[0.22em] text-emerald-700">Onboarding</p>
         <h1 className="mt-2 text-3xl font-semibold tracking-tight">Crie a primeira clínica</h1>
@@ -25,7 +30,7 @@ export default async function OnboardingPage({ searchParams }) {
         <ClinicForm
           userEmail={user.email}
           userPhone={user.user_metadata?.phone || ""}
-          selectedPlan={normalizeSelectedPlan(params?.plan || user.user_metadata?.selected_plan)}
+          selectedPlan={selectedPlan}
         />
       </section>
     </main>

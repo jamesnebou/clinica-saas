@@ -7,6 +7,8 @@ import { isAsaasNotFoundError, removeAsaasSubscription } from "@/lib/asaas/clien
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { removeClinicStorage, uploadMarketingHomeImage } from "@/lib/supabase/storage";
 import { MARKETING_HOME_CONFIG_KEY, normalizeMarketingHomeConfig } from "@/lib/marketing/home-config";
+import { deterministicMetaEventId, normalizeMarketingAttribution } from "@/lib/tracking/core.mjs";
+import { enqueueGoogleOfflineConversion } from "@/lib/tracking/service";
 
 function text(formData, key) {
   return String(formData.get(key) || "").trim();
@@ -413,6 +415,9 @@ export async function updateMarketingLeadStatusAction(formData) {
   const allowed = new Set(["novo", "contatado", "qualificado", "convertido", "perdido"]);
   if (!allowed.has(status)) throw new Error("Status comercial inválido.");
 
+  const { data: lead, error: leadError } = await supabaseAdmin.from("clinica_marketing_leads").select("id, status, email, whatsapp, nome, first_touch, last_touch, utm_source, utm_medium, utm_campaign, utm_content, utm_term, gclid, gbraid, wbraid, consent, registered_clinica_id").eq("id", id).maybeSingle();
+  if (leadError) throw leadError;
+
   const { error } = await supabaseAdmin
     .from("clinica_marketing_leads")
     .update({
@@ -423,6 +428,14 @@ export async function updateMarketingLeadStatusAction(formData) {
     .eq("id", id);
 
   if (error) throw error;
+  if (status === "qualificado" && lead && !["qualificado", "convertido"].includes(lead.status)) {
+    try {
+      const attribution = normalizeMarketingAttribution(lead);
+      await enqueueGoogleOfflineConversion({ clinicId: lead.registered_clinica_id, marketingLeadId: lead.id, sourceType: "marketing_lead_mql", sourceId: lead.id, eventName: "MQL", eventId: deterministicMetaEventId("mql", lead.id), eventTime: new Date(), attribution, contactEmail: lead.email, contactPhone: lead.whatsapp, fullName: lead.nome });
+    } catch (trackingError) {
+      console.error("google_mql_enqueue_failed", { code: trackingError?.code || "unknown" });
+    }
+  }
   revalidatePath("/dashboard-admin");
   revalidatePath("/dashboard-admin/funil");
 }

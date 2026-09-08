@@ -1,10 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState } from "react";
+import { useActionState, useEffect, useRef } from "react";
 import { useFormStatus } from "react-dom";
 import { MarketingAttributionHiddenFields } from "@/components/marketing/attribution-hidden-fields";
 import { signUpAction } from "./actions";
+import { trackMarketingEvent } from "@/components/marketing/conversion-tracker";
+import { fireGoogleAdsConversion, fireGoogleAnalyticsEvent, setGoogleEnhancedUserData } from "@/lib/tracking/google-client";
 
 const initialState = { ok: true, message: "" };
 
@@ -19,6 +21,22 @@ function SubmitButton() {
 
 export default function CadastroForm({ selectedPlan }) {
   const [state, formAction] = useActionState(signUpAction, initialState);
+  const completedRef = useRef(false);
+
+  useEffect(() => {
+    if (!state?.ok || !state?.requiresEmailConfirmation || completedRef.current) return;
+    completedRef.current = true;
+    try { window.localStorage.setItem("nexawi_signup_completed_tracked", "1"); } catch {}
+    fireGoogleAnalyticsEvent("signup_completed", { method: "email", plan: selectedPlan });
+    fireGoogleAdsConversion("signup_completed", { value: 1, currency: "BRL" });
+  }, [selectedPlan, state]);
+
+  function handleSubmit(event) {
+    const form = new FormData(event.currentTarget);
+    const nameParts = String(form.get("name") || "").trim().split(/\s+/);
+    setGoogleEnhancedUserData({ email: form.get("email"), phone: form.get("phone"), firstName: nameParts[0], lastName: nameParts.slice(1).join(" ") });
+    trackMarketingEvent("signup_started", { plan: selectedPlan });
+  }
 
   if (state?.ok && state?.requiresEmailConfirmation) {
     return (
@@ -31,7 +49,7 @@ export default function CadastroForm({ selectedPlan }) {
   }
 
   return (
-    <form action={formAction} className="mt-6 space-y-4">
+    <form action={formAction} onSubmit={handleSubmit} className="mt-6 space-y-4">
       <MarketingAttributionHiddenFields pageType="self_service_signup" includeRegistrationEvent={false} includeSession />
       <input type="hidden" name="selected_plan" value={selectedPlan} />
       <label className="absolute -left-[10000px] top-auto h-px w-px overflow-hidden" aria-hidden="true">

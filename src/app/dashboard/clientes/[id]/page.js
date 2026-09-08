@@ -16,6 +16,7 @@ import {
 import { ConsentimentoForm } from "./consentimento-form";
 import { clinicTimeZone } from "@/lib/clinic/schedule";
 import { getPrimaryClinicSegment } from "@/lib/segments/service";
+import { canAccessProntuario } from "@/lib/auth/permissions";
 
 export const metadata = { title: "Ficha do cliente | Clínica SaaS" };
 
@@ -80,22 +81,23 @@ export default async function ClienteDetalhePage({ params }) {
   const clientesLower = terminology.clientes.toLocaleLowerCase("pt-BR");
 
   const membership = (memberships || []).find((item) => item.clinica_id === activeClinic.id);
-  const canAccessProntuario = ["owner", "admin", "profissional"].includes(membership?.papel);
+  const hasProntuarioAccess = canAccessProntuario(membership);
 
-  if (!canAccessProntuario) {
+  if (!hasProntuarioAccess) {
     return (
       <main className="px-5 py-8 sm:px-8 lg:px-10">
         <section className="mx-auto max-w-3xl rounded-lg border border-amber-200 bg-amber-50 p-6 text-amber-950">
           <Link href="/dashboard/clientes" className="inline-flex items-center gap-2 text-sm font-semibold"><ArrowLeft size={16} /> Voltar para {clientesLower}</Link>
           <h1 className="mt-6 text-2xl font-semibold">Prontuário restrito</h1>
-          <p className="mt-3 text-sm leading-6">Dados sensíveis, anamnese, consentimentos e documentos clínicos ficam disponíveis apenas para owner, admin e {terminology.profissional.toLocaleLowerCase("pt-BR")} da clínica.</p>
+          <p className="mt-3 text-sm leading-6">Dados sensíveis, anamnese, consentimentos e documentos clínicos ficam disponíveis somente para usuários com permissão clínica explícita.</p>
         </section>
       </main>
     );
   }
 
-  const [{ data: cliente }, { data: agendamentos = [] }, { data: fotos = [] }, { data: pacotes = [] }, { data: consentimentos = [] }] = await Promise.all([
-    supabase.from("clientes").select("*").eq("clinica_id", activeClinic.id).eq("id", id).maybeSingle(),
+  const [{ data: cadastro }, { data: prontuario }, { data: agendamentos = [] }, { data: fotos = [] }, { data: pacotes = [] }, { data: consentimentos = [] }] = await Promise.all([
+    supabase.from("clientes").select("id, clinica_id, nome, telefone, email, cpf, data_nascimento, endereco, origem, status, observacoes, consentimento_lgpd, data_consentimento_lgpd, created_at, updated_at").eq("clinica_id", activeClinic.id).eq("id", id).maybeSingle(),
+    supabase.from("cliente_prontuarios").select("observacoes_clinicas, anamnese, alergias, contraindicacoes, medicamentos_uso, procedimentos_previos, retorno_recomendado_em, termo_consentimento_aceito, termo_consentimento_aceito_em, termo_consentimento_observacao, termo_consentimento_versao, termo_consentimento_registrado_por").eq("clinica_id", activeClinic.id).eq("cliente_id", id).maybeSingle(),
     supabase
       .from("agendamentos")
       .select("id, inicio, fim, status, valor, pagamento_status, valor_pago, observacoes, profissionais(nome), procedimentos(nome)")
@@ -123,7 +125,8 @@ export default async function ClienteDetalhePage({ params }) {
       .order("aceito_em", { ascending: false }),
   ]);
 
-  if (!cliente) notFound();
+  if (!cadastro) notFound();
+  const cliente = { ...cadastro, ...(prontuario || {}) };
 
   const fotosComUrl = await Promise.all((fotos || []).map(async (foto) => ({
     ...foto,

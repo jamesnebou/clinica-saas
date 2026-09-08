@@ -5,6 +5,8 @@ import { decryptClinicSecrets } from "@/lib/security/clinic-secrets";
 import { notifyPublicBookingPaymentConfirmedById } from "@/lib/notifications/booking";
 import { emitDomainEvent } from "@/lib/whatsapp/events";
 import {
+  cancelCanonicalAppointmentPayment,
+  cancelCanonicalOrderPayment,
   cancelCanonicalReceivableByOrigin,
   syncCanonicalAppointmentPayment,
   syncCanonicalOrderPayment,
@@ -155,6 +157,20 @@ async function updatePublicBookingPayment({ payment, payload, event, paymentStat
 
   const publicStatus = paymentStatus === "pago" ? "pago" : ["cancelado", "estornado"].includes(paymentStatus) ? "cancelado" : "pendente";
 
+  if (booking.agendamento_id && paymentStatus === "pago") {
+    await syncCanonicalAppointmentPayment({ clinicId: booking.clinica_id, appointmentId: booking.agendamento_id,
+      value: Number(booking.valor_total || payment?.value || booking.valor_sinal || 0), paidValue: Number(booking.valor_sinal || payment?.value || 0),
+      clientId: booking.cliente_id, professionalId: booking.profissional_id, procedureId: booking.procedimento_id,
+      description: "Sinal de agendamento", provider: "asaas", providerReference: paymentId || externalReference,
+      paidAt: paidAt ? new Date(paidAt).toISOString() : new Date().toISOString(), paymentMethod: String(payment?.billingType || "").toLowerCase(), metadata: { webhook: true } });
+  } else if (booking.agendamento_id && ["cancelado", "estornado"].includes(paymentStatus)) {
+    await cancelCanonicalAppointmentPayment({
+      clinicId: booking.clinica_id,
+      appointmentId: booking.agendamento_id,
+      reason: `Pagamento ${paymentStatus} pelo Asaas`,
+    });
+  }
+
   const { error: publicError } = await supabaseAdmin
     .from("site_agendamentos_publicos")
     .update({
@@ -168,39 +184,6 @@ async function updatePublicBookingPayment({ payment, payload, event, paymentStat
     .eq("id", booking.id);
 
   if (publicError) throw publicError;
-
-  if (booking.agendamento_id && paymentStatus === "pago") {
-    const { error: agendaError } = await supabaseAdmin
-      .from("agendamentos")
-      .update({
-        pagamento_status: "parcial",
-        forma_pagamento: "outro",
-        valor_pago: Number(booking.valor_sinal || payment?.value || 0),
-        data_pagamento: paidAt ? new Date(paidAt).toISOString() : new Date().toISOString(),
-        status: "confirmado",
-      })
-      .eq("id", booking.agendamento_id);
-
-    if (agendaError) throw agendaError;
-    await syncCanonicalAppointmentPayment({ clinicId: booking.clinica_id, appointmentId: booking.agendamento_id,
-      value: Number(booking.valor_total || payment?.value || booking.valor_sinal || 0), paidValue: Number(booking.valor_sinal || payment?.value || 0),
-      clientId: booking.cliente_id, professionalId: booking.profissional_id, procedureId: booking.procedimento_id,
-      description: "Sinal de agendamento", provider: "asaas", providerReference: paymentId || externalReference,
-      paidAt: paidAt ? new Date(paidAt).toISOString() : new Date().toISOString(), paymentMethod: String(payment?.billingType || "").toLowerCase(), metadata: { webhook: true } });
-  } else if (booking.agendamento_id && ["cancelado", "estornado"].includes(paymentStatus)) {
-    const { error: agendaError } = await supabaseAdmin
-      .from("agendamentos")
-      .update({ pagamento_status: "cancelado", valor_pago: 0, data_pagamento: null })
-      .eq("id", booking.agendamento_id)
-      .eq("clinica_id", booking.clinica_id);
-    if (agendaError) throw agendaError;
-    await cancelCanonicalReceivableByOrigin({
-      clinicId: booking.clinica_id,
-      originType: "agendamento",
-      originId: booking.agendamento_id,
-      reason: `Pagamento ${paymentStatus} pelo Asaas`,
-    });
-  }
 
   if (paymentStatus === "pago" && booking.pagamento_status !== "pago") {
     await notifyPublicBookingPaymentConfirmedById(booking.id).catch((notificationError) => {
@@ -243,30 +226,25 @@ async function updateStoreOrderPayment({ payment, payload, paymentStatus, paidAt
   }
   if (!order?.id) return false;
   const invoiceUrl = payment?.invoiceUrl || payment?.bankSlipUrl || null;
-  const { error: orderPayloadError } = await supabaseAdmin.from("pedidos_clinica").update({ pagamento_gateway: "asaas", pagamento_external_id: paymentId || externalReference || null, asaas_payment_id: paymentId || null, invoice_url: invoiceUrl, payload_pagamento: payload }).eq("id", order.id).eq("clinica_id", order.clinica_id);
-  if (orderPayloadError) throw orderPayloadError;
-  if (paymentStatus === "pago") {
-    const { error } = await supabaseAdmin.rpc("confirmar_pagamento_pedido_loja", { p_pedido_id: order.id, p_asaas_payment_id: paymentId || null, p_payload: payload, p_pago_em: paidAt ? new Date(paidAt).toISOString() : new Date().toISOString() }); if (error) throw error;
-  } else if (paymentStatus === "estornado" && order.pagamento_status === "pago") {
-    const { error } = await supabaseAdmin.rpc("estornar_pedido_loja", { p_pedido_id: order.id, p_motivo: "Estorno confirmado pelo webhook Asaas." }); if (error) throw error;
-  } else if (["cancelado", "vencido"].includes(paymentStatus) && order.pagamento_status !== "pago") {
-    const { error } = await supabaseAdmin.rpc("cancelar_pedido_loja", { p_pedido_id: order.id, p_motivo: `Pagamento ${paymentStatus} no Asaas.` }); if (error) throw error;
-  }
   const billingType = String(payment?.billingType || "").toUpperCase();
   const forma = billingType === "PIX" ? "pix" : billingType === "BOLETO" ? "boleto" : billingType === "CREDIT_CARD" ? "cartao_credito" : "link";
   const internalStatus = paymentStatus === "pago" ? "pago" : paymentStatus === "estornado" ? "estornado" : paymentStatus === "cancelado" ? "cancelado" : paymentStatus === "vencido" ? "falhou" : "pendente";
-  const { error: paymentError } = await supabaseAdmin.from("pagamentos_loja_clinica").upsert({ clinica_id: order.clinica_id, cliente_id: order.cliente_id, pedido_id: order.id, valor: Number(payment?.value || order.total || 0), forma, status: internalStatus, provedor: "asaas", provedor_pagamento_id: paymentId, link_pagamento: invoiceUrl, pago_em: paymentStatus === "pago" ? (paidAt ? new Date(paidAt).toISOString() : new Date().toISOString()) : null, vencimento_em: payment?.dueDate ? new Date(`${payment.dueDate}T23:59:59`).toISOString() : null, payload, observacoes: "Atualizado automaticamente pelo webhook da lojinha." }, { onConflict: "clinica_id,provedor,provedor_pagamento_id" });
-  if (paymentError) throw paymentError;
-  if (paymentStatus === "pago") await syncCanonicalOrderPayment({ clinicId: order.clinica_id, orderId: order.id,
-    value: Number(order.total || payment?.value || 0), paidValue: Number(payment?.value || order.total || 0), clientId: order.cliente_id,
-    description: `Pedido ${order.id}`, provider: "asaas", providerReference: paymentId || externalReference,
-    paidAt: paidAt ? new Date(paidAt).toISOString() : new Date().toISOString(), paymentMethod: forma, metadata: { webhook: true } });
-  else if (["cancelado", "estornado"].includes(paymentStatus)) await cancelCanonicalReceivableByOrigin({
-    clinicId: order.clinica_id,
-    originType: "ecommerce",
-    originId: order.id,
-    reason: `Pedido ${paymentStatus} pelo Asaas`,
-  });
+  const { error: orderPayloadError } = await supabaseAdmin.from("pedidos_clinica").update({ pagamento_gateway: "asaas", pagamento_external_id: paymentId || externalReference || null, asaas_payment_id: paymentId || null, invoice_url: invoiceUrl, payload_pagamento: payload }).eq("id", order.id).eq("clinica_id", order.clinica_id);
+  if (orderPayloadError) throw orderPayloadError;
+  if (paymentStatus === "pago") {
+    await syncCanonicalOrderPayment({ clinicId: order.clinica_id, orderId: order.id,
+      value: Number(order.total || payment?.value || 0), paidValue: Number(payment?.value || order.total || 0), clientId: order.cliente_id,
+      description: `Pedido ${order.id}`, provider: "asaas", providerReference: paymentId || externalReference,
+      paidAt: paidAt ? new Date(paidAt).toISOString() : new Date().toISOString(), paymentMethod: forma, metadata: { webhook: true, payload } });
+  } else if (paymentStatus === "estornado" && order.pagamento_status === "pago") {
+    await cancelCanonicalOrderPayment({ clinicId: order.clinica_id, orderId: order.id, reason: "Estorno confirmado pelo webhook Asaas.", refund: true });
+  } else if (["cancelado", "vencido"].includes(paymentStatus) && order.pagamento_status !== "pago") {
+    await cancelCanonicalOrderPayment({ clinicId: order.clinica_id, orderId: order.id, reason: `Pagamento ${paymentStatus} no Asaas.`, refund: false });
+  }
+  if (paymentStatus !== "pago") {
+    const { error: paymentError } = await supabaseAdmin.from("pagamentos_loja_clinica").upsert({ clinica_id: order.clinica_id, cliente_id: order.cliente_id, pedido_id: order.id, valor: Number(payment?.value || order.total || 0), forma, status: internalStatus, provedor: "asaas", provedor_pagamento_id: paymentId, link_pagamento: invoiceUrl, pago_em: null, vencimento_em: payment?.dueDate ? new Date(`${payment.dueDate}T23:59:59`).toISOString() : null, payload, observacoes: "Atualizado automaticamente pelo webhook da lojinha." }, { onConflict: "clinica_id,provedor,provedor_pagamento_id" });
+    if (paymentError) throw paymentError;
+  }
   return true;
 }
 

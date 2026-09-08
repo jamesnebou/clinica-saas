@@ -34,10 +34,6 @@ function calculateTotalDeposit(procedimentos) {
   return Number(procedimentos.reduce((total, item) => total + calculateDeposit(item), 0).toFixed(2));
 }
 
-function normalizePhone(value) {
-  return String(value || "").replace(/\D/g, "");
-}
-
 function attributionFromForm(formData) {
   return {
     source: nullableText(formData, "source"),
@@ -238,52 +234,6 @@ export async function createPublicBookingAction(formData) {
     slug,
   });
 
-  let existingQuery = supabaseAdmin.from("clientes").select("id").eq("clinica_id", clinic.id).limit(1);
-  if (email) {
-    existingQuery = existingQuery.eq("email", email);
-  } else {
-    existingQuery = existingQuery.eq("telefone", telefone || "__sem_telefone__");
-  }
-
-  const { data: existingClientes, error: existingError } = await existingQuery;
-
-  if (existingError) throw existingError;
-  let clienteId = existingClientes?.[0]?.id || null;
-
-  if (!clienteId) {
-    const { data: cliente, error: clienteError } = await supabaseAdmin
-      .from("clientes")
-      .insert({
-        clinica_id: clinic.id,
-        nome,
-        telefone,
-        email,
-        cpf,
-        origem: "Site",
-        status: "lead",
-        observacoes: `Lead criado pelo site publico. Telefone normalizado: ${normalizePhone(telefone) || "-"}.`,
-        consentimento_lgpd: true,
-        data_consentimento_lgpd: new Date().toISOString(),
-      })
-      .select("id")
-      .single();
-
-    if (clienteError) throw clienteError;
-    clienteId = cliente.id;
-  }
-
-  if (whatsappTransactionalOptIn) {
-    await upsertTransactionalConsent({
-      clinicId: clinic.id,
-      clientId: clienteId,
-      phone: telefone,
-      accepted: true,
-      source: "public_booking",
-    }).catch((error) => {
-      console.error("whatsapp_consent_registration_failed", { clinicId: clinic.id, code: error?.code || "unknown" });
-    });
-  }
-
   const valorTotal = Number(procedimentos.reduce((total, item) => total + Number(item.preco_promocional ?? item.preco ?? 0), 0).toFixed(2));
   const valorSinal = calculateTotalDeposit(procedimentos);
   const pagamentoStatus = valorSinal > 0 ? "pendente" : "sem_sinal";
@@ -292,28 +242,34 @@ export async function createPublicBookingAction(formData) {
     publicRedirect(slug, { erro: "pagamento", mensagem: "Checkout online indisponível no momento. A clínica precisa conectar Asaas ou InfinitePay para receber o sinal pelo site." });
   }
 
-  const { data: agendamento, error: agendaError } = await supabaseAdmin
-    .from("agendamentos")
-    .insert({
-      clinica_id: clinic.id,
-      cliente_id: clienteId,
-      profissional_id: profissionalId,
-      procedimento_id: procedimento.id,
-      inicio: start.toISOString(),
-      fim: end.toISOString(),
-      status: "agendado",
-      valor: valorTotal,
-      pagamento_status: pagamentoStatus === "sem_sinal" ? "pendente" : "parcial",
-      valor_pago: 0,
-      observacoes: `Agendamento criado pelo site público. Procedimentos: ${procedimentosTexto}. Duração total: ${duracaoTotal} min.`,
-    })
-      .select("id")
-      .single();
+  const operationKey = text(formData, "booking_request_id") || `public:${clinic.id}:${email}:${profissionalId}:${start.toISOString()}:${selectedIds.join(",")}`;
+  const publicPayload = {
+    nome, telefone, email, cpf, valor_sinal: valorSinal, pagamento_gateway: paymentProvider,
+    payload: {
+      procedimentos: procedimentos.map((item) => ({ id: item.id, nome: item.nome, preco: Number(item.preco_promocional ?? item.preco ?? 0), duracao_minutos: Number(item.duracao_minutos || 60), intervalo_minutos: Number(item.intervalo_minutos || 0), sinal: calculateDeposit(item) })),
+      duracao_total_minutos: duracaoTotal,
+    },
+  };
+  const { data: bookingCore, error: agendaError } = await supabaseAdmin.rpc("agenda_criar_agendamento_atomico_v2", {
+    p_clinica_id: clinic.id, p_cliente_id: null, p_profissional_id: profissionalId,
+    p_procedimento_ids: selectedIds, p_inicio: start.toISOString(), p_fim: end.toISOString(), p_valor: valorTotal,
+    p_observacoes: `Agendamento criado pelo site público. Procedimentos: ${procedimentosTexto}. Duração total: ${duracaoTotal} min.`,
+    p_idempotency_key: operationKey, p_public_booking: publicPayload,
+  });
 
   if (agendaError?.code === "23P01") {
     publicRedirect(slug, { erro: "horario", mensagem: "Este horário acabou de ser ocupado. Escolha outra opção disponível." });
   }
   if (agendaError) throw agendaError;
+  const agendamento = { id: bookingCore.agendamento_id };
+  const clienteId = bookingCore.cliente_id;
+  const publicBookingId = bookingCore.public_booking_id;
+
+  if (whatsappTransactionalOptIn) {
+    await upsertTransactionalConsent({ clinicId: clinic.id, clientId: clienteId, phone: telefone, accepted: true, source: "public_booking" }).catch((error) => {
+      console.error("whatsapp_consent_registration_failed", { clinicId: clinic.id, code: error?.code || "unknown" });
+    });
+  }
 
   let invoiceUrl = null;
   let asaasPaymentId = null;
@@ -356,42 +312,16 @@ export async function createPublicBookingAction(formData) {
         paymentPayload = checkout;
       }
     } catch (error) {
-      await supabaseAdmin.from("agendamentos").delete().eq("id", agendamento.id).eq("clinica_id", clinic.id);
+      await supabaseAdmin.from("site_agendamentos_publicos").update({ pagamento_status: "erro" }).eq("clinica_id", clinic.id).eq("id", publicBookingId);
       publicRedirect(slug, { erro: "pagamento", mensagem: error.message || "Não foi possível gerar o checkout do sinal. Tente novamente." });
     }
   }
 
-  const { data: publicBooking, error: publicError } = await supabaseAdmin.from("site_agendamentos_publicos").insert({
-    clinica_id: clinic.id,
-    cliente_id: clienteId,
-    agendamento_id: agendamento.id,
-    procedimento_id: procedimento.id,
-    profissional_id: profissionalId,
-    nome,
-    telefone,
-    email,
-    data_hora: start.toISOString(),
-    valor_total: valorTotal,
-    valor_sinal: valorSinal,
+  const { data: publicBooking, error: publicError } = await supabaseAdmin.from("site_agendamentos_publicos").update({
     pagamento_status: invoiceUrl ? "pendente" : pagamentoStatus,
-    pagamento_gateway: paymentProvider,
-    pagamento_external_id: paymentExternalId,
-    asaas_payment_id: asaasPaymentId,
-    invoice_url: invoiceUrl,
-    payload: {
-      pagamento: paymentPayload,
-      pagamento_gateway: paymentProvider,
-      procedimentos: procedimentos.map((item) => ({
-        id: item.id,
-        nome: item.nome,
-        preco: Number(item.preco_promocional ?? item.preco ?? 0),
-        duracao_minutos: Number(item.duracao_minutos || 60),
-        intervalo_minutos: Number(item.intervalo_minutos || 0),
-        sinal: calculateDeposit(item),
-      })),
-      duracao_total_minutos: duracaoTotal,
-    },
-  }).select("id, nome, telefone, email, data_hora, valor_total, valor_sinal, pagamento_status, payload").single();
+    pagamento_gateway: paymentProvider, pagamento_external_id: paymentExternalId, asaas_payment_id: asaasPaymentId, invoice_url: invoiceUrl,
+    payload: { ...publicPayload.payload, pagamento: paymentPayload, pagamento_gateway: paymentProvider },
+  }).eq("clinica_id", clinic.id).eq("id", publicBookingId).select("id, nome, telefone, email, data_hora, valor_total, valor_sinal, pagamento_status, payload").single();
 
   if (publicError) throw publicError;
 
@@ -429,16 +359,6 @@ export async function createPublicBookingAction(formData) {
     eventName: "booking_created",
     attribution,
     metadata: { agendamento_id: agendamento.id, valor_total: valorTotal, valor_sinal: valorSinal, gateway: paymentProvider, quantidade_procedimentos: procedimentos.length },
-  });
-
-  await emitDomainEvent({
-    clinicId: clinic.id,
-    eventName: "booking.created",
-    aggregateId: agendamento.id,
-    payload: { source: "public_site", public_booking_id: publicBooking.id },
-    idempotencyKey: `booking.created:${agendamento.id}:v1`,
-  }).catch((error) => {
-    console.error("whatsapp_booking_event_failed", { clinicId: clinic.id, code: error?.code || "unknown" });
   });
 
   if (invoiceUrl) {

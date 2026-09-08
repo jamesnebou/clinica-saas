@@ -18,7 +18,7 @@ import {
   dateFromClinicLocal,
   isWithinWorkingPeriods,
 } from "@/lib/clinic/schedule";
-import { ACCESS_SECTIONS } from "@/lib/auth/permissions";
+import { ACCESS_SECTIONS, canAccessProntuario } from "@/lib/auth/permissions";
 import { decryptClinicSecrets, encryptClinicSecrets } from "@/lib/security/clinic-secrets";
 import { getAsaasBaseUrl, removeAsaasWebhook, upsertAsaasWebhook, validateAsaasConnection } from "@/lib/asaas/client";
 import { getTrustedAppOrigin } from "@/lib/security/app-origin";
@@ -26,9 +26,8 @@ import { normalizeInfinitePayHandle } from "@/lib/infinitepay/client";
 import { emitDomainEvent } from "@/lib/whatsapp/events";
 import { SEGMENT_OPTIONS } from "@/lib/segments/registry";
 import {
-  cancelCanonicalReceivableByOrigin,
-  syncCanonicalAppointmentPayment,
-  syncCanonicalPackagePayment,
+  cancelCanonicalAppointmentPayment,
+  setCanonicalAppointmentPayment,
 } from "@/lib/finance/canonical";
 
 async function getScopedSupabase() {
@@ -170,9 +169,21 @@ function requireClinicManager(memberships, clinicaId, redirectTo) {
 
 function requireProntuarioAccess(memberships, clinicaId, redirectTo) {
   const membership = currentMembership(memberships, clinicaId);
-  if (!["owner", "admin", "profissional"].includes(membership?.papel)) {
-    redirectWithMessage(redirectTo, "permissao", "Prontuário restrito a owner, admin e profissional.");
+  if (!canAccessProntuario(membership)) {
+    redirectWithMessage(redirectTo, "permissao", "Seu usuário não possui permissão clínica para acessar o prontuário.");
   }
+}
+
+async function auditProntuario({ clinicaId, actorId, acao, clienteId, metadata = {} }) {
+  const { error } = await supabaseAdmin.from("auditoria_clinica").insert({
+    clinica_id: clinicaId,
+    actor_id: actorId || null,
+    acao,
+    entidade_tipo: "cliente_prontuario",
+    entidade_id: clienteId,
+    metadata,
+  });
+  if (error) console.error("prontuario_audit_failed", { code: error.code || "unknown" });
 }
 
 async function requireScopedClient(supabase, clinicaId, clienteId, redirectTo) {
@@ -297,8 +308,10 @@ export async function updateClienteStatusAction(formData) {
 }
 
 export async function deleteClienteAction(formData) {
-  const { supabase, clinicaId } = await getScopedSupabase();
+  const { supabase, clinicaId, memberships } = await getScopedSupabase();
   const id = requireValue(text(formData, "id"), "Cliente não informado.");
+  requireClinicManager(memberships, clinicaId, "/dashboard/clientes");
+  requireProntuarioAccess(memberships, clinicaId, "/dashboard/clientes");
 
   const { error } = await supabase.from("clientes").delete().eq("id", id).eq("clinica_id", clinicaId);
   if (error) throw error;
@@ -705,10 +718,19 @@ export async function createAgendamentoAction(formData) {
     timeZone: clinicTimeZone(activeClinic),
   });
 
-  const { data: created, error } = await supabase.from("agendamentos").insert({
-    ...payload,
-    status: "agendado",
-  }).select("id").single();
+  const operationKey = `dashboard:${userData?.user?.id || "unknown"}:${payload.cliente_id || "sem-cliente"}:${payload.profissional_id}:${payload.inicio}:${payload.fim}:${payload.procedimento_id || "sem-procedimento"}`;
+  const { data: created, error } = await supabase.rpc("agenda_criar_agendamento_atomico_v2", {
+    p_clinica_id: clinicaId,
+    p_cliente_id: payload.cliente_id,
+    p_profissional_id: payload.profissional_id,
+    p_procedimento_ids: payload.procedimento_id ? [payload.procedimento_id] : [],
+    p_inicio: payload.inicio,
+    p_fim: payload.fim,
+    p_valor: payload.valor,
+    p_observacoes: payload.observacoes,
+    p_idempotency_key: operationKey,
+    p_public_booking: null,
+  });
 
   if (error?.code === "23P01") {
     redirectAgendaError(formData, "Este horário acabou de ser ocupado. Escolha outro horário.", dateKeyInTimeZone(new Date(payload.inicio), clinicTimeZone(activeClinic)));
@@ -717,9 +739,9 @@ export async function createAgendamentoAction(formData) {
   await emitWhatsAppDomainEvent({
     clinicId: clinicaId,
     eventName: "booking.created",
-    aggregateId: created.id,
+    aggregateId: created.agendamento_id,
     payload: { source: "dashboard" },
-    idempotencyKey: `booking.created:${created.id}:v1`,
+    idempotencyKey: `booking.created:${created.agendamento_id}:v1`,
   });
   revalidatePath("/dashboard/agenda");
   revalidatePath("/dashboard");
@@ -832,7 +854,7 @@ export async function updateClienteFichaAction(formData) {
   requireProntuarioAccess(memberships, clinicaId, `/dashboard/clientes/${id}`);
   const termoAceito = formData.get("termo_consentimento_aceito") === "on";
 
-  const payload = {
+  const cadastroPayload = {
     nome: requireValue(text(formData, "nome"), "Informe o nome do cliente."),
     telefone: nullableText(formData, "telefone"),
     email: nullableText(formData, "email"),
@@ -842,6 +864,11 @@ export async function updateClienteFichaAction(formData) {
     origem: nullableText(formData, "origem"),
     status: requireValue(text(formData, "status"), "Status não informado."),
     observacoes: nullableText(formData, "observacoes"),
+  };
+
+  const prontuarioPayload = {
+    clinica_id: clinicaId,
+    cliente_id: id,
     observacoes_clinicas: nullableText(formData, "observacoes_clinicas"),
     alergias: nullableText(formData, "alergias"),
     contraindicacoes: nullableText(formData, "contraindicacoes"),
@@ -853,16 +880,23 @@ export async function updateClienteFichaAction(formData) {
     termo_consentimento_observacao: nullableText(formData, "termo_consentimento_observacao"),
     termo_consentimento_versao: nullableText(formData, "termo_consentimento_versao") || "v1",
     termo_consentimento_registrado_por: termoAceito ? user?.id || null : null,
+    updated_by: user?.id || null,
   };
 
-  const { error } = await supabase.from("clientes").update(payload).eq("id", id).eq("clinica_id", clinicaId);
-  if (error) throw error;
+  const { error: cadastroError } = await supabase.from("clientes").update(cadastroPayload).eq("id", id).eq("clinica_id", clinicaId);
+  if (cadastroError) throw cadastroError;
+
+  const { error: prontuarioError } = await supabase
+    .from("cliente_prontuarios")
+    .upsert(prontuarioPayload, { onConflict: "clinica_id,cliente_id" });
+  if (prontuarioError) throw prontuarioError;
+  await auditProntuario({ clinicaId, actorId: user?.id, acao: "prontuario.ficha_updated", clienteId: id });
   revalidatePath(`/dashboard/clientes/${id}`);
   revalidatePath("/dashboard/clientes");
 }
 
 export async function updateClienteAnamneseAction(formData) {
-  const { supabase, clinicaId, memberships } = await getScopedSupabase();
+  const { supabase, clinicaId, memberships, user } = await getScopedSupabase();
   const id = requireValue(text(formData, "id"), "Cliente não informado.");
   requireProntuarioAccess(memberships, clinicaId, `/dashboard/clientes/${id}`);
 
@@ -883,8 +917,14 @@ export async function updateClienteAnamneseAction(formData) {
     updated_at: new Date().toISOString(),
   };
 
-  const { error } = await supabase.from("clientes").update({ anamnese }).eq("id", id).eq("clinica_id", clinicaId);
+  const { error } = await supabase.from("cliente_prontuarios").upsert({
+    clinica_id: clinicaId,
+    cliente_id: id,
+    anamnese,
+    updated_by: user?.id || null,
+  }, { onConflict: "clinica_id,cliente_id" });
   if (error) throw error;
+  await auditProntuario({ clinicaId, actorId: user?.id, acao: "prontuario.anamnese_updated", clienteId: id });
   revalidatePath(`/dashboard/clientes/${id}`);
 }
 
@@ -909,17 +949,19 @@ export async function createClienteFotoAction(formData) {
   });
 
   if (error) throw error;
+  await auditProntuario({ clinicaId, actorId: user?.id, acao: "prontuario.foto_created", clienteId });
   revalidatePath(`/dashboard/clientes/${clienteId}`);
 }
 
 export async function deleteClienteFotoAction(formData) {
-  const { supabase, clinicaId, memberships } = await getScopedSupabase();
+  const { supabase, clinicaId, memberships, user } = await getScopedSupabase();
   const id = requireValue(text(formData, "id"), "Foto não informada.");
   const clienteId = requireValue(text(formData, "cliente_id"), "Cliente não informado.");
   requireProntuarioAccess(memberships, clinicaId, `/dashboard/clientes/${clienteId}`);
 
   const { error } = await supabase.from("cliente_fotos").delete().eq("id", id).eq("clinica_id", clinicaId).eq("cliente_id", clienteId);
   if (error) throw error;
+  await auditProntuario({ clinicaId, actorId: user?.id, acao: "prontuario.foto_deleted", clienteId });
   revalidatePath(`/dashboard/clientes/${clienteId}`);
 }
 
@@ -955,6 +997,7 @@ export async function createClienteFotoUploadAction(formData) {
   });
 
   if (error) throw error;
+  await auditProntuario({ clinicaId, actorId: user?.id, acao: "prontuario.foto_uploaded", clienteId });
   revalidatePath(`/dashboard/clientes/${clienteId}`);
 }
 
@@ -987,17 +1030,21 @@ export async function createClienteConsentimentoAction(formData) {
   if (error) throw error;
 
   if (["procedimento", "imagem", "lgpd", "anamnese"].includes(payload.tipo)) {
-    await supabase
-      .from("clientes")
-      .update({
+    const { error: prontuarioError } = await supabase
+      .from("cliente_prontuarios")
+      .upsert({
+        clinica_id: clinicaId,
+        cliente_id: clienteId,
         termo_consentimento_aceito: true,
         termo_consentimento_aceito_em: payload.aceito_em,
         termo_consentimento_versao: payload.versao,
         termo_consentimento_registrado_por: user?.id || null,
-      })
-      .eq("id", clienteId)
-      .eq("clinica_id", clinicaId);
+        updated_by: user?.id || null,
+      }, { onConflict: "clinica_id,cliente_id" });
+    if (prontuarioError) throw prontuarioError;
   }
+
+  await auditProntuario({ clinicaId, actorId: user?.id, acao: "prontuario.consentimento_created", clienteId, metadata: { tipo: payload.tipo } });
 
   revalidatePath(`/dashboard/clientes/${clienteId}`);
   redirect(`/dashboard/clientes/${clienteId}?ok=consentimento`);
@@ -1014,8 +1061,6 @@ export async function updateAgendamentoFinanceiroAction(formData) {
   if (agendamentoError) throw agendamentoError;
   if (!agendamento) throw new Error("Agendamento não encontrado nesta clínica.");
 
-  const clienteId = agendamento.cliente_id || null;
-  const profissionalId = agendamento.profissional_id || null;
   const valor = numberValue(formData, "valor", 0);
   const valorPagoInformado = numberValue(formData, "valor_pago", 0);
   const status = requireValue(text(formData, "pagamento_status"), "Status de pagamento não informado.");
@@ -1032,71 +1077,24 @@ export async function updateAgendamentoFinanceiroAction(formData) {
 
   if (publicBookingError) throw publicBookingError;
 
-  const { error: agendaError } = await supabaseAdmin
-    .from("agendamentos")
-    .update({
-      valor,
-      valor_pago: valorPago,
-      pagamento_status: status,
-      forma_pagamento: formaPagamento,
-      data_pagamento: dataPagamento,
-    })
-    .eq("id", agendamentoId)
-    .eq("clinica_id", clinicaId);
-
-  if (agendaError) throw agendaError;
-
-  const pagamentoPayload = {
-    clinica_id: clinicaId,
-    cliente_id: clienteId,
-    agendamento_id: agendamentoId,
-    profissional_id: profissionalId,
-    descricao: nullableText(formData, "descricao") || "Pagamento de atendimento",
-    valor,
-    valor_pago: valorPago,
-    status,
-    forma_pagamento: formaPagamento,
-    data_pagamento: dataPagamento,
-    observacoes: nullableText(formData, "observacoes_financeiras"),
-  };
-
-  const { data: existente, error: buscaError } = await supabaseAdmin
-    .from("pagamentos_clinica")
-    .select("id")
-    .eq("clinica_id", clinicaId)
-    .eq("agendamento_id", agendamentoId)
-    .maybeSingle();
-
-  if (buscaError) throw buscaError;
-
-  const query = existente?.id
-    ? supabaseAdmin.from("pagamentos_clinica").update(pagamentoPayload).eq("id", existente.id).eq("clinica_id", clinicaId)
-    : supabaseAdmin.from("pagamentos_clinica").insert(pagamentoPayload);
-
-  const { error: pagamentoError } = await query;
-  if (pagamentoError) throw pagamentoError;
+  const descricao = nullableText(formData, "descricao") || "Pagamento de atendimento";
 
   if (status === "cancelado") {
-    await cancelCanonicalReceivableByOrigin({
+    await cancelCanonicalAppointmentPayment({
       clinicId: clinicaId,
-      originType: "agendamento",
-      originId: agendamentoId,
+      appointmentId: agendamentoId,
       reason: "Pagamento do agendamento cancelado pela clínica",
     });
   } else {
-    await syncCanonicalAppointmentPayment({
+    await setCanonicalAppointmentPayment({
       clinicId: clinicaId,
       appointmentId: agendamentoId,
       value: valor,
       paidValue: valorPago,
-      clientId: clienteId,
-      professionalId: profissionalId,
-      description: pagamentoPayload.descricao,
-      provider: "manual",
-      providerReference: `dashboard:${agendamentoId}:${valorPago}`,
+      description: descricao,
       paidAt: dataPagamento,
       paymentMethod: formaPagamento,
-      metadata: { source: "dashboard" },
+      metadata: { source: "dashboard", observacoes: nullableText(formData, "observacoes_financeiras") },
     });
   }
 
@@ -1105,14 +1103,6 @@ export async function updateAgendamentoFinanceiroAction(formData) {
     || (status === "parcial" && signalValue > 0 && valorPago >= signalValue);
 
   if (publicBookingBefore?.id && publicBookingBefore.pagamento_status !== "pago" && paymentConfirmsBooking) {
-    const { error: publicPaymentError } = await supabaseAdmin
-      .from("site_agendamentos_publicos")
-      .update({ pagamento_status: "pago" })
-      .eq("id", publicBookingBefore.id)
-      .eq("clinica_id", clinicaId);
-
-    if (publicPaymentError) throw publicPaymentError;
-
     await notifyPublicBookingPaymentConfirmedById(publicBookingBefore.id).catch((notificationError) => {
       console.error("Erro ao enviar confirmação de pagamento manual:", notificationError);
     });
@@ -1154,60 +1144,19 @@ export async function createPacoteAction(formData) {
 }
 
 export async function sellClientePacoteAction(formData) {
-  const { supabase, clinicaId } = await getScopedSectionSupabase("financeiro");
+  const { clinicaId } = await getScopedSectionSupabase("financeiro");
   const pacoteId = requireValue(text(formData, "pacote_id"), "Pacote não informado.");
   const clienteId = requireValue(text(formData, "cliente_id"), "Cliente não informado.");
 
-  const { data: pacote, error: pacoteError } = await supabase
-    .from("pacotes_clinica")
-    .select("id, nome, quantidade_sessoes, valor, validade_dias")
-    .eq("clinica_id", clinicaId)
-    .eq("id", pacoteId)
-    .maybeSingle();
-
-  if (pacoteError) throw pacoteError;
-  if (!pacote) throw new Error("Pacote não encontrado.");
-
   const compra = nullableText(formData, "data_compra") || new Date().toISOString().slice(0, 10);
-  const validade = new Date(`${compra}T12:00:00`);
-  validade.setDate(validade.getDate() + Number(pacote.validade_dias || 90));
   const valorPago = numberValue(formData, "valor_pago", 0);
-  const status = valorPago >= Number(pacote.valor || 0) ? "pago" : valorPago > 0 ? "parcial" : "pendente";
-
-  const { data: clientePacote, error: vendaError } = await supabase
-    .from("cliente_pacotes")
-    .insert({
-      clinica_id: clinicaId,
-      cliente_id: clienteId,
-      pacote_id: pacote.id,
-      nome_pacote: pacote.nome,
-      sessoes_total: pacote.quantidade_sessoes,
-      valor_total: pacote.valor,
-      data_compra: compra,
-      validade_em: validade.toISOString().slice(0, 10),
-      observacoes: nullableText(formData, "observacoes"),
-    })
-    .select("id")
-    .single();
-
-  if (vendaError) throw vendaError;
-
-  const { error: pagamentoError } = await supabase.from("pagamentos_clinica").insert({
-    clinica_id: clinicaId,
-    cliente_id: clienteId,
-    descricao: `Venda de pacote: ${pacote.nome}`,
-    valor: pacote.valor,
-    valor_pago: valorPago,
-    status,
-    forma_pagamento: nullableText(formData, "forma_pagamento"),
-    data_pagamento: valorPago > 0 ? new Date().toISOString() : null,
-    observacoes: clientePacote?.id ? `cliente_pacote_id:${clientePacote.id}` : null,
+  const { error } = await supabaseAdmin.rpc("finance_vender_pacote_v2", {
+    p_clinica_id: clinicaId, p_cliente_id: clienteId, p_pacote_id: pacoteId, p_data_compra: compra,
+    p_validade_em: nullableText(formData, "validade_em"), p_valor_pago: valorPago,
+    p_forma: nullableText(formData, "forma_pagamento"), p_observacoes: nullableText(formData, "observacoes"),
+    p_idempotency_key: requireValue(text(formData, "operation_key"), "Operação de venda inválida."),
   });
-
-  if (pagamentoError) throw pagamentoError;
-  await syncCanonicalPackagePayment({ clinicId: clinicaId, clientPackageId: clientePacote.id, value: pacote.valor,
-    paidValue: valorPago, clientId: clienteId, description: `Venda de pacote: ${pacote.nome}`,
-    paidAt: valorPago > 0 ? new Date().toISOString() : null, paymentMethod: nullableText(formData, "forma_pagamento"), metadata: { source: "dashboard" } });
+  if (error) throw error;
   revalidatePath("/dashboard/financeiro");
   redirect(financeRedirectUrl(formData));
 }

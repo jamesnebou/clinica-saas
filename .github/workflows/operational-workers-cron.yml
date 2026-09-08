@@ -1,0 +1,48 @@
+name: Operational Workers
+
+on:
+  schedule:
+    - cron: "4-59/5 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: operational-workers-production
+  cancel-in-progress: false
+
+jobs:
+  notifications:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: Processar notificacoes e WhatsApp
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          set -euo pipefail
+          test -n "${CRON_SECRET}" || { echo "::error::CRON_SECRET nao configurado."; exit 1; }
+          curl --fail-with-body --silent --show-error \
+            --connect-timeout 10 --max-time 50 \
+            --retry 2 --retry-delay 10 --retry-max-time 150 \
+            --header "Authorization: Bearer ${CRON_SECRET}" \
+            --header "Accept: application/json" \
+            https://clinicas.nexawi.com.br/api/cron/notifications
+
+  store-expirations:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: Expirar reservas da loja
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          set -euo pipefail
+          test -n "${CRON_SECRET}" || { echo "::error::CRON_SECRET nao configurado."; exit 1; }
+          curl --fail-with-body --silent --show-error \
+            --connect-timeout 10 --max-time 50 \
+            --retry 2 --retry-delay 10 --retry-max-time 150 \
+            --header "Authorization: Bearer ${CRON_SECRET}" \
+            --header "Accept: application/json" \
+            https://clinicas.nexawi.com.br/api/cron/store-expirations

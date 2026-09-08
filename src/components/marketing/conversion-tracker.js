@@ -9,6 +9,8 @@ import {
   getMarketingSessionId,
   refreshMetaCookieAttribution,
 } from "@/lib/tracking/client-attribution";
+import { CONSENT_EVENT } from "@/lib/tracking/consent";
+import { fireGoogleAdsConversion, fireGoogleAnalyticsEvent } from "@/lib/tracking/google-client";
 
 export { getMarketingAttribution, getMarketingSessionId };
 
@@ -28,6 +30,7 @@ export function trackMarketingEvent(eventName, metadata = {}, options = {}) {
     ...attribution,
     metadata,
     meta_event_id: eventId,
+    external_only: options.externalOnly === true,
   });
 
   if (!options.skipInternal) {
@@ -39,7 +42,8 @@ export function trackMarketingEvent(eventName, metadata = {}, options = {}) {
     }).catch(() => null);
   }
 
-  window.gtag?.("event", eventName, metadata);
+  fireGoogleAnalyticsEvent(eventName, metadata);
+  fireGoogleAdsConversion(eventName, metadata);
   return eventId;
 }
 
@@ -82,20 +86,33 @@ export function ConversionTracker({ segment = "geral", pageType = "marketing", c
       tracked = window.sessionStorage.getItem(viewKey) === "1";
     } catch {}
 
+    let viewEventId = null;
+    const parameters = {
+      content_name: contentName,
+      content_category: "SaaS B2B",
+      segment,
+      page_type: pageType,
+    };
     if (!tracked) {
       try { window.sessionStorage.setItem(viewKey, "1"); } catch {}
-      const eventId = createMarketingEventId("view_content");
-      const parameters = {
-        content_name: contentName,
-        content_category: "SaaS B2B",
-        segment,
-        page_type: pageType,
-      };
-      trackMarketingEvent("landing_view", parameters, { eventId });
-      trackMetaStandardEvent("ViewContent", parameters, eventId);
+      viewEventId = createMarketingEventId("view_content");
+      trackMarketingEvent("landing_view", parameters, { eventId: viewEventId });
+      trackMetaStandardEvent("ViewContent", parameters, viewEventId);
     }
 
-    return () => refreshTimers.forEach((timer) => window.clearTimeout(timer));
+    const refreshAfterConsent = () => {
+      captureMarketingAttribution(context);
+      if (!viewEventId) return;
+      trackMarketingEvent("landing_view", parameters, { eventId: viewEventId, externalOnly: true });
+      trackMetaStandardEvent("PageView", { segment, page_type: pageType });
+      trackMetaStandardEvent("ViewContent", parameters, viewEventId);
+    };
+    window.addEventListener(CONSENT_EVENT, refreshAfterConsent);
+
+    return () => {
+      refreshTimers.forEach((timer) => window.clearTimeout(timer));
+      window.removeEventListener(CONSENT_EVENT, refreshAfterConsent);
+    };
   }, [contentName, pageType, segment]);
 
   return null;

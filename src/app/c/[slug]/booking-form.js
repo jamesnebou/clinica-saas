@@ -36,10 +36,43 @@ function depositValue(procedimento) {
   return Math.max(0, Math.min(price, Number(signal.toFixed(2))));
 }
 
-export function PublicBookingForm({ slug, procedimentos, profissionais, query, timeZone = "America/Bahia", terminology = {} }) {
+function colorChannels(value) {
+  const hex = String(value || "").trim().match(/^#([\da-f]{6})$/i)?.[1];
+  if (!hex) return null;
+  return [0, 2, 4].map((index) => Number.parseInt(hex.slice(index, index + 2), 16));
+}
+
+function luminance(value) {
+  const channels = colorChannels(value);
+  if (!channels) return null;
+  const [red, green, blue] = channels.map((channel) => {
+    const normalized = channel / 255;
+    return normalized <= 0.04045 ? normalized / 12.92 : ((normalized + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * red + 0.7152 * green + 0.0722 * blue;
+}
+
+function contrastRatio(first, second) {
+  const firstLuminance = luminance(first);
+  const secondLuminance = luminance(second);
+  if (firstLuminance === null || secondLuminance === null) return 0;
+  return (Math.max(firstLuminance, secondLuminance) + 0.05) / (Math.min(firstLuminance, secondLuminance) + 0.05);
+}
+
+function readableDialogAccent(primaryColor, accentColor) {
+  const dialogBackground = "#211b18";
+  const candidates = [accentColor, primaryColor, "#f2b35d"];
+  return candidates.reduce((best, candidate) => (
+    contrastRatio(candidate, dialogBackground) > contrastRatio(best, dialogBackground) ? candidate : best
+  ), "#f2b35d");
+}
+
+export function PublicBookingForm({ slug, procedimentos, profissionais, query, timeZone = "America/Bahia", terminology = {}, primaryColor = "#6f5434", accentColor = "#d9ad4e" }) {
   const serviceSingular = terminology.procedimento || "Procedimento";
   const servicePlural = terminology.procedimentos || "Procedimentos";
   const professionalSingular = terminology.profissional || "Profissional";
+  const dialogAccent = readableDialogAccent(primaryColor, accentColor);
+  const dialogAccentText = contrastRatio(dialogAccent, "#15120f") >= 4.5 ? "#15120f" : "#ffffff";
   const today = clinicDateKey(timeZone);
   const initialDate = addDaysToDateKey(today, 1);
   const [procedimentoIds, setProcedimentoIds] = useState([]);
@@ -290,7 +323,8 @@ export function PublicBookingForm({ slug, procedimentos, profissionais, query, t
 
       {proceduresOpen ? createPortal((
         <div
-          className="fixed inset-0 z-[100] flex items-end justify-center bg-black/65 p-0 backdrop-blur-sm sm:items-center sm:p-5"
+          className="fixed inset-0 z-[100] flex items-end justify-center bg-black/65 p-0 text-white backdrop-blur-sm sm:items-center sm:p-5"
+          style={{ "--clinic-primary": primaryColor, "--clinic-accent": accentColor, "--dialog-accent": dialogAccent, "--dialog-accent-text": dialogAccentText }}
           role="dialog"
           aria-modal="true"
           aria-labelledby="procedure-dialog-title"
@@ -302,7 +336,7 @@ export function PublicBookingForm({ slug, procedimentos, profissionais, query, t
             <div className="flex items-start justify-between gap-4 border-b border-white/10 px-4 py-4 sm:px-6">
               <div>
                 <h3 id="procedure-dialog-title" className="text-lg font-bold">Escolher {servicePlural.toLocaleLowerCase("pt-BR")}</h3>
-                <p className="mt-1 text-xs text-white/55">Selecione um ou mais itens.</p>
+                <p className="mt-1 text-xs text-white/75">Selecione um ou mais itens.</p>
               </div>
               <button type="button" onClick={() => setProceduresOpen(false)} title="Fechar" aria-label="Fechar seleção" className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-white/10 bg-white/10 text-white transition hover:bg-white/15">
                 <X size={18} aria-hidden="true" />
@@ -311,34 +345,34 @@ export function PublicBookingForm({ slug, procedimentos, profissionais, query, t
 
             <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6">
               <label className="relative block">
-                <Search size={17} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-white/40" aria-hidden="true" />
-                <input value={procedureSearch} onChange={(event) => setProcedureSearch(event.target.value)} placeholder={`Buscar ${serviceSingular.toLocaleLowerCase("pt-BR")}`} autoFocus className="h-11 w-full rounded-xl border border-white/10 bg-white/10 pl-10 pr-4 text-sm text-white outline-none placeholder:text-white/35 focus:border-[var(--clinic-accent)]" />
+                <Search size={17} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-white/70" aria-hidden="true" />
+                <input value={procedureSearch} onChange={(event) => setProcedureSearch(event.target.value)} placeholder={`Buscar ${serviceSingular.toLocaleLowerCase("pt-BR")}`} autoFocus className="h-11 w-full rounded-xl border border-white/20 bg-white/10 pl-10 pr-4 text-sm text-white outline-none placeholder:text-white/65 focus:border-[var(--dialog-accent)]" />
               </label>
               <div className="mt-3 space-y-2">
                 {filteredProcedures.map((item) => {
                   const checked = procedimentoIds.includes(item.id);
                   return (
-                    <button key={item.id} type="button" aria-pressed={checked} onClick={() => toggleProcedure(item.id)} className={["flex w-full items-start justify-between gap-3 rounded-xl border px-4 py-3 text-left text-sm transition", checked ? "border-[var(--clinic-accent)] bg-[var(--clinic-accent)]/20 text-white" : "border-white/10 bg-white/[0.06] text-white/75 hover:border-white/25 hover:bg-white/10"].join(" ")}>
+                    <button key={item.id} type="button" aria-pressed={checked} onClick={() => toggleProcedure(item.id)} className={["flex w-full items-start justify-between gap-3 rounded-xl border px-4 py-3 text-left text-sm transition", checked ? "border-[var(--dialog-accent)] bg-[color-mix(in_srgb,var(--dialog-accent)_20%,transparent)] text-white shadow-[inset_3px_0_0_var(--dialog-accent)]" : "border-white/15 bg-white/[0.06] text-white/85 hover:border-white/30 hover:bg-white/10"].join(" ")}>
                       <span>
                         <strong className="block text-white">{item.nome}</strong>
-                        <span className="mt-1 block text-xs leading-5 text-white/55">{money(item.preco_promocional ?? item.preco)} - {item.duracao_minutos || 60} min - {serviceLabel(item)}</span>
+                        <span className="mt-1 block text-xs leading-5 text-white/75">{money(item.preco_promocional ?? item.preco)} - {item.duracao_minutos || 60} min - {serviceLabel(item)}</span>
                       </span>
-                      <span className={["mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full border", checked ? "border-[var(--clinic-accent)] bg-[var(--clinic-accent)] text-[#15120f]" : "border-white/25"].join(" ")}>
+                      <span className={["mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full border", checked ? "border-[var(--dialog-accent)] bg-[var(--dialog-accent)] text-[var(--dialog-accent-text)]" : "border-white/25"].join(" ")}>
                         {checked ? <Check size={14} strokeWidth={3} aria-hidden="true" /> : null}
                       </span>
                     </button>
                   );
                 })}
-                {!filteredProcedures.length ? <p className="px-3 py-6 text-center text-sm text-white/50">Nenhum {serviceSingular.toLocaleLowerCase("pt-BR")} encontrado.</p> : null}
+                {!filteredProcedures.length ? <p className="px-3 py-6 text-center text-sm text-white/75">Nenhum {serviceSingular.toLocaleLowerCase("pt-BR")} encontrado.</p> : null}
               </div>
             </div>
 
             <div className="border-t border-white/10 bg-[#1a1613] px-4 py-4 sm:px-6">
-              <div className="mb-3 flex flex-wrap items-center justify-between gap-2 text-xs text-white/60">
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2 text-xs text-white/80">
                 <span>{selectedProcedures.length} selecionado{selectedProcedures.length === 1 ? "" : "s"}</span>
                 <span>{totals.duration} min · {money(totals.price)}</span>
               </div>
-              <button type="button" disabled={!procedimentoIds.length} onClick={() => setProceduresOpen(false)} className="h-12 w-full rounded-full bg-[var(--clinic-accent)] px-5 text-sm font-bold text-[#15120f] transition disabled:cursor-not-allowed disabled:opacity-45">
+              <button type="button" disabled={!procedimentoIds.length} onClick={() => setProceduresOpen(false)} className="h-12 w-full rounded-full bg-[var(--dialog-accent)] px-5 text-sm font-bold text-[var(--dialog-accent-text)] transition disabled:cursor-not-allowed disabled:opacity-45">
                 Concluir seleção
               </button>
             </div>
@@ -348,7 +382,8 @@ export function PublicBookingForm({ slug, procedimentos, profissionais, query, t
 
       {calendarOpen ? createPortal((
         <div
-          className="fixed inset-0 z-[100] flex items-end justify-center bg-black/65 p-0 backdrop-blur-sm sm:items-center sm:p-5"
+          className="fixed inset-0 z-[100] flex items-end justify-center bg-black/65 p-0 text-white backdrop-blur-sm sm:items-center sm:p-5"
+          style={{ "--clinic-primary": primaryColor, "--clinic-accent": accentColor, "--dialog-accent": dialogAccent, "--dialog-accent-text": dialogAccentText }}
           role="dialog"
           aria-modal="true"
           aria-labelledby="calendar-dialog-title"
@@ -360,7 +395,7 @@ export function PublicBookingForm({ slug, procedimentos, profissionais, query, t
             <div className="flex items-start justify-between gap-4">
               <div>
                 <h3 id="calendar-dialog-title" className="text-lg font-bold">Escolher data</h3>
-                <p className="mt-1 text-xs text-white/55">Dias esmaecidos não possuem vaga para esta seleção.</p>
+                <p className="mt-1 text-xs text-white/75">Dias esmaecidos não possuem vaga para esta seleção.</p>
               </div>
               <button type="button" onClick={() => setCalendarOpen(false)} title="Fechar" aria-label="Fechar calendário" className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-white/10 bg-white/10 text-white transition hover:bg-white/15">
                 <X size={18} aria-hidden="true" />
@@ -378,7 +413,7 @@ export function PublicBookingForm({ slug, procedimentos, profissionais, query, t
             </div>
 
             <div className="mt-4 grid grid-cols-7 gap-0.5 text-center sm:gap-1" role="grid" aria-label={`Calendário de ${formatCalendarMonth(visibleMonth)}`}>
-              {WEEKDAYS.map((weekday) => <span key={weekday} role="columnheader" className="py-1 text-[10px] font-bold uppercase text-white/45 sm:text-xs">{weekday}</span>)}
+              {WEEKDAYS.map((weekday) => <span key={weekday} role="columnheader" className="py-1 text-[10px] font-bold uppercase text-white/70 sm:text-xs">{weekday}</span>)}
               {calendarDays.map((day) => {
                 const past = day.date < initialDate;
                 const unavailable = day.inMonth && !past && !loadingDates && !availableDateSet.has(day.date);
@@ -397,10 +432,12 @@ export function PublicBookingForm({ slug, procedimentos, profissionais, query, t
                     onClick={() => selectDate(day.date)}
                     className={[
                       "relative grid min-h-10 place-items-center rounded-xl text-xs font-bold transition sm:min-h-12 sm:text-sm",
-                      selected ? "bg-[var(--clinic-accent)] text-[#15120f]" : "text-white/80 hover:bg-white/12 hover:text-white",
-                      !day.inMonth || past ? "opacity-15" : "",
-                      unavailable ? "opacity-30" : "",
-                      loadingDates && day.inMonth ? "animate-pulse opacity-30" : "",
+                      selected ? "bg-[var(--dialog-accent)] text-[var(--dialog-accent-text)]" : "hover:bg-white/12 hover:text-white",
+                      !selected && !day.inMonth ? "text-white/25" : "",
+                      !selected && day.inMonth && past ? "text-white/30" : "",
+                      !selected && unavailable ? "text-white/50" : "",
+                      !selected && day.inMonth && !past && !unavailable && !loadingDates ? "text-white/90" : "",
+                      loadingDates && day.inMonth ? "animate-pulse text-white/40" : "",
                       isToday && !selected ? "ring-1 ring-inset ring-white/30" : "",
                     ].join(" ")}
                   >
@@ -410,7 +447,7 @@ export function PublicBookingForm({ slug, procedimentos, profissionais, query, t
               })}
             </div>
 
-            <div className="mt-4 min-h-10 rounded-xl bg-white/[0.07] px-3 py-2.5 text-xs text-white/70" aria-live="polite">
+            <div className="mt-4 min-h-10 rounded-xl border border-white/10 bg-white/[0.09] px-3 py-2.5 text-xs text-white/85" aria-live="polite">
               {loadingDates ? "Consultando disponibilidade..." : datesMessage || (date ? <>Data selecionada: <strong className="text-white">{formatBrazilianNumericDate(date)}</strong></> : "Selecione um dia disponível.")}
             </div>
           </div>

@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { after, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import {
+  allowsMarketing,
   cleanText,
   deterministicMetaEventId,
   isValidMetaEventId,
@@ -99,13 +100,17 @@ export async function POST(request) {
       fbclid: attribution.fbclid || null,
       fbc: attribution.fbc || null,
       fbp: attribution.fbp || null,
+      gclid: attribution.gclid || null,
+      gbraid: attribution.gbraid || null,
+      wbraid: attribution.wbraid || null,
+      consent: attribution.consent,
       first_touch: attribution.first_touch || {},
       last_touch: attribution.last_touch || {},
       segmento_interesse: segment || null,
       meta_lead_event_id: preInsertEventId,
       metadata: {
         user_agent: cleanText(request.headers.get("user-agent"), 300),
-        attribution_version: 2,
+        attribution_version: 3,
       },
     }).select("id").single();
 
@@ -127,6 +132,10 @@ export async function POST(request) {
       utm_campaign: attribution.utm_campaign || null,
       utm_content: attribution.utm_content || null,
       utm_term: attribution.utm_term || null,
+      gclid: attribution.gclid || null,
+      gbraid: attribution.gbraid || null,
+      wbraid: attribution.wbraid || null,
+      consent: attribution.consent,
       metadata: {
         plano_interesse: plano,
         profissionais_qtd: profissionais,
@@ -164,14 +173,16 @@ export async function POST(request) {
       sourceId: data.id,
     };
 
-    let queueRecord = null;
-    try {
-      const queued = await enqueueMetaConversionEvent(capiInput);
-      queueRecord = queued.record;
-      scheduleDelivery(queueRecord, null);
-    } catch (queueError) {
-      if (!queueError?.trackingQueueUnavailable) throw queueError;
-      scheduleDelivery(null, capiInput);
+    if (allowsMarketing(attribution)) {
+      let queueRecord = null;
+      try {
+        const queued = await enqueueMetaConversionEvent(capiInput);
+        queueRecord = queued.record;
+        scheduleDelivery(queueRecord, null);
+      } catch (queueError) {
+        if (!queueError?.trackingQueueUnavailable) throw queueError;
+        scheduleDelivery(null, capiInput);
+      }
     }
 
     return NextResponse.json({ ok: true, lead_id: data.id, event_id: eventId });

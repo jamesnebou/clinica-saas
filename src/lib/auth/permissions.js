@@ -11,6 +11,7 @@ export const ACCESS_SECTION_LABELS = [
   ["agenda", "Agenda"],
   ["notificacoes", "Notificações"],
   ["clientes", "Clientes"],
+  ["prontuario", "Prontuário clínico"],
   ["crm", "CRM"],
   ["profissionais", "Profissionais"],
   ["procedimentos", "Procedimentos"],
@@ -47,12 +48,18 @@ export const SECTION_CAPABILITY = Object.freeze({
 });
 
 export const ROLE_ACCESS = {
-  owner: ["dashboard", "agenda", "notificacoes", "clientes", "crm", "profissionais", "procedimentos", "produtos", "pedidos", "usuarios", "configuracoes", "financeiro", "assinatura", "tutoriais", "bi", "marketing", "automacoes", "integracoes", "whatsapp"],
-  admin: ["dashboard", "agenda", "notificacoes", "clientes", "crm", "profissionais", "procedimentos", "produtos", "pedidos", "usuarios", "configuracoes", "financeiro", "assinatura", "tutoriais", "bi", "marketing", "automacoes", "integracoes", "whatsapp"],
+  owner: ["dashboard", "agenda", "notificacoes", "clientes", "prontuario", "crm", "profissionais", "procedimentos", "produtos", "pedidos", "usuarios", "configuracoes", "financeiro", "assinatura", "tutoriais", "bi", "marketing", "automacoes", "integracoes", "whatsapp"],
+  admin: ["dashboard", "agenda", "notificacoes", "clientes", "prontuario", "crm", "profissionais", "procedimentos", "produtos", "pedidos", "usuarios", "configuracoes", "financeiro", "assinatura", "tutoriais", "bi", "marketing", "automacoes", "integracoes", "whatsapp"],
   recepcao: ["dashboard", "agenda", "notificacoes", "clientes", "crm", "profissionais", "procedimentos", "produtos", "pedidos", "tutoriais"],
   financeiro: ["dashboard", "notificacoes", "clientes", "crm", "pedidos", "financeiro", "assinatura", "tutoriais"],
   profissional: ["dashboard", "agenda", "notificacoes", "clientes", "crm", "procedimentos", "produtos", "tutoriais"],
 };
+
+export function canAccessProntuario(membership) {
+  if (membership?.papel === "owner") return true;
+  if (!["admin", "profissional"].includes(membership?.papel)) return false;
+  return canAccessSection(membership.papel, "prontuario", membership);
+}
 
 export function getCurrentMembership(memberships, clinicaId) {
   return (memberships || []).find((item) => item.clinica_id === clinicaId) || null;
@@ -77,4 +84,4 @@ export function assertSectionAccess(role, section, membership = null) {
     throw new Error(`${label} não tem permissão para acessar esta área.`);
   }
 }
-import { canAccessByPolicy, customSectionsFromMembership } from "@/lib/domain/permission-core.mjs";
+import { canAccessByPolicy, customSectionsFromMembership } from "../domain/permission-core.mjs";
