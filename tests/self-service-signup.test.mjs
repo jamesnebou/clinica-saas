@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 
 import {
   buildSelfServiceUserMetadata,
+  buildSignupConfirmationDestination,
   friendlySignupError,
   normalizeSelectedPlan,
   normalizeSignupPhone,
@@ -27,6 +28,7 @@ const planCta = source("src/components/marketing/plan-cta.js");
 const demoCta = source("src/components/demo/demo-conversion-cta.js");
 const demoRoute = source("src/app/demo/route.js");
 const proxy = source("src/proxy.js");
+const authConfirm = source("src/app/auth/confirm/route.js");
 
 function validInput(overrides = {}) {
   return {
@@ -123,6 +125,37 @@ test("CTAs de começar apontam para cadastro", () => {
 
 test("CTAs demonstrativos continuam apontando para demo", () => {
   assert.match(marketingPortal, /TrackedLink href="\/demo" prefetch=\{false\} eventName="demo_click"/);
+});
+
+test("confirmação de cadastro usa TokenHash server-side sem estado do navegador original", () => {
+  assert.match(cadastroAction, /emailRedirectTo = `\$\{context\.baseUrl\}\/onboarding`/);
+  assert.match(authConfirm, /searchParams\.get\("token_hash"\)/);
+  assert.match(authConfirm, /verifyOtp\(\{/);
+  assert.match(authConfirm, /token_hash: tokenHash/);
+  assert.match(authConfirm, /type: "email"/);
+  assert.doesNotMatch(authConfirm, /exchangeCodeForSession|code_verifier|localStorage|sessionStorage/);
+});
+
+test("confirmação sempre retorna ao onboarding confiável com plano do metadata", () => {
+  const origin = "https://clinicas.nexawi.com.br";
+  assert.equal(
+    buildSignupConfirmationDestination(`${origin}/onboarding`, origin, "growth"),
+    "/onboarding?plan=growth&signup=completed",
+  );
+  assert.equal(
+    buildSignupConfirmationDestination("/onboarding?plan=premium", origin, "starter"),
+    "/onboarding?plan=starter&signup=completed",
+  );
+  assert.equal(buildSignupConfirmationDestination("https://evil.example/onboarding", origin, "growth"), "/onboarding");
+  assert.equal(buildSignupConfirmationDestination("//evil.example/onboarding", origin, "growth"), "/onboarding");
+  assert.equal(buildSignupConfirmationDestination("javascript:alert(1)", origin, "growth"), "/onboarding");
+  assert.equal(buildSignupConfirmationDestination("/dashboard", origin, "growth"), "/onboarding");
+});
+
+test("token inválido ou reutilizado não cria clínica nem CompleteRegistration", () => {
+  assert.match(authConfirm, /if \(error \|\| !data\.user\)/);
+  assert.match(authConfirm, /erro=confirmacao/);
+  assert.doesNotMatch(authConfirm, /from\("clinicas"\)|CompleteRegistration/);
 });
 
 test("login do cliente continua usando signInAction e oferece cadastro", () => {

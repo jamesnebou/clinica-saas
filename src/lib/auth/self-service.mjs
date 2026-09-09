@@ -35,6 +35,30 @@ export function safeInternalNext(value, fallback = "/") {
   }
 }
 
+export function buildSignupConfirmationDestination(value, trustedOrigin, selectedPlan) {
+  const fallback = "/onboarding";
+  let candidate = String(value || "").trim();
+
+  if (candidate && !candidate.startsWith("/")) {
+    try {
+      const target = new URL(candidate);
+      if (target.origin !== new URL(trustedOrigin).origin) return fallback;
+      candidate = `${target.pathname}${target.search}`;
+    } catch {
+      return fallback;
+    }
+  }
+
+  const safeDestination = safeInternalNext(candidate, null);
+  if (!safeDestination) return fallback;
+  const parsed = new URL(safeDestination, "https://nexawi.invalid");
+  if (parsed.pathname !== "/onboarding") return fallback;
+
+  parsed.searchParams.set("plan", normalizeSelectedPlan(selectedPlan || parsed.searchParams.get("plan")));
+  parsed.searchParams.set("signup", "completed");
+  return `${parsed.pathname}${parsed.search}`;
+}
+
 export function validateSelfServiceSignup(input = {}, { demoEmail = "", internalAdminEmails = [] } = {}) {
   const name = String(input.name || "").trim().replace(/\s+/g, " ").slice(0, 120);
   const email = normalizeSignupEmail(input.email);

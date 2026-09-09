@@ -75,6 +75,7 @@ export default async function LoginClientePage({ searchParams }) {
 
             {params?.senha === "alterada" ? <p className="mt-5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-800">Senha alterada. Entre novamente com a nova senha.</p> : null}
             {params?.erro === "link" ? <p className="mt-5 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">O link é inválido ou expirou. Solicite uma nova recuperação de senha.</p> : null}
+            {params?.erro === "confirmacao" ? <p className="mt-5 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">O link de confirmação é inválido, expirou ou já foi utilizado. Inicie um novo cadastro ou entre com sua conta.</p> : null}
             {params?.erro === "demo" ? <p className="mt-5 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">Não foi possível preparar a demonstração agora. Tente novamente em alguns instantes.</p> : null}
 
             <div className="mt-5 rounded-lg border border-orange-200 bg-orange-50 p-4 text-sm text-neutral-800">

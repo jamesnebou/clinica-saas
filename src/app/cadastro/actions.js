@@ -120,7 +120,7 @@ export async function signUpAction(_previousState, formData) {
 
   const supabase = await createClient();
   const onboardingPath = `/onboarding?plan=${encodeURIComponent(selectedPlan)}&signup=completed`;
-  const emailRedirectTo = `${context.baseUrl}/auth/callback?next=${encodeURIComponent(onboardingPath)}`;
+  const emailRedirectTo = `${context.baseUrl}/onboarding`;
   const metadata = {
     ...buildSelfServiceUserMetadata({ name, phone, selectedPlan }),
     marketing_attribution: attribution,
