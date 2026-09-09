@@ -16,9 +16,10 @@ test("recuperacao usa fluxo que funciona fora do navegador solicitante", () => {
 
 test("ponte aceita somente fragmento de recuperacao completo", () => {
   assert.match(recoveryBridge, /fragment\.get\("type"\) === "recovery"/);
-  assert.match(recoveryBridge, /fragment\.has\("access_token"\)/);
-  assert.match(recoveryBridge, /fragment\.has\("refresh_token"\)/);
-  assert.match(recoveryBridge, /supabase\.auth\.getSession\(\)/);
+  assert.match(recoveryBridge, /fragment\.get\("access_token"\)/);
+  assert.match(recoveryBridge, /fragment\.get\("refresh_token"\)/);
+  assert.match(recoveryBridge, /history\.replaceState/);
+  assert.match(recoveryBridge, /supabase\.auth\.setSession/);
 });
 
 test("destinos de nova senha e erro permanecem internos e separados por perfil", () => {

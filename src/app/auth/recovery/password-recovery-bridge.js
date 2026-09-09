@@ -14,18 +14,24 @@ export function PasswordRecoveryBridge({ next, errorPath }) {
     async function completeRecovery() {
       try {
         const fragment = new URLSearchParams(window.location.hash.replace(/^#/, ""));
-        const isRecoveryLink = fragment.get("type") === "recovery" && fragment.has("access_token") && fragment.has("refresh_token");
+        const accessToken = fragment.get("access_token");
+        const refreshToken = fragment.get("refresh_token");
+        const isRecoveryLink = fragment.get("type") === "recovery" && accessToken && refreshToken;
 
         if (!isRecoveryLink) {
           router.replace(errorPath);
           return;
         }
 
+        window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
         const supabase = createClient();
-        const { data, error } = await supabase.auth.getSession();
+        const { data, error } = await supabase.auth.setSession({
+          access_token: accessToken,
+          refresh_token: refreshToken,
+        });
 
         if (!active) return;
-        if (error || !data?.session) {
+        if (error || !data?.session?.user) {
           router.replace(errorPath);
           return;
         }
