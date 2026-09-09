@@ -92,11 +92,37 @@ try {
   assert.deepEqual(restoredProfessional, { id: professionalA, nome: "Profissional original A" });
   assert.deepEqual(tenantBAfterRepeat, tenantBBeforeRepeat);
 
+  const snapshot = await must(db.from("clinica_demo_snapshots")
+    .select("snapshot")
+    .eq("clinica_id", clinicA)
+    .single());
+  const tamperedSnapshot = structuredClone(snapshot.snapshot);
+  tamperedSnapshot.clientes.push({
+    id: randomUUID(),
+    clinica_id: clinicB,
+    nome: "Tentativa cross-tenant",
+    status: "ativo",
+  });
+  await must(db.from("clinica_demo_snapshots")
+    .update({ snapshot: tamperedSnapshot })
+    .eq("clinica_id", clinicA));
+
+  const rejectedRestore = await db.rpc("restore_clinica_demo_snapshot", { p_clinica_id: clinicA });
+  assert.equal(rejectedRestore.error?.code, "42501");
+  const tenantAAfterRejectedRestore = await must(db.from("clientes").select("id, nome").eq("clinica_id", clinicA));
+  const tenantBAfterRejectedRestore = await must(db.from("clientes")
+    .select("id, nome, telefone, telefone_whatsapp")
+    .eq("id", clientB)
+    .single());
+  assert.deepEqual(tenantAAfterRejectedRestore, [{ id: clientA, nome: "Paciente original A" }]);
+  assert.deepEqual(tenantBAfterRejectedRestore, tenantBBeforeRepeat);
+
   console.log("demo_snapshot_restore_ok", {
     restoredClients: restoredClients.length,
     generatedPhoneRecalculated: true,
     repeatedRestore: true,
     crossTenantIsolation: true,
+    tamperedSnapshotRejected: true,
   });
 } finally {
   await db.from("clinicas").delete().in("id", [clinicA, clinicB]);
