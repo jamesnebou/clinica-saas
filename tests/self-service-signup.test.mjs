@@ -132,6 +132,7 @@ test("login do cliente continua usando signInAction e oferece cadastro", () => {
 test("recuperação do cliente não exige administrador interno", () => {
   const clientReset = loginAction.slice(loginAction.indexOf("requestClientPasswordResetAction"), loginAction.indexOf("updateRecoveredPasswordAction"));
   assert.match(clientReset, /resetPasswordForEmail/);
+  assert.match(clientReset, /auth\/recovery\?next=\/login-cliente\/nova-senha/);
   assert.doesNotMatch(clientReset, /findInternalAdminByEmail/);
 });
 

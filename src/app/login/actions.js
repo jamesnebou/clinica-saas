@@ -1,6 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { isInternalAdminUser } from "@/lib/auth/session";
 import { safeInternalNext } from "@/lib/auth/self-service.mjs";
 import { ensureDemoAccountAndReset, isDemoLoginEmail, isDemoPassword } from "@/lib/demo/demo-account";
@@ -15,6 +16,24 @@ function normalizeEmail(value) {
 
 async function getBaseUrl() {
   return getTrustedAppOrigin();
+}
+
+function createPasswordRecoveryClient() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  if (!supabaseUrl || !supabaseAnonKey) {
+    throw new Error("Variaveis publicas do Supabase nao configuradas.");
+  }
+
+  return createSupabaseClient(supabaseUrl, supabaseAnonKey, {
+    auth: {
+      autoRefreshToken: false,
+      detectSessionInUrl: false,
+      flowType: "implicit",
+      persistSession: false,
+    },
+  });
 }
 
 async function findInternalAdminByEmail(email) {
@@ -90,9 +109,9 @@ export async function requestAdminPasswordResetAction(_prevState, formData) {
     const user = await findInternalAdminByEmail(email);
 
     if (user) {
-      const supabase = await createClient();
+      const supabase = createPasswordRecoveryClient();
       const baseUrl = await getBaseUrl();
-      const redirectTo = `${baseUrl}/auth/callback?next=/login/nova-senha`;
+      const redirectTo = `${baseUrl}/auth/recovery?next=/login/nova-senha`;
       const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
       if (error) throw error;
     }
@@ -114,9 +133,9 @@ export async function requestClientPasswordResetAction(_prevState, formData) {
 
   try {
     if (!isInternalAdminEmail(email) && !isDemoLoginEmail(email)) {
-      const supabase = await createClient();
+      const supabase = createPasswordRecoveryClient();
       const baseUrl = await getBaseUrl();
-      const redirectTo = `${baseUrl}/auth/callback?next=/login-cliente/nova-senha`;
+      const redirectTo = `${baseUrl}/auth/recovery?next=/login-cliente/nova-senha`;
       const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
       if (error) throw error;
     }
