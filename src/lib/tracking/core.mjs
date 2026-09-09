@@ -159,8 +159,13 @@ export function normalizeMarketingAttribution(input = {}) {
     if (value) output[key] = value;
   }
 
-  for (const key of ["fbclid", "fbc", "fbp", ...GOOGLE_CLICK_ID_KEYS, "segment", "page_type"]) {
-    const value = cleanText(source[key] || raw[key] || effectiveFirst[key], key.startsWith("fb") ? 500 : 160);
+  for (const key of ["fbclid", "fbc", "fbp", ...GOOGLE_CLICK_ID_KEYS]) {
+    const value = cleanText(source[key], 500);
+    if (value) output[key] = value;
+  }
+
+  for (const key of ["segment", "page_type"]) {
+    const value = cleanText(source[key] || raw[key] || effectiveFirst[key], 160);
     if (value) output[key] = value;
   }
 

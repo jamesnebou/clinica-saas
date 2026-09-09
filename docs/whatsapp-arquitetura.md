@@ -6,6 +6,8 @@
 - Cada clínica conecta a própria WABA e o próprio número pelo Embedded Signup.
 - Nenhuma credencial da Meta é enviada ao navegador ou salva em tabela de clínica.
 - A linha de crédito padrão é `client_direct`; o custo de conversas pertence à clínica conectada.
+- O token temporário do Embedded Signup valida os ativos concedidos e é descartado.
+- A credencial permanente somente assume a operação depois da verificação Business, System User, WABA, número, webhook e templates.
 
 ## Fluxo de saída
 

@@ -27,8 +27,8 @@ $$,'booking público completo');
 select is((select count(*) from public.agendamentos where clinica_id='c0000000-0000-4000-8000-000000000001'),1::bigint,'cria um agendamento');
 select is((select cardinality(procedimento_ids) from public.agendamentos where clinica_id='c0000000-0000-4000-8000-000000000001'),2,'preserva todos os procedimentos');
 select is((select count(*) from public.site_agendamentos_publicos where clinica_id='c0000000-0000-4000-8000-000000000001'),1::bigint,'cria booking público na transação');
-select is((select count(*) from public.finance_recebiveis where origem_tipo='agendamento'),1::bigint,'cria obrigação canônica quando há sinal');
-select is((select count(*) from public.domain_outbox_events where event_name='booking.created' and consumer='whatsapp'),1::bigint,'grava outbox junto com booking');
+select is((select count(*) from public.finance_recebiveis where clinica_id='c0000000-0000-4000-8000-000000000001' and origem_tipo='agendamento'),1::bigint,'cria obrigação canônica quando há sinal');
+select is((select count(*) from public.domain_outbox_events where clinica_id='c0000000-0000-4000-8000-000000000001' and event_name='booking.created' and consumer='whatsapp'),1::bigint,'grava outbox junto com booking');
 
 select lives_ok($$
  select public.agenda_criar_agendamento_atomico_v2(
@@ -42,13 +42,13 @@ select throws_ok($$
   'c0000000-0000-4000-8000-000000000001',null,'d1000000-0000-4000-8000-000000000001',array['c2000000-0000-4000-8000-000000000001'::uuid],
   '2030-01-11 12:00+00','2030-01-11 13:00+00',100,'cross','booking-cross','{"nome":"Cross","email":"cross@nexawi.test"}'::jsonb)
 $$,'23503',null,'profissional cross-tenant é bloqueado');
-select is((select count(*) from public.clientes where email='cross@nexawi.test'),0::bigint,'falha intermediária não deixa cliente parcial');
+select is((select count(*) from public.clientes where clinica_id='c0000000-0000-4000-8000-000000000001' and email='cross@nexawi.test'),0::bigint,'falha intermediária não deixa cliente parcial');
 select throws_ok($$
  select public.agenda_criar_agendamento_atomico_v2(
   'c0000000-0000-4000-8000-000000000001',null,'c1000000-0000-4000-8000-000000000001',array['c2000000-0000-4000-8000-000000000001'::uuid],
   '2030-01-10 12:30+00','2030-01-10 13:00+00',100,'overlap','booking-overlap','{"nome":"Rollback","email":"rollback@nexawi.test"}'::jsonb)
 $$,'23P01',null,'sobreposição falha dentro da transação');
-select is((select count(*) from public.clientes where email='rollback@nexawi.test'),0::bigint,'erro no insert do agendamento reverte cliente criado');
+select is((select count(*) from public.clientes where clinica_id='c0000000-0000-4000-8000-000000000001' and email='rollback@nexawi.test'),0::bigint,'erro no insert do agendamento reverte cliente criado');
 
 select throws_ok($$
  select public.finance_registrar_pagamento_agendamento_v2(
@@ -61,21 +61,21 @@ select lives_ok($$
   'c0000000-0000-4000-8000-000000000001',(select id from public.agendamentos where clinica_id='c0000000-0000-4000-8000-000000000001'),150,50,
   'Sinal','asaas','pay-f0b-1',now(),'pix','{}')
 $$,'liquidação parcial canônica');
-select is((select valor_recebido from public.finance_recebiveis where origem_tipo='agendamento'),50.00::numeric,'saldo recebido parcial correto');
-select is((select count(*) from public.finance_liquidacoes where provider_reference='pay-f0b-1' and tipo='recebimento'),1::bigint,'uma liquidação para o evento');
+select is((select valor_recebido from public.finance_recebiveis where clinica_id='c0000000-0000-4000-8000-000000000001' and origem_tipo='agendamento'),50.00::numeric,'saldo recebido parcial correto');
+select is((select count(*) from public.finance_liquidacoes where clinica_id='c0000000-0000-4000-8000-000000000001' and provider_reference='pay-f0b-1' and tipo='recebimento'),1::bigint,'uma liquidação para o evento');
 select lives_ok($$
  select public.finance_registrar_pagamento_agendamento_v2(
   'c0000000-0000-4000-8000-000000000001',(select id from public.agendamentos where clinica_id='c0000000-0000-4000-8000-000000000001'),150,50,
   'Sinal','asaas','pay-f0b-1',now(),'pix','{}')
 $$,'webhook duplicado é idempotente');
-select is((select count(*) from public.finance_liquidacoes where provider_reference='pay-f0b-1' and tipo='recebimento'),1::bigint,'duplicidade continua uma liquidação');
+select is((select count(*) from public.finance_liquidacoes where clinica_id='c0000000-0000-4000-8000-000000000001' and provider_reference='pay-f0b-1' and tipo='recebimento'),1::bigint,'duplicidade continua uma liquidação');
 select ok((select bool_and(diagnostico='ok') from public.finance_reconciliacao_legado_v2 where clinica_id='c0000000-0000-4000-8000-000000000001'),'espelho legado confere com canônico');
 select lives_ok($$
  select public.finance_cancelar_pagamento_agendamento_v2(
   'c0000000-0000-4000-8000-000000000001',(select id from public.agendamentos where clinica_id='c0000000-0000-4000-8000-000000000001'),'Estorno F0B')
 $$,'cancelamento estorna atomicamente');
 select results_eq(
- $$select status,valor_recebido from public.finance_recebiveis where origem_tipo='agendamento'$$,
+ $$select status,valor_recebido from public.finance_recebiveis where clinica_id='c0000000-0000-4000-8000-000000000001' and origem_tipo='agendamento'$$,
  $$values ('cancelado'::text,0.00::numeric)$$,
  'recebível termina cancelado e zerado');
 

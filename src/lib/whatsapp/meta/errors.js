@@ -5,6 +5,10 @@ export class MetaCloudError extends Error {
 }
 export function sanitizeMetaError(error) {
   const code = error?.code ? ` (${error.code})` : "";
-  return `${String(error?.message || "Falha na comunicação com a Meta").slice(0, 350)}${code}`;
+  const message = String(error?.message || "Falha na comunicação com a Meta")
+    .replace(/Bearer\s+[A-Za-z0-9._~-]+/gi, "Bearer [redacted]")
+    .replace(/\bEAA[A-Za-z0-9_-]{12,}\b/g, "[redacted]")
+    .replace(/\b\d{5,}\|[A-Za-z0-9._~-]{8,}\b/g, "[redacted]")
+    .slice(0, 350);
+  return `${message}${code}`;
 }
-

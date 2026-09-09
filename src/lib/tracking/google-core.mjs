@@ -26,13 +26,18 @@ export function buildGoogleOfflineConversion({ eventName, eventId, eventTime = n
   if (!safeEventId) throw new Error("event_id Google obrigatório.");
   const timestamp = eventTime instanceof Date ? eventTime : new Date(eventTime);
   if (!Number.isFinite(timestamp.getTime())) throw new Error("event_time Google inválido.");
+  const clickTouch = Object.keys(attribution.last_touch || {}).length
+    ? attribution.last_touch
+    : Object.keys(attribution.first_touch || {}).length
+      ? attribution.first_touch
+      : attribution;
   const output = {
     event_name: eventName,
     event_id: safeEventId,
     event_time: timestamp.toISOString(),
-    gclid: cleanText(attribution.gclid || attribution.last_touch?.gclid || attribution.first_touch?.gclid, 500),
-    gbraid: cleanText(attribution.gbraid || attribution.last_touch?.gbraid || attribution.first_touch?.gbraid, 500),
-    wbraid: cleanText(attribution.wbraid || attribution.last_touch?.wbraid || attribution.first_touch?.wbraid, 500),
+    gclid: cleanText(clickTouch.gclid, 500),
+    gbraid: cleanText(clickTouch.gbraid, 500),
+    wbraid: cleanText(clickTouch.wbraid, 500),
     user_data: userData,
   };
   const amount = Number(value);

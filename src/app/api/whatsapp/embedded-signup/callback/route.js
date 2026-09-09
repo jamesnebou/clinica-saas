@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireClinicSection } from "@/lib/auth/session";
 import { getCurrentMembership } from "@/lib/auth/permissions";
 import { completeEmbeddedSignup } from "@/lib/whatsapp/onboarding";
+import { sanitizeMetaError } from "@/lib/whatsapp/meta/errors";
 
 export const runtime = "nodejs";
 export async function POST(request) {
@@ -12,6 +13,5 @@ export async function POST(request) {
     for (const key of ["state","code","wabaId","phoneNumberId"]) if (!String(body?.[key] || "").trim()) return NextResponse.json({ error: "Retorno incompleto da Meta." }, { status: 400 });
     const result = await completeEmbeddedSignup({ ...body, clinicId: context.activeClinic.id, userId: context.user.id });
     return NextResponse.json({ ok: true, ...result });
-  } catch (error) { return NextResponse.json({ error: error?.message || "Não foi possível concluir a conexão." }, { status: 400 }); }
+  } catch (error) { return NextResponse.json({ error: sanitizeMetaError(error) || "Não foi possível concluir a conexão." }, { status: 400 }); }
 }
-

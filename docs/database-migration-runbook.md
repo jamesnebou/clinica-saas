@@ -62,6 +62,21 @@ As cadeias historicas nao podem ser simplesmente concatenadas: o fresh reset com
 - Guardar hash, data, project ref, commit e responsavel pelo backup.
 - Um dump sem teste de restauracao nao e considerado recuperavel.
 
+## Staging
+
+Nenhum projeto Supabase de staging dedicado foi comprovado pelo repositorio ou pela configuracao local auditada. Producao nao deve ser usada como staging. O minimo recomendado e um projeto Supabase isolado, sem dados clinicos reais, com as mesmas extensions, variaveis nao produtivas e uma instancia Preview da aplicacao apontada exclusivamente para ele.
+
+## CI, deploy e sincronismo
+
+- Os workflows existentes executam workers; nao existe pipeline versionado que aplique migrations automaticamente.
+- O deploy da aplicacao e feito pela Vercel a partir do repositorio, enquanto migrations dependem de operacao humana. Portanto, schema e aplicacao podem ficar fora de sincronia.
+- Antes de promover codigo que dependa de schema novo, o responsavel deve confirmar backup, aplicar e validar a migration em staging, aplicar a migration produtiva em janela controlada e somente entao promover a aplicacao compativel.
+- Protecao de branch e regras do repositorio GitHub nao sao observaveis pelo codigo local e precisam ser confirmadas externamente.
+
+## Pos-deploy
+
+Confirmar versao implantada, historico de migrations, HTTP dos workers, login, troca de clinica, prontuario, criacao e reagendamento, baixa financeira e reconciliacoes somente leitura. Monitorar filas e erros durante a janela definida; diante de incompatibilidade, reverter a aplicacao e corrigir schema somente por fix-forward.
+
 ## Restore seguro
 
 1. Criar projeto/staging ou banco local vazio; nunca apontar para producao.
@@ -70,6 +85,12 @@ As cadeias historicas nao podem ser simplesmente concatenadas: o fresh reset com
 4. Executar pgTAP, F0A, F0B e reconciliacoes.
 5. Apontar uma instancia isolada da aplicacao para o restore e executar smoke tests.
 6. Descartar o ambiente somente depois de registrar o resultado.
+
+No restore integral local validado na F0C-R, o custom dump precisou ser aplicado
+com `supabase_admin`, `--no-owner` e preservacao dos privilegios. O usuario
+`postgres` nao possuia permissao para todos os objetos gerenciados, e
+`--no-privileges` removeu grants necessarios. A evidencia e os hashes estao em
+`docs/f0c-r-restore-homologation.md`.
 
 ## Cenários de recuperacao
 

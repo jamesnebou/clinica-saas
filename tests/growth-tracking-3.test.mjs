@@ -16,9 +16,30 @@ test("Growth 3 preserva first/last touch e click IDs Google", () => {
   assert.equal(result.first_touch.gclid, "first-click");
   assert.equal(result.last_touch.gbraid, "last-braid");
   assert.equal(result.gbraid, "last-braid");
+  assert.equal(result.gclid, undefined);
   assert.equal(result.attribution_version, 3);
   assert.equal(allowsAnalytics(result), true);
   assert.equal(allowsMarketing(result), true);
+});
+
+test("novo last paid touch não herda click ID de campanha anterior", () => {
+  const attribution = normalizeMarketingAttribution({
+    first_touch: { utm_source: "google", utm_campaign: "first", gclid: "old-google-click" },
+    last_touch: { utm_source: "instagram", utm_campaign: "second", fbclid: "new-meta-click" },
+    gclid: "old-google-click",
+    consent: { analytics: true, marketing: true, decided: true },
+  });
+
+  assert.equal(attribution.gclid, undefined);
+  assert.equal(attribution.fbclid, "new-meta-click");
+
+  const conversion = buildGoogleOfflineConversion({
+    eventName: "CompleteRegistration",
+    eventId: "registration:clinic_123",
+    eventTime: "2026-09-08T12:00:00.000Z",
+    attribution,
+  });
+  assert.equal(conversion.gclid, null);
 });
 
 test("consentimento negado bloqueia destinos opcionais", () => {
