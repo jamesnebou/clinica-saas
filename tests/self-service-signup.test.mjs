@@ -15,6 +15,7 @@ import { marketingPhoneCandidates } from "../src/lib/tracking/core.mjs";
 const source = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 const cadastroPage = source("src/app/cadastro/page.js");
 const cadastroAction = source("src/app/cadastro/actions.js");
+const cadastroForm = source("src/app/cadastro/cadastro-form.js");
 const leaveDemo = source("src/app/auth/leave-demo/route.js");
 const loginAction = source("src/app/login/actions.js");
 const loginPage = source("src/app/login-cliente/page.js");
@@ -144,6 +145,11 @@ test("onboarding continua criando o vínculo owner", () => {
 test("CompleteRegistration permanece depois da criação da clínica", () => {
   assert.ok(onboarding.indexOf("eventName: \"CompleteRegistration\"") > onboarding.indexOf(".from(\"clinicas\")"));
   assert.doesNotMatch(cadastroAction, /CompleteRegistration/);
+});
+
+test("signup_started persiste somente pela Server Action", () => {
+  assert.match(cadastroForm, /trackMarketingEvent\("signup_started", \{ plan: selectedPlan \}, \{ skipInternal: true \}\)/);
+  assert.match(cadastroAction, /eventName: "signup_started"/);
 });
 
 test("atribuição UTM atravessa cadastro e onboarding", () => {

@@ -35,7 +35,7 @@ export default function CadastroForm({ selectedPlan }) {
     const form = new FormData(event.currentTarget);
     const nameParts = String(form.get("name") || "").trim().split(/\s+/);
     setGoogleEnhancedUserData({ email: form.get("email"), phone: form.get("phone"), firstName: nameParts[0], lastName: nameParts.slice(1).join(" ") });
-    trackMarketingEvent("signup_started", { plan: selectedPlan });
+    trackMarketingEvent("signup_started", { plan: selectedPlan }, { skipInternal: true });
   }
 
   if (state?.ok && state?.requiresEmailConfirmation) {
