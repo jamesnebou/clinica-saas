@@ -31,9 +31,13 @@ test("landing de estetica possui FAQ comercial completo", async () => {
 
 test("formulario envia segmento explicito preservando tracking", async () => {
   const form = await source("src/components/marketing/lead-capture-form.js");
-  assert.match(form, /\.\.\.attribution, segment/);
+  const payload = await source("src/lib/tracking/marketing-lead.mjs");
+  assert.match(form, /buildMarketingLeadPayload/);
+  assert.match(form, /metaEventId,/);
+  assert.match(form, /segment,/);
+  assert.match(payload, /contact_consent: formPayload\.contact_consent/);
+  assert.match(payload, /consent: attribution\.consent/);
   assert.match(form, /trackMetaStandardEvent\("Lead"/);
-  assert.match(form, /meta_event_id: metaEventId/);
 });
 
 test("paginas publicas ativam tracking com contexto separado", async () => {

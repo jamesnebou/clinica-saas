@@ -5,6 +5,7 @@ import { CheckCircle2, LoaderCircle, MessageCircle } from "lucide-react";
 import { createMarketingEventId, getMarketingAttribution, getMarketingSessionId } from "@/lib/tracking/client-attribution";
 import { trackMarketingEvent, trackMetaStandardEvent } from "./conversion-tracker";
 import { fireGoogleAdsConversion, fireGoogleAnalyticsEvent, setGoogleEnhancedUserData } from "@/lib/tracking/google-client";
+import { buildMarketingLeadPayload } from "@/lib/tracking/marketing-lead.mjs";
 
 const WHATSAPP_URL = "https://wa.me/5577988656394?text=Ol%C3%A1%2C%20quero%20conhecer%20a%20NexaWi%20Cl%C3%ADnicas.";
 
@@ -45,7 +46,14 @@ export function LeadCaptureForm({
       const response = await fetch("/api/public/marketing-leads", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ ...payload, plan_interest: plan, session_id: getMarketingSessionId(), meta_event_id: metaEventId, ...attribution, segment }),
+        body: JSON.stringify(buildMarketingLeadPayload({
+          formPayload: payload,
+          attribution,
+          plan,
+          sessionId: getMarketingSessionId(),
+          metaEventId,
+          segment,
+        })),
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.error || "Não foi possível enviar agora.");
@@ -94,7 +102,7 @@ export function LeadCaptureForm({
             </select>
           </label>
           <label className="flex items-start gap-2 text-xs leading-5 text-white/58 sm:col-span-2">
-            <input name="consent" type="checkbox" required className="mt-1" /> Autorizo o contato da NexaWi sobre esta solicitação, conforme a Política de Privacidade.
+            <input name="contact_consent" type="checkbox" required className="mt-1" /> Autorizo o contato da NexaWi sobre esta solicitação, conforme a Política de Privacidade.
           </label>
           {state.message ? <p role="status" className={`rounded-md px-4 py-3 text-sm font-bold sm:col-span-2 ${state.status === "success" ? "bg-emerald-500/15 text-emerald-200" : "bg-red-500/15 text-red-200"}`}>{state.message}</p> : null}
           <button disabled={state.status === "loading"} className="inline-flex h-12 items-center justify-center gap-2 rounded-md bg-[var(--nexawi-primary)] px-6 text-sm font-black text-white transition active:scale-[0.98] disabled:opacity-60 sm:col-span-2">

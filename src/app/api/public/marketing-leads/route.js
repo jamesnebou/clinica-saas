@@ -15,6 +15,7 @@ import {
   enqueueMetaConversionEvent,
   queueAndDeliverMetaConversionEvent,
 } from "@/lib/tracking/service";
+import { hasContactConsent } from "@/lib/tracking/marketing-lead.mjs";
 
 export const runtime = "nodejs";
 
@@ -66,7 +67,7 @@ export async function POST(request) {
 
     if (!nome || nome.length < 2) return NextResponse.json({ error: "Informe seu nome." }, { status: 400 });
     if (whatsapp.length < 10) return NextResponse.json({ error: "Informe um WhatsApp válido com DDD." }, { status: 400 });
-    if (body.consent !== "on" && body.consent !== true) return NextResponse.json({ error: "Autorize o contato para continuar." }, { status: 400 });
+    if (!hasContactConsent(body)) return NextResponse.json({ error: "Autorize o contato para continuar." }, { status: 400 });
 
     const ipHash = requestHash(request);
     const twoMinutesAgo = new Date(Date.now() - 2 * 60 * 1000).toISOString();
