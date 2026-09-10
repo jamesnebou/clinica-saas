@@ -3,12 +3,16 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import {
   META_BROKER_MESSAGE_TYPE,
+  META_BROKER_NAVIGATION_POPUP,
+  META_BROKER_NAVIGATION_TOP_LEVEL,
   isExpectedBrokerOrigin,
   isMetaConnectCanary,
   isPlatformReturnOrigin,
   isTrustedBrokerMessage,
+  normalizeBrokerNavigationMode,
   normalizeHttpOrigin,
   requestOriginFromHeaders,
+  shouldUseTopLevelBroker,
 } from "../src/lib/whatsapp/broker-core.mjs";
 import { hashOpaqueToken } from "../src/lib/whatsapp/core.mjs";
 
@@ -66,14 +70,32 @@ test("tenant fora do canary permanece no fluxo legado", () => {
   }), false);
 });
 
+test("navegacao top-level e escolhida somente para tela pequena com toque sem usar User-Agent", () => {
+  assert.equal(shouldUseTopLevelBroker({ viewportWidth: 390, coarsePointer: true, maxTouchPoints: 5 }), true);
+  assert.equal(shouldUseTopLevelBroker({ viewportWidth: 390, coarsePointer: false, maxTouchPoints: 1 }), true);
+  assert.equal(shouldUseTopLevelBroker({ viewportWidth: 390, coarsePointer: false, maxTouchPoints: 0 }), false);
+  assert.equal(shouldUseTopLevelBroker({ viewportWidth: 1440, coarsePointer: true, maxTouchPoints: 5 }), false);
+  assert.equal(normalizeBrokerNavigationMode("top_level"), META_BROKER_NAVIGATION_TOP_LEVEL);
+  assert.equal(normalizeBrokerNavigationMode("tampered"), META_BROKER_NAVIGATION_POPUP);
+});
+
 test("dashboard abre popup no clique, nao executa JSSDK e confirma ready no servidor", async () => {
   const dashboard = await source("../src/app/dashboard/whatsapp/embedded-signup-button.js");
   assert.ok(dashboard.indexOf('window.open("about:blank"') < dashboard.indexOf('fetch("/api/whatsapp/embedded-signup/start"'));
+  assert.match(dashboard, /navigationMode === META_BROKER_NAVIGATION_POPUP[\s\S]+window\.open\("about:blank"/);
   assert.doesNotMatch(dashboard, /FB\.init|FB\.login|connect\.facebook\.net/);
   assert.match(dashboard, /isTrustedBrokerMessage/);
   assert.match(dashboard, /embedded-signup\/status\?sessionId=/);
   assert.match(dashboard, /if \(data\.ready\)/);
-  assert.match(dashboard, /window\.location\.reload\(\)/);
+  assert.match(dashboard, /window\.location\.replace\(cleanOnboardingReturnUrl\(\)\)/);
+});
+
+test("mobile navega para o broker sem abrir popup", async () => {
+  const dashboard = await source("../src/app/dashboard/whatsapp/embedded-signup-button.js");
+  assert.match(dashboard, /shouldUseTopLevelBroker\(\{/);
+  assert.match(dashboard, /window\.matchMedia\?\.\("\(pointer: coarse\)"\)/);
+  assert.doesNotMatch(dashboard, /userAgent|navigator\.platform/);
+  assert.match(dashboard, /navigationMode === META_BROKER_NAVIGATION_TOP_LEVEL[\s\S]+window\.location\.assign\(data\.brokerUrl\)/);
 });
 
 test("fluxo broker carrega e executa o Facebook JSSDK somente na pagina central", async () => {
@@ -116,6 +138,16 @@ test("trava sincrona impede duplo clique e cancelamento permite nova tentativa",
   assert.doesNotMatch(broker, /sendOutcome\(\{ outcome: "meta_cancelled" \}\)/);
 });
 
+test("timeout restaura a UI sem consumir nem duplicar a sessao", async () => {
+  const broker = await source("../src/app/whatsapp/connect/broker-client.js");
+  const launcher = broker.slice(broker.indexOf("function launchMetaSignup"), broker.indexOf("const actionDisabled"));
+  const beforeLogin = launcher.slice(0, launcher.indexOf("window.FB.login"));
+  assert.match(launcher, /META_LOGIN_UI_TIMEOUT_MS = 30_000|META_LOGIN_UI_TIMEOUT_MS/);
+  assert.match(launcher, /Não foi possível abrir a Meta\. Tente novamente\./);
+  assert.doesNotMatch(beforeLogin, /await |fetch\(/);
+  assert.doesNotMatch(launcher.slice(launcher.indexOf("loginTimeoutRef.current = window.setTimeout"), launcher.indexOf("window.FB.login")), /sendOutcome|embedded-signup\/start/);
+});
+
 test("payload Embedded Signup e encaminhamento FINISH permanecem inalterados", async () => {
   const broker = await source("../src/app/whatsapp/connect/broker-client.js");
   assert.match(broker, /config_id: configId/);
@@ -126,6 +158,7 @@ test("payload Embedded Signup e encaminhamento FINISH permanecem inalterados", a
   assert.match(broker, /wabaId: data\?\.data\?\.waba_id/);
   assert.match(broker, /phoneNumberId: data\?\.data\?\.phone_number_id/);
   assert.match(broker, /sendOutcome\(\{ code, wabaId, phoneNumberId \}\)/);
+  assert.doesNotMatch(broker, /auth_type/);
 });
 
 test("dashboard escolhe o fluxo somente pelo mode retornado pelo backend", async () => {
@@ -138,7 +171,8 @@ test("dashboard escolhe o fluxo somente pelo mode retornado pelo backend", async
   assert.match(dashboard, /data\.mode === "legacy"/);
   assert.match(dashboard, /data\.mode !== "broker"/);
   assert.match(dashboard, /import\("\.\/legacy-embedded-signup"\)/);
-  assert.doesNotMatch(start, /request\.json\(/);
+  assert.match(start, /navigationMode: normalizeBrokerNavigationMode\(body\?\.navigationMode\)/);
+  assert.doesNotMatch(start, /body\?\.(?:clinic|clinica|tenant|return|origin)/i);
   assert.match(onboarding, /isClinicMetaConnectCanary\(\{ clinicId, returnOrigin \}\)/);
   assert.match(onboarding, /mode: "legacy"/);
   assert.match(onboarding, /mode: "broker"/);
@@ -152,7 +186,43 @@ test("tenant canary recebe URL do broker e retorno validado permanece server-sid
   assert.match(onboarding, /const brokerUrl = new URL\("\/whatsapp\/connect", connectOrigin\)/);
   assert.match(onboarding, /brokerUrl\.searchParams\.set\("state", state\)/);
   assert.match(onboarding, /return_origin: returnOrigin/);
-  assert.doesNotMatch(onboarding, /return_url/);
+  assert.match(onboarding, /navigation_mode: normalizedNavigationMode/);
+});
+
+test("retorno top-level e construido somente da origem armazenada na sessao", async () => {
+  const [onboarding, callback] = await Promise.all([
+    source("../src/lib/whatsapp/onboarding.js"),
+    source("../src/app/api/whatsapp/embedded-signup/broker/callback/route.js"),
+  ]);
+  assert.match(onboarding, /new URL\("\/dashboard\/whatsapp", normalizeStoredReturnOrigin\(session\.metadata\?\.return_origin\)\)/);
+  assert.match(onboarding, /url\.searchParams\.set\("whatsapp_session", session\.id\)/);
+  assert.match(onboarding, /returnUrl: brokerDashboardReturnUrl\(session, "completed"\)/);
+  assert.match(callback, /returnUrl: result\.returnUrl/);
+  assert.doesNotMatch(callback, /body\?\.(?:return|origin|url)/i);
+});
+
+test("query completed isolada nunca falsifica conexao pronta", async () => {
+  const dashboard = await source("../src/app/dashboard/whatsapp/embedded-signup-button.js");
+  assert.match(dashboard, /const returnedSessionId = params\.get\("whatsapp_session"\)/);
+  assert.match(dashboard, /if \(returnedSessionId\)[\s\S]+checkServerStatus\(\)/);
+  assert.match(dashboard, /if \(data\.ready\)/);
+  assert.match(dashboard, /A conexão ainda não foi confirmada\. Tente novamente\./);
+  assert.doesNotMatch(dashboard, /whatsapp_onboarding[^\n]+===\s*["']completed["']/);
+});
+
+test("retorno cancelado libera nova tentativa sem consumir a sessao", async () => {
+  const dashboard = await source("../src/app/dashboard/whatsapp/embedded-signup-button.js");
+  assert.match(dashboard, /returnedOutcome === "cancelled" \? "idle" : "error"/);
+  assert.match(dashboard, /Conexão cancelada\. Você pode tentar novamente\./);
+  assert.match(dashboard, /window\.history\.replaceState\(\{\}, "", cleanOnboardingReturnUrl\(\)\)/);
+});
+
+test("sucesso top-level redireciona e desktop preserva postMessage", async () => {
+  const broker = await source("../src/app/whatsapp/connect/broker-client.js");
+  assert.match(broker, /if \(!topLevelNavigation && notifyOpener\(result\)\)/);
+  assert.match(broker, /window\.location\.assign\(safeReturnUrl\)/);
+  assert.match(broker, /finishBrowserFlow\("completed", outcome\.returnUrl \|\| completedReturnUrl\)/);
+  assert.match(broker, /postMessage\(\{ type: META_BROKER_MESSAGE_TYPE, sessionId, result \}, returnOrigin\)/);
 });
 
 test("conexoes existentes continuam impedindo exibicao do botao de onboarding", async () => {
@@ -190,6 +260,7 @@ test("status e consumo impedem leitura cross-tenant e tratam expiracao e replay"
   assert.match(onboarding, /status: "expired"/);
   assert.match(onboarding, /existing\.status === "completed" && existing\.metadata\?\.connection_id/);
   assert.match(onboarding, /existing\.status !== "pending"/);
+  assert.match(onboarding, /\.eq\("clinica_id", clinicId\)[\s\S]+\.eq\("user_id", userId\)/);
 });
 
 test("callback deriva o tenant da sessao e ignora tenant e return_url do navegador", async () => {

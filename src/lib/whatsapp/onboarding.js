@@ -7,20 +7,22 @@ import { sanitizeMetaError } from "./meta/errors";
 import { provisionMetaOnboarding } from "./meta/onboarding-core.mjs";
 import { templatePurposeFromName } from "./meta/templates";
 import { getMetaConnectOrigin, isClinicMetaConnectCanary, resolveClinicReturnOrigin } from "./broker";
+import { normalizeBrokerNavigationMode } from "./broker-core.mjs";
 
 const META_TEMPLATE_STATUSES = new Set(["APPROVED","PENDING","REJECTED","PAUSED","DISABLED","IN_APPEAL","PENDING_DELETION","DELETED","LIMIT_EXCEEDED"]);
 
-export async function createEmbeddedSignupSession({ clinicId, userId, role, requestOrigin }) {
+export async function createEmbeddedSignupSession({ clinicId, userId, role, requestOrigin, navigationMode }) {
   const returnOrigin = await resolveClinicReturnOrigin({ clinicId, requestOrigin });
   const brokerEnabled = isClinicMetaConnectCanary({ clinicId, returnOrigin });
   const connectOrigin = brokerEnabled ? getMetaConnectOrigin() : null;
+  const normalizedNavigationMode = normalizeBrokerNavigationMode(navigationMode);
   const state = secureOpaqueToken(); const expiresAt = new Date(Date.now() + 15 * 60_000).toISOString();
   const { data, error } = await supabaseAdmin.from("whatsapp_onboarding_sessions").insert({
     clinica_id: clinicId,
     user_id: userId,
     state_hash: hashOpaqueToken(state),
     expires_at: expiresAt,
-    metadata: { stage: "started", flow_mode: brokerEnabled ? "broker" : "legacy", return_origin: returnOrigin, broker_origin: connectOrigin, initiated_role: role },
+    metadata: { stage: "started", flow_mode: brokerEnabled ? "broker" : "legacy", return_origin: returnOrigin, broker_origin: connectOrigin, navigation_mode: normalizedNavigationMode, initiated_role: role },
   }).select("id").single();
   if (error) throw error;
   if (!brokerEnabled) {
@@ -61,6 +63,14 @@ function assertBrokerEnvironment(session) {
   }
 }
 
+function brokerDashboardReturnUrl(session, outcome) {
+  const url = new URL("/dashboard/whatsapp", normalizeStoredReturnOrigin(session.metadata?.return_origin));
+  url.searchParams.set("tab", "conexao");
+  url.searchParams.set("whatsapp_onboarding", outcome);
+  url.searchParams.set("whatsapp_session", session.id);
+  return url.toString();
+}
+
 export async function getEmbeddedSignupBrokerSession({ state }) {
   const session = await sessionByState(state);
   assertBrokerEnvironment(session);
@@ -74,6 +84,9 @@ export async function getEmbeddedSignupBrokerSession({ state }) {
     sessionId: session.id,
     status: session.status,
     returnOrigin,
+    navigationMode: normalizeBrokerNavigationMode(session.metadata?.navigation_mode),
+    cancelReturnUrl: brokerDashboardReturnUrl(session, "cancelled"),
+    completedReturnUrl: brokerDashboardReturnUrl(session, "completed"),
     appId: process.env.META_APP_ID || "",
     configId: process.env.META_WHATSAPP_CONFIG_ID || "",
     graphVersion: process.env.META_GRAPH_API_VERSION || "",
@@ -98,7 +111,7 @@ export async function completeEmbeddedSignupFromBroker({ state, code, wabaId, ph
   const session = await sessionByState(state);
   assertBrokerEnvironment(session);
   const result = await completeEmbeddedSignup({ state, code, wabaId, phoneNumberId, clinicId: session.clinica_id, userId: session.user_id });
-  return { ...result, sessionId: session.id };
+  return { ...result, sessionId: session.id, returnUrl: brokerDashboardReturnUrl(session, "completed") };
 }
 
 export async function failEmbeddedSignupBrokerSession({ state, reason }) {

@@ -1,4 +1,6 @@
 export const META_BROKER_MESSAGE_TYPE = "NEXAWI_WHATSAPP_ONBOARDING";
+export const META_BROKER_NAVIGATION_POPUP = "popup";
+export const META_BROKER_NAVIGATION_TOP_LEVEL = "top_level";
 
 function firstHeaderValue(value) {
   return String(value || "").split(",")[0].trim();
@@ -65,6 +67,18 @@ export function isTrustedBrokerMessage({ eventOrigin, expectedOrigin, eventSourc
       && data?.type === META_BROKER_MESSAGE_TYPE
       && String(data?.sessionId || "") === String(sessionId || ""),
   );
+}
+
+export function normalizeBrokerNavigationMode(value) {
+  return value === META_BROKER_NAVIGATION_TOP_LEVEL
+    ? META_BROKER_NAVIGATION_TOP_LEVEL
+    : META_BROKER_NAVIGATION_POPUP;
+}
+
+export function shouldUseTopLevelBroker({ viewportWidth, coarsePointer, maxTouchPoints } = {}) {
+  const width = Number(viewportWidth);
+  if (!Number.isFinite(width) || width <= 0 || width > 900) return false;
+  return Boolean(coarsePointer || Number(maxTouchPoints) > 0);
 }
 
 function csvValues(value) {

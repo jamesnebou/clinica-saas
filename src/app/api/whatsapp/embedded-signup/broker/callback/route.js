@@ -29,7 +29,7 @@ export async function POST(request) {
       wabaId: body.wabaId,
       phoneNumberId: body.phoneNumberId,
     });
-    return NextResponse.json({ ok: true, sessionId: result.sessionId, status: "completed" });
+    return NextResponse.json({ ok: true, sessionId: result.sessionId, status: "completed", returnUrl: result.returnUrl });
   } catch (error) {
     return NextResponse.json({ error: sanitizeMetaError(error) || "Não foi possível concluir a conexão." }, { status: 400 });
   }
