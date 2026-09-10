@@ -88,6 +88,46 @@ test("fluxo broker carrega e executa o Facebook JSSDK somente na pagina central"
   assert.match(page, /notFound\(\)/);
 });
 
+test("fbAsyncInit apenas inicializa o SDK e habilita a acao do usuario", async () => {
+  const broker = await source("../src/app/whatsapp/connect/broker-client.js");
+  const initializer = broker.slice(broker.indexOf("const initializeSdk"), broker.indexOf("function launchMetaSignup"));
+  assert.match(initializer, /window\.FB\.init/);
+  assert.match(initializer, /setSdkReady\(true\)/);
+  assert.match(initializer, /setMessage\("Tudo pronto para continuar\."\)/);
+  assert.doesNotMatch(initializer, /FB\.login/);
+});
+
+test("FB.login ocorre somente no handler ligado ao clique explicito", async () => {
+  const broker = await source("../src/app/whatsapp/connect/broker-client.js");
+  const launcher = broker.slice(broker.indexOf("function launchMetaSignup"));
+  assert.match(launcher, /function launchMetaSignup\(\)/);
+  assert.match(launcher, /window\.FB\.login/);
+  assert.match(broker, /onClick=\{launchMetaSignup\}/);
+  assert.match(broker, />\{launching \? "Abrindo Meta\.\.\." : "Continuar com a Meta"\}<\/button>/);
+});
+
+test("trava sincrona impede duplo clique e cancelamento permite nova tentativa", async () => {
+  const broker = await source("../src/app/whatsapp/connect/broker-client.js");
+  assert.match(broker, /launchingRef\.current \|\| terminal\.current/);
+  assert.match(broker, /launchingRef\.current = true/);
+  assert.match(broker, /const attempt = \+\+attemptRef\.current/);
+  assert.match(broker, /data\.event === "CANCEL"[\s\S]+resetForRetry/);
+  assert.match(broker, /setStatus\("ready"\)/);
+  assert.doesNotMatch(broker, /sendOutcome\(\{ outcome: "meta_cancelled" \}\)/);
+});
+
+test("payload Embedded Signup e encaminhamento FINISH permanecem inalterados", async () => {
+  const broker = await source("../src/app/whatsapp/connect/broker-client.js");
+  assert.match(broker, /config_id: configId/);
+  assert.match(broker, /response_type: "code"/);
+  assert.match(broker, /override_default_response_type: true/);
+  assert.match(broker, /extras: \{ setup: \{\}, featureType: "", sessionInfoVersion: "3" \}/);
+  assert.match(broker, /data\.event === "FINISH"/);
+  assert.match(broker, /wabaId: data\?\.data\?\.waba_id/);
+  assert.match(broker, /phoneNumberId: data\?\.data\?\.phone_number_id/);
+  assert.match(broker, /sendOutcome\(\{ code, wabaId, phoneNumberId \}\)/);
+});
+
 test("dashboard escolhe o fluxo somente pelo mode retornado pelo backend", async () => {
   const [dashboard, onboarding, start, legacyCallback] = await Promise.all([
     source("../src/app/dashboard/whatsapp/embedded-signup-button.js"),
