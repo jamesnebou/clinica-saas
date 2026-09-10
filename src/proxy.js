@@ -63,7 +63,10 @@ function isPlatformHost(host) {
     .split(",")
     .map((item) => item.trim().toLowerCase())
     .filter(Boolean);
-  return configured.includes(value);
+  const connectHost = (() => {
+    try { return new URL(process.env.META_CONNECT_ORIGIN || "").hostname.toLowerCase(); } catch { return ""; }
+  })();
+  return configured.includes(value) || Boolean(connectHost && value === connectHost);
 }
 
 async function findSlugByDomain(host) {

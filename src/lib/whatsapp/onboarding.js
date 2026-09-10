@@ -6,14 +6,120 @@ import { MetaCloudProvider } from "./meta/provider";
 import { sanitizeMetaError } from "./meta/errors";
 import { provisionMetaOnboarding } from "./meta/onboarding-core.mjs";
 import { templatePurposeFromName } from "./meta/templates";
+import { getMetaConnectOrigin, resolveClinicReturnOrigin } from "./broker";
 
 const META_TEMPLATE_STATUSES = new Set(["APPROVED","PENDING","REJECTED","PAUSED","DISABLED","IN_APPEAL","PENDING_DELETION","DELETED","LIMIT_EXCEEDED"]);
 
-export async function createEmbeddedSignupSession({ clinicId, userId }) {
+export async function createEmbeddedSignupSession({ clinicId, userId, role, requestOrigin }) {
+  const returnOrigin = await resolveClinicReturnOrigin({ clinicId, requestOrigin });
+  const connectOrigin = getMetaConnectOrigin();
   const state = secureOpaqueToken(); const expiresAt = new Date(Date.now() + 15 * 60_000).toISOString();
-  const { error } = await supabaseAdmin.from("whatsapp_onboarding_sessions").insert({ clinica_id: clinicId, user_id: userId, state_hash: hashOpaqueToken(state), expires_at: expiresAt, metadata: { stage: "started" } });
+  const { data, error } = await supabaseAdmin.from("whatsapp_onboarding_sessions").insert({
+    clinica_id: clinicId,
+    user_id: userId,
+    state_hash: hashOpaqueToken(state),
+    expires_at: expiresAt,
+    metadata: { stage: "started", return_origin: returnOrigin, broker_origin: connectOrigin, initiated_role: role },
+  }).select("id").single();
   if (error) throw error;
-  return { state, expiresAt, appId: process.env.META_APP_ID || "", configId: process.env.META_WHATSAPP_CONFIG_ID || "" };
+  const brokerUrl = new URL("/whatsapp/connect", connectOrigin);
+  brokerUrl.searchParams.set("state", state);
+  return { sessionId: data.id, brokerUrl: brokerUrl.toString(), connectOrigin, expiresAt };
+}
+
+async function sessionByState(state) {
+  const normalizedState = String(state || "").trim();
+  if (!normalizedState) throw new Error("Sessão de conexão inválida.");
+  const { data, error } = await supabaseAdmin
+    .from("whatsapp_onboarding_sessions")
+    .select("id,clinica_id,user_id,status,expires_at,metadata")
+    .eq("state_hash", hashOpaqueToken(normalizedState))
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) throw new Error("Sessão de conexão inválida ou expirada.");
+  return data;
+}
+
+function assertBrokerEnvironment(session) {
+  if (session.metadata?.broker_origin !== getMetaConnectOrigin()) {
+    throw new Error("Sessão criada para outro ambiente.");
+  }
+}
+
+export async function getEmbeddedSignupBrokerSession({ state }) {
+  const session = await sessionByState(state);
+  assertBrokerEnvironment(session);
+  if (Date.parse(session.expires_at) <= Date.now() && session.status !== "completed") {
+    await supabaseAdmin.from("whatsapp_onboarding_sessions").update({ status: "expired", metadata: { ...(session.metadata || {}), failed_stage: "broker_expired", stage: "failed" } }).eq("id", session.id).eq("status", session.status);
+    throw new Error("Sessão de conexão expirada.");
+  }
+  if (!["pending", "processing", "completed"].includes(session.status)) throw new Error("Sessão de conexão indisponível.");
+  const returnOrigin = normalizeStoredReturnOrigin(session.metadata?.return_origin);
+  return {
+    sessionId: session.id,
+    status: session.status,
+    returnOrigin,
+    appId: process.env.META_APP_ID || "",
+    configId: process.env.META_WHATSAPP_CONFIG_ID || "",
+    graphVersion: process.env.META_GRAPH_API_VERSION || "",
+  };
+}
+
+function normalizeStoredReturnOrigin(value) {
+  const origin = String(value || "").trim();
+  if (!origin || new URL(origin).origin !== origin) throw new Error("Origem de retorno da sessão inválida.");
+  return origin;
+}
+
+export async function completeEmbeddedSignupFromBroker({ state, code, wabaId, phoneNumberId }) {
+  const session = await sessionByState(state);
+  assertBrokerEnvironment(session);
+  const result = await completeEmbeddedSignup({ state, code, wabaId, phoneNumberId, clinicId: session.clinica_id, userId: session.user_id });
+  return { ...result, sessionId: session.id };
+}
+
+export async function failEmbeddedSignupBrokerSession({ state, reason }) {
+  const session = await sessionByState(state);
+  assertBrokerEnvironment(session);
+  const failedStage = ["meta_cancelled", "meta_refused", "assets_missing"].includes(reason) ? reason : "broker_failed";
+  if (session.status === "completed") return { sessionId: session.id, status: "completed" };
+  if (session.status === "pending") {
+    const { error } = await supabaseAdmin.from("whatsapp_onboarding_sessions").update({
+      status: "failed",
+      last_error: "Conexão interativa não concluída.",
+      metadata: { ...(session.metadata || {}), failed_stage: failedStage, stage: "failed" },
+    }).eq("id", session.id).eq("status", "pending");
+    if (error) throw error;
+  }
+  return { sessionId: session.id, status: session.status === "pending" ? "failed" : session.status };
+}
+
+export async function getEmbeddedSignupSessionStatus({ sessionId, clinicId, userId }) {
+  const { data, error } = await supabaseAdmin
+    .from("whatsapp_onboarding_sessions")
+    .select("id,status,expires_at,metadata")
+    .eq("id", sessionId)
+    .eq("clinica_id", clinicId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+  if (data.status === "pending" && Date.parse(data.expires_at) <= Date.now()) {
+    await supabaseAdmin.from("whatsapp_onboarding_sessions").update({
+      status: "expired",
+      metadata: { ...(data.metadata || {}), failed_stage: "broker_expired", stage: "failed" },
+    }).eq("id", data.id).eq("clinica_id", clinicId).eq("user_id", userId).eq("status", "pending");
+    data.status = "expired";
+    data.metadata = { ...(data.metadata || {}), failed_stage: "broker_expired", stage: "failed" };
+  }
+  return {
+    sessionId: data.id,
+    status: data.status,
+    stage: data.metadata?.stage || "started",
+    failedStage: data.metadata?.failed_stage || null,
+    ready: data.status === "completed" && data.metadata?.stage === "ready",
+    expiresAt: data.expires_at,
+  };
 }
 
 async function consumeSession({ state, clinicId, userId }) {
