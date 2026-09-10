@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 import {
   META_BROKER_MESSAGE_TYPE,
   isExpectedBrokerOrigin,
+  isMetaConnectCanary,
   isPlatformReturnOrigin,
   isTrustedBrokerMessage,
   normalizeHttpOrigin,
@@ -43,6 +44,28 @@ test("state alterado produz hash diferente", () => {
   assert.notEqual(hashOpaqueToken("opaque-state"), hashOpaqueToken("opaque-state-tampered"));
 });
 
+test("canary aceita clinic id ou hostname exato configurado no servidor", () => {
+  const options = {
+    clinicId: "clinic-ingrid",
+    returnOrigin: "https://ingridestetica.com.br",
+    clinicIds: "clinic-other,clinic-ingrid",
+    hosts: "another.example",
+  };
+  assert.equal(isMetaConnectCanary(options), true);
+  assert.equal(isMetaConnectCanary({ ...options, clinicId: "clinic-outside", hosts: "ingridestetica.com.br" }), true);
+  assert.equal(isMetaConnectCanary({ ...options, clinicId: "clinic-outside", hosts: "www.ingridestetica.com.br" }), false);
+  assert.equal(isMetaConnectCanary({ ...options, clinicId: "clinic-outside", returnOrigin: "https://fake-ingridestetica.com.br", hosts: "ingridestetica.com.br" }), false);
+});
+
+test("tenant fora do canary permanece no fluxo legado", () => {
+  assert.equal(isMetaConnectCanary({
+    clinicId: "clinic-outside",
+    returnOrigin: "https://outside.example",
+    clinicIds: "clinic-ingrid",
+    hosts: "ingridestetica.com.br",
+  }), false);
+});
+
 test("dashboard abre popup no clique, nao executa JSSDK e confirma ready no servidor", async () => {
   const dashboard = await source("../src/app/dashboard/whatsapp/embedded-signup-button.js");
   assert.ok(dashboard.indexOf('window.open("about:blank"') < dashboard.indexOf('fetch("/api/whatsapp/embedded-signup/start"'));
@@ -53,7 +76,7 @@ test("dashboard abre popup no clique, nao executa JSSDK e confirma ready no serv
   assert.match(dashboard, /window\.location\.reload\(\)/);
 });
 
-test("somente o broker central carrega e executa o Facebook JSSDK", async () => {
+test("fluxo broker carrega e executa o Facebook JSSDK somente na pagina central", async () => {
   const [broker, page] = await Promise.all([
     source("../src/app/whatsapp/connect/broker-client.js"),
     source("../src/app/whatsapp/connect/page.js"),
@@ -63,6 +86,38 @@ test("somente o broker central carrega e executa o Facebook JSSDK", async () => 
   assert.match(broker, /https:\/\/connect\.facebook\.net\/pt_BR\/sdk\.js/);
   assert.match(page, /isMetaConnectRequestOrigin/);
   assert.match(page, /notFound\(\)/);
+});
+
+test("dashboard escolhe o fluxo somente pelo mode retornado pelo backend", async () => {
+  const [dashboard, onboarding, start, legacyCallback] = await Promise.all([
+    source("../src/app/dashboard/whatsapp/embedded-signup-button.js"),
+    source("../src/lib/whatsapp/onboarding.js"),
+    source("../src/app/api/whatsapp/embedded-signup/start/route.js"),
+    source("../src/app/api/whatsapp/embedded-signup/callback/route.js"),
+  ]);
+  assert.match(dashboard, /data\.mode === "legacy"/);
+  assert.match(dashboard, /data\.mode !== "broker"/);
+  assert.match(dashboard, /import\("\.\/legacy-embedded-signup"\)/);
+  assert.doesNotMatch(start, /request\.json\(/);
+  assert.match(onboarding, /isClinicMetaConnectCanary\(\{ clinicId, returnOrigin \}\)/);
+  assert.match(onboarding, /mode: "legacy"/);
+  assert.match(onboarding, /mode: "broker"/);
+  assert.match(onboarding, /metadata\?\.flow_mode !== "broker"/);
+  assert.match(onboarding, /metadata\?\.flow_mode === "broker"/);
+  assert.match(legacyCallback, /completeEmbeddedSignupLegacy/);
+});
+
+test("tenant canary recebe URL do broker e retorno validado permanece server-side", async () => {
+  const onboarding = await source("../src/lib/whatsapp/onboarding.js");
+  assert.match(onboarding, /const brokerUrl = new URL\("\/whatsapp\/connect", connectOrigin\)/);
+  assert.match(onboarding, /brokerUrl\.searchParams\.set\("state", state\)/);
+  assert.match(onboarding, /return_origin: returnOrigin/);
+  assert.doesNotMatch(onboarding, /return_url/);
+});
+
+test("conexoes existentes continuam impedindo exibicao do botao de onboarding", async () => {
+  const page = await source("../src/app/dashboard/whatsapp/page.js");
+  assert.match(page, /manager && !connection \? <EmbeddedSignupButton\/> : null/);
 });
 
 test("postMessage usa targetOrigin armazenado e nunca wildcard", async () => {
@@ -113,6 +168,7 @@ test("nenhum cliente recebe credenciais server-side", async () => {
     source("../src/app/dashboard/whatsapp/embedded-signup-button.js"),
     source("../src/app/whatsapp/connect/broker-client.js"),
     source("../src/app/whatsapp/connect/page.js"),
+    source("../src/app/dashboard/whatsapp/legacy-embedded-signup.js"),
   ]);
   assert.doesNotMatch(clientSources.join("\n"), /META_SYSTEM_USER_ACCESS_TOKEN|META_APP_SECRET|SUPABASE_SERVICE_ROLE_KEY|META_PHONE_REGISTRATION_SECRET/);
 });
@@ -126,4 +182,6 @@ test("META_CONNECT_ORIGIN e configuravel e o host central nao sofre rewrite", as
   assert.match(brokerServer, /process\.env\.META_CONNECT_ORIGIN/);
   assert.match(proxy, /process\.env\.META_CONNECT_ORIGIN/);
   assert.match(env, /META_CONNECT_ORIGIN=/);
+  assert.match(env, /META_CONNECT_CANARY_CLINIC_IDS=/);
+  assert.match(env, /META_CONNECT_CANARY_HOSTS=/);
 });

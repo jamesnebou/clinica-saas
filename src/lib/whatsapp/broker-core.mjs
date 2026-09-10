@@ -66,3 +66,16 @@ export function isTrustedBrokerMessage({ eventOrigin, expectedOrigin, eventSourc
       && String(data?.sessionId || "") === String(sessionId || ""),
   );
 }
+
+function csvValues(value) {
+  return String(value || "").split(",").map((item) => item.trim().toLowerCase()).filter(Boolean);
+}
+
+export function isMetaConnectCanary({ clinicId, returnOrigin, clinicIds, hosts }) {
+  const normalizedClinicId = String(clinicId || "").trim().toLowerCase();
+  if (normalizedClinicId && csvValues(clinicIds).includes(normalizedClinicId)) return true;
+  const origin = normalizeHttpOrigin(returnOrigin);
+  if (!origin) return false;
+  const hostname = new URL(origin).hostname.toLowerCase();
+  return csvValues(hosts).includes(hostname);
+}

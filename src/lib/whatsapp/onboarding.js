@@ -6,25 +6,37 @@ import { MetaCloudProvider } from "./meta/provider";
 import { sanitizeMetaError } from "./meta/errors";
 import { provisionMetaOnboarding } from "./meta/onboarding-core.mjs";
 import { templatePurposeFromName } from "./meta/templates";
-import { getMetaConnectOrigin, resolveClinicReturnOrigin } from "./broker";
+import { getMetaConnectOrigin, isClinicMetaConnectCanary, resolveClinicReturnOrigin } from "./broker";
 
 const META_TEMPLATE_STATUSES = new Set(["APPROVED","PENDING","REJECTED","PAUSED","DISABLED","IN_APPEAL","PENDING_DELETION","DELETED","LIMIT_EXCEEDED"]);
 
 export async function createEmbeddedSignupSession({ clinicId, userId, role, requestOrigin }) {
   const returnOrigin = await resolveClinicReturnOrigin({ clinicId, requestOrigin });
-  const connectOrigin = getMetaConnectOrigin();
+  const brokerEnabled = isClinicMetaConnectCanary({ clinicId, returnOrigin });
+  const connectOrigin = brokerEnabled ? getMetaConnectOrigin() : null;
   const state = secureOpaqueToken(); const expiresAt = new Date(Date.now() + 15 * 60_000).toISOString();
   const { data, error } = await supabaseAdmin.from("whatsapp_onboarding_sessions").insert({
     clinica_id: clinicId,
     user_id: userId,
     state_hash: hashOpaqueToken(state),
     expires_at: expiresAt,
-    metadata: { stage: "started", return_origin: returnOrigin, broker_origin: connectOrigin, initiated_role: role },
+    metadata: { stage: "started", flow_mode: brokerEnabled ? "broker" : "legacy", return_origin: returnOrigin, broker_origin: connectOrigin, initiated_role: role },
   }).select("id").single();
   if (error) throw error;
+  if (!brokerEnabled) {
+    return {
+      mode: "legacy",
+      sessionId: data.id,
+      state,
+      appId: process.env.META_APP_ID,
+      configId: process.env.META_WHATSAPP_CONFIG_ID,
+      graphVersion: process.env.META_GRAPH_API_VERSION,
+      expiresAt,
+    };
+  }
   const brokerUrl = new URL("/whatsapp/connect", connectOrigin);
   brokerUrl.searchParams.set("state", state);
-  return { sessionId: data.id, brokerUrl: brokerUrl.toString(), connectOrigin, expiresAt };
+  return { mode: "broker", sessionId: data.id, brokerUrl: brokerUrl.toString(), connectOrigin, expiresAt };
 }
 
 async function sessionByState(state) {
@@ -41,6 +53,9 @@ async function sessionByState(state) {
 }
 
 function assertBrokerEnvironment(session) {
+  if (session.metadata?.flow_mode !== "broker") {
+    throw new Error("Sessão não autorizada para o broker central.");
+  }
   if (session.metadata?.broker_origin !== getMetaConnectOrigin()) {
     throw new Error("Sessão criada para outro ambiente.");
   }
@@ -69,6 +84,14 @@ function normalizeStoredReturnOrigin(value) {
   const origin = String(value || "").trim();
   if (!origin || new URL(origin).origin !== origin) throw new Error("Origem de retorno da sessão inválida.");
   return origin;
+}
+
+export async function completeEmbeddedSignupLegacy({ state, code, wabaId, phoneNumberId, clinicId, userId }) {
+  const session = await sessionByState(state);
+  if (session.metadata?.flow_mode === "broker") {
+    throw new Error("Esta sessão deve ser concluída pelo broker central.");
+  }
+  return completeEmbeddedSignup({ state, code, wabaId, phoneNumberId, clinicId, userId });
 }
 
 export async function completeEmbeddedSignupFromBroker({ state, code, wabaId, phoneNumberId }) {

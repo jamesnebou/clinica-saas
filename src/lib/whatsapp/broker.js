@@ -3,6 +3,7 @@ import "server-only";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import {
   isExpectedBrokerOrigin,
+  isMetaConnectCanary,
   isPlatformReturnOrigin,
   normalizeHttpOrigin,
   requestOriginFromHeaders,
@@ -32,6 +33,15 @@ export function getRequestOrigin(request) {
 
 export function isMetaConnectRequestOrigin(origin) {
   return isExpectedBrokerOrigin(origin, getMetaConnectOrigin());
+}
+
+export function isClinicMetaConnectCanary({ clinicId, returnOrigin }) {
+  return isMetaConnectCanary({
+    clinicId,
+    returnOrigin,
+    clinicIds: process.env.META_CONNECT_CANARY_CLINIC_IDS,
+    hosts: process.env.META_CONNECT_CANARY_HOSTS,
+  });
 }
 
 export async function resolveClinicReturnOrigin({ clinicId, requestOrigin }) {

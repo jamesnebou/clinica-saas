@@ -9,5 +9,7 @@ Somente `META_CONNECT_ORIGIN` serve `/whatsapp/connect` e carrega o JavaScript S
 - Production: `META_CONNECT_ORIGIN=https://connect.nexawi.com.br`
 - Preview/Staging: configurar uma origem central separada e autorizada no app Meta correspondente ao ambiente.
 - Adicionar somente o host central à lista de domínios permitidos do JavaScript SDK da Meta.
+- Durante o canário, preencher `META_CONNECT_CANARY_HOSTS=ingridestetica.com.br` ou `META_CONNECT_CANARY_CLINIC_IDS` com IDs separados por vírgula. A decisão acontece no servidor depois da validação do tenant.
+- Clínicas fora das duas listas continuam temporariamente no Embedded Signup legado. Para expandir o rollout, adicione tenants de forma controlada; depois da homologação geral, remova o fallback legado em uma alteração separada.
 
 Não são compartilhados cookies entre o dashboard e o broker. Tokens Meta, App Secret, service role, PIN e dados clínicos nunca são enviados ao popup.

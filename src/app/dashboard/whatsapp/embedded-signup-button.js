@@ -54,6 +54,21 @@ export function EmbeddedSignupButton() {
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.error || "Não foi possível iniciar a conexão.");
       sessionIdRef.current = data.sessionId;
+      if (data.mode === "legacy") {
+        popup.close();
+        const { runLegacyEmbeddedSignup } = await import("./legacy-embedded-signup");
+        const assets = await runLegacyEmbeddedSignup(data);
+        const finishResponse = await fetch("/api/whatsapp/embedded-signup/callback", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ state: data.state, ...assets }),
+        });
+        const finish = await finishResponse.json().catch(() => ({}));
+        if (!finishResponse.ok) throw new Error(finish.error || "Não foi possível concluir a conexão.");
+        setStatus("done"); setMessage("WhatsApp conectado. Atualizando diagnóstico..."); window.location.reload();
+        return;
+      }
+      if (data.mode !== "broker") throw new Error("Modo de conexão inválido.");
       expectedOriginRef.current = data.connectOrigin;
       popup.location.replace(data.brokerUrl);
       setMessage("Conclua a autorização na janela aberta.");
