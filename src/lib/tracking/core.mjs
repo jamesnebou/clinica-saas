@@ -178,6 +178,46 @@ export function normalizeMarketingAttribution(input = {}) {
   return output;
 }
 
+export function hasPaidMarketingAttribution(input = {}) {
+  const attribution = normalizeMarketingAttribution(input);
+  return hasPaidAttributionSignal(attribution)
+    || hasPaidAttributionSignal(attribution.first_touch)
+    || hasPaidAttributionSignal(attribution.last_touch);
+}
+
+export function resolveOnboardingMarketingAttribution({
+  formAttribution = {},
+  userMetadataAttribution = {},
+} = {}) {
+  const current = normalizeMarketingAttribution(formAttribution);
+  const persisted = normalizeMarketingAttribution(userMetadataAttribution);
+  const currentHasPaidSignal = hasPaidMarketingAttribution(current);
+  const persistedHasPaidSignal = hasPaidMarketingAttribution(persisted);
+  const currentConsentWasDecided = current.consent?.decided === true;
+  const consent = currentConsentWasDecided ? current.consent : persisted.consent;
+
+  if (!currentHasPaidSignal) {
+    const source = persistedHasPaidSignal ? persisted : current;
+    return normalizeMarketingAttribution({ ...source, consent });
+  }
+
+  const persistedPaidTouch = hasPaidAttributionSignal(persisted.first_touch)
+    ? persisted.first_touch
+    : persisted.last_touch;
+  const firstTouch = persistedHasPaidSignal ? persistedPaidTouch : current.first_touch;
+  const lastTouch = hasPaidAttributionSignal(current.last_touch)
+    ? current.last_touch
+    : current.first_touch;
+
+  return normalizeMarketingAttribution({
+    ...persisted,
+    ...current,
+    first_touch: firstTouch,
+    last_touch: lastTouch,
+    consent,
+  });
+}
+
 export function buildFbc({ fbc, fbclid, capturedAt } = {}) {
   const existing = cleanText(fbc, 500);
   if (existing) return existing;

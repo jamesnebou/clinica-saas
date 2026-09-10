@@ -8,7 +8,7 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { normalizeSelectedPlan, normalizeSignupPhone } from "@/lib/auth/self-service.mjs";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { SEGMENT_OPTIONS } from "@/lib/segments/registry";
-import { deterministicMetaEventId, isValidMetaEventId, normalizeMarketingAttribution } from "@/lib/tracking/core.mjs";
+import { deterministicMetaEventId, resolveOnboardingMarketingAttribution } from "@/lib/tracking/core.mjs";
 import { deliverMetaConversionRecord, enqueueClinicLifecycleMetaEvent, queueAndDeliverMetaConversionEvent, saveClinicMarketingAttribution } from "@/lib/tracking/service";
 import { getTrustedAppOrigin } from "@/lib/security/app-origin";
 
@@ -39,17 +39,13 @@ function scheduleTrackingDelivery(result, logCode) {
   });
 }
 
-function parseMarketingAttribution(value) {
+function parseRawMarketingAttribution(value) {
   try {
     const parsed = JSON.parse(String(value || "{}"));
-    return normalizeMarketingAttribution(parsed);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
   } catch {
     return {};
   }
-}
-
-function hasMarketingAttribution(value) {
-  return Boolean(value && typeof value === "object" && Object.keys(value).length);
 }
 
 function slugify(value) {
@@ -164,14 +160,11 @@ export async function createClinicAction(_prevState, formData) {
 
   // Persistimos a origem comercial antes do redirect. Falha de tracking nunca desfaz a criação da clínica.
   try {
-    const formAttribution = parseMarketingAttribution(formData.get("marketing_attribution"));
-    const attribution = hasMarketingAttribution(formAttribution)
-      ? formAttribution
-      : normalizeMarketingAttribution(user.user_metadata?.marketing_attribution || {});
-    const requestedEventId = String(formData.get("meta_registration_event_id") || "").trim();
-    const registrationEventId = isValidMetaEventId(requestedEventId)
-      ? requestedEventId
-      : deterministicMetaEventId("complete_registration", clinica.id);
+    const attribution = resolveOnboardingMarketingAttribution({
+      formAttribution: parseRawMarketingAttribution(formData.get("marketing_attribution")),
+      userMetadataAttribution: user.user_metadata?.marketing_attribution || {},
+    });
+    const registrationEventId = deterministicMetaEventId("complete_registration", clinica.id);
     const contactEmail = email || user.email || null;
     const savedAttribution = await saveClinicMarketingAttribution({
       clinicId: clinica.id,

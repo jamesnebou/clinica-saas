@@ -2,7 +2,7 @@ import "server-only";
 
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { isDemoSaasClinic } from "@/lib/saas/payment-tracking.mjs";
-import { allowsMarketing, cleanText, deterministicMetaEventId, marketingPhoneCandidates, metaRetryDelayMinutes, normalizeMarketingAttribution, splitPersonName } from "./core.mjs";
+import { allowsMarketing, cleanText, deterministicMetaEventId, marketingPhoneCandidates, metaRetryDelayMinutes, normalizeMarketingAttribution, resolveOnboardingMarketingAttribution, splitPersonName } from "./core.mjs";
 import { buildGoogleEnhancedUserData, buildGoogleOfflineConversion } from "./google-core.mjs";
 import { buildMetaEventPayload, buildMetaUserData, sendMetaConversionPayload } from "./meta-capi";
 
@@ -238,9 +238,9 @@ export async function saveClinicMarketingAttribution({
     first_page: lead.pagina,
     first_referrer: lead.referrer,
   }) : {};
-  const effective = normalizeMarketingAttribution({ ...leadAttribution, ...normalized,
-    first_touch: Object.keys(normalized.first_touch || {}).length ? normalized.first_touch : leadAttribution.first_touch,
-    last_touch: Object.keys(normalized.last_touch || {}).length ? normalized.last_touch : leadAttribution.last_touch,
+  const effective = resolveOnboardingMarketingAttribution({
+    formAttribution: normalized,
+    userMetadataAttribution: leadAttribution,
   });
 
   const row = {

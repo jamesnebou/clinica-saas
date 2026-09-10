@@ -28,6 +28,6 @@ test("destinos de nova senha e erro permanecem internos e separados por perfil",
   assert.match(recoveryPage, /\/login\/recuperar-senha\?erro=link/);
 });
 
-test("confirmacao de cadastro continua usando callback PKCE existente", () => {
+test("callback PKCE permanece disponível para outros fluxos", () => {
   assert.match(authCallback, /exchangeCodeForSession\(code\)/);
 });

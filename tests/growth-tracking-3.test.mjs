@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-import { allowsAnalytics, allowsMarketing, normalizeMarketingAttribution, sanitizeInternalMetadata } from "../src/lib/tracking/core.mjs";
+import { allowsAnalytics, allowsMarketing, hasPaidMarketingAttribution, normalizeMarketingAttribution, resolveOnboardingMarketingAttribution, sanitizeInternalMetadata } from "../src/lib/tracking/core.mjs";
 import { buildGoogleEnhancedUserData, buildGoogleOfflineConversion } from "../src/lib/tracking/google-core.mjs";
 
 const source = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
@@ -42,6 +42,103 @@ test("novo last paid touch não herda click ID de campanha anterior", () => {
   assert.equal(conversion.gclid, null);
 });
 
+test("onboarding cross-browser preserva atribuição paga e consentimento do signup", () => {
+  const metadata = normalizeMarketingAttribution({
+    first_touch: { utm_source: "meta", utm_campaign: "campanha_a", fbclid: "fb_123" },
+    last_touch: { utm_source: "meta", utm_campaign: "campanha_a", fbclid: "fb_123" },
+    consent: { analytics: true, marketing: true, decided: true },
+  });
+  const form = normalizeMarketingAttribution({
+    consent: { analytics: false, marketing: false, decided: false },
+  });
+
+  assert.equal(hasPaidMarketingAttribution(form), false);
+  const result = resolveOnboardingMarketingAttribution({ formAttribution: form, userMetadataAttribution: metadata });
+  assert.equal(result.utm_source, "meta");
+  assert.equal(result.utm_campaign, "campanha_a");
+  assert.equal(result.fbclid, "fb_123");
+  assert.equal(result.consent.marketing, true);
+  assert.equal(result.consent.decided, true);
+});
+
+test("contexto direto do onboarding não substitui campanha persistida", () => {
+  const result = resolveOnboardingMarketingAttribution({
+    userMetadataAttribution: {
+      utm_source: "meta",
+      utm_campaign: "campanha_a",
+      fbclid: "fb_123",
+      consent: { marketing: true, decided: true },
+    },
+    formAttribution: {
+      landing_page: "/onboarding",
+      page_type: "onboarding",
+      consent: { marketing: false, decided: false },
+    },
+  });
+
+  assert.equal(result.utm_campaign, "campanha_a");
+  assert.equal(result.fbclid, "fb_123");
+  assert.equal(result.consent.marketing, true);
+});
+
+test("novo paid touch atualiza last touch sem contaminar Meta com gclid antigo", () => {
+  const result = resolveOnboardingMarketingAttribution({
+    userMetadataAttribution: {
+      first_touch: { utm_source: "google", utm_campaign: "campanha_a", gclid: "google_antigo" },
+      last_touch: { utm_source: "google", utm_campaign: "campanha_a", gclid: "google_antigo" },
+      consent: { marketing: true, decided: true },
+    },
+    formAttribution: {
+      first_touch: { utm_source: "meta", utm_campaign: "campanha_b", fbclid: "meta_novo" },
+      last_touch: { utm_source: "meta", utm_campaign: "campanha_b", fbclid: "meta_novo" },
+      consent: { marketing: true, decided: true },
+    },
+  });
+
+  assert.equal(result.first_touch.utm_source, "google");
+  assert.equal(result.first_touch.gclid, "google_antigo");
+  assert.equal(result.last_touch.utm_source, "meta");
+  assert.equal(result.last_touch.fbclid, "meta_novo");
+  assert.equal(result.gclid, undefined);
+  assert.equal(result.fbclid, "meta_novo");
+});
+
+test("decisão explícita atual pode revogar marketing sem apagar campanha", () => {
+  const result = resolveOnboardingMarketingAttribution({
+    userMetadataAttribution: {
+      utm_source: "meta",
+      utm_campaign: "campanha_a",
+      fbclid: "fb_123",
+      consent: { analytics: true, marketing: true, decided: true },
+    },
+    formAttribution: {
+      consent: { analytics: false, marketing: false, decided: true },
+    },
+  });
+
+  assert.equal(result.utm_campaign, "campanha_a");
+  assert.equal(result.consent.marketing, false);
+  assert.equal(result.consent.decided, true);
+  assert.equal(allowsMarketing(result), false);
+});
+
+test("fallback do lead não sofre downgrade por contexto normalizado vazio", () => {
+  const leadAttribution = normalizeMarketingAttribution({
+    utm_source: "google",
+    utm_campaign: "lead_pago",
+    gclid: "click_123",
+    consent: { analytics: true, marketing: true, decided: true },
+  });
+  const result = resolveOnboardingMarketingAttribution({
+    formAttribution: normalizeMarketingAttribution({}),
+    userMetadataAttribution: leadAttribution,
+  });
+
+  assert.equal(result.utm_source, "google");
+  assert.equal(result.gclid, "click_123");
+  assert.equal(allowsMarketing(result), true);
+});
+
 test("consentimento negado bloqueia destinos opcionais", () => {
   const result = normalizeMarketingAttribution({ consent: { analytics: false, marketing: false, decided: true } });
   assert.equal(allowsAnalytics(result), false);
@@ -76,6 +173,26 @@ test("rotas externas e lifecycle respeitam consentimento", () => {
   assert.match(events, /allowsMarketing\(attribution\)/);
   assert.match(leads, /if \(allowsMarketing\(attribution\)\)/);
   assert.match(service, /marketing_consent_required/);
+});
+
+test("onboarding usa parse cru e resolver semântico antes de persistir", () => {
+  const onboarding = source("src/app/onboarding/actions.js");
+  const service = source("src/lib/tracking/service.js");
+  assert.match(onboarding, /parseRawMarketingAttribution/);
+  assert.match(onboarding, /resolveOnboardingMarketingAttribution/);
+  assert.doesNotMatch(onboarding, /Object\.keys\(value\)\.length/);
+  assert.match(service, /const effective = resolveOnboardingMarketingAttribution/);
+  assert.match(service, /enqueueGoogleOfflineConversion/);
+});
+
+test("CompleteRegistration usa a clínica como identidade determinística", () => {
+  const onboarding = source("src/app/onboarding/actions.js");
+  const migrationMeta = source("supabase/migrations/20260831120000_tracking_2_meta_capi.sql");
+  const migrationGoogle = source("supabase/migrations/20260907120000_growth_tracking_3_phase_1.sql");
+  assert.match(onboarding, /deterministicMetaEventId\("complete_registration", clinica\.id\)/);
+  assert.doesNotMatch(onboarding, /formData\.get\("meta_registration_event_id"\)/);
+  assert.match(migrationMeta, /unique\(event_name, event_id\)/);
+  assert.match(migrationGoogle, /unique\(event_name, event_id\)/);
 });
 
 test("migration Growth 3 e RLS sao incrementais", () => {
