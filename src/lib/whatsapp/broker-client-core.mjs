@@ -5,6 +5,8 @@ export const BROKER_TELEMETRY_EVENTS = Object.freeze([
   "fb_init_completed",
   "continue_meta_clicked",
   "fb_login_invoked",
+  "fb_login_returned_sync",
+  "fb_login_threw",
   "document_visibility_hidden",
   "document_visibility_visible",
   "pagehide",
@@ -21,6 +23,31 @@ export const BROKER_TELEMETRY_EVENTS = Object.freeze([
 const BROKER_TELEMETRY_EVENT_SET = new Set(BROKER_TELEMETRY_EVENTS);
 const META_MESSAGE_EVENTS = new Set(["FINISH", "CANCEL", "ERROR"]);
 const META_MESSAGE_TYPE = "WA_EMBEDDED_SIGNUP";
+const MAX_ERROR_NAME_LENGTH = 80;
+const MAX_ERROR_MESSAGE_LENGTH = 240;
+
+function sanitizeTelemetryErrorText(value, maxLength, fallback) {
+  const sensitiveAssignment = /\b(access[_ -]?token|app[_ -]?secret|client[_ -]?secret|authorization|bearer|password|api[_ -]?key|state|code|config[_ -]?id|app[_ -]?id|waba(?:[_ -]?id)?|phone(?:[_ -]?number)?[_ -]?id)\b\s*[:=]\s*(?:"[^"]*"|'[^']*'|[^\s,;]+)/gi;
+  const sanitized = String(value || "")
+    .replace(/[\u0000-\u001f\u007f]+/g, " ")
+    .replace(/\bBearer\s+[A-Za-z0-9._~-]+/gi, "Bearer [redacted]")
+    .replace(sensitiveAssignment, "$1=[redacted]")
+    .replace(/\b(?:https?|wss?):\/\/[^\s]+/gi, "[url]")
+    .replace(/\?[^\s]+/g, "?[redacted]")
+    .replace(/\b[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b/gi, "[id]")
+    .replace(/\b\d{8,}\b/g, "[id]")
+    .replace(/\b(?=[A-Za-z0-9_-]{20,}\b)(?=[A-Za-z0-9_-]*\d)[A-Za-z0-9_-]+\b/g, "[redacted]")
+    .trim();
+  return (sanitized || fallback).slice(0, maxLength);
+}
+
+export function sanitizeBrokerTelemetryError(error) {
+  const rawMessage = error && typeof error === "object" ? error.message : error;
+  return {
+    error_name: sanitizeTelemetryErrorText(error?.name, MAX_ERROR_NAME_LENGTH, "Error"),
+    error_message: sanitizeTelemetryErrorText(rawMessage, MAX_ERROR_MESSAGE_LENGTH, "Falha síncrona sem detalhes."),
+  };
+}
 
 function isFacebookHostname(hostname) {
   const normalized = String(hostname || "").trim().toLowerCase();
@@ -64,6 +91,29 @@ export function normalizeBrokerTelemetryPayload(payload) {
   if (!state || state.length > 128 || !BROKER_TELEMETRY_EVENT_SET.has(event)) return null;
 
   const baseKeys = new Set(["state", "event"]);
+  if (event === "fb_login_returned_sync" || event === "fb_login_threw") {
+    const allowedKeys = new Set([
+      ...baseKeys,
+      "user_activation_before",
+      ...(event === "fb_login_threw" ? ["error_name", "error_message"] : []),
+    ]);
+    if (Object.keys(payload).some((key) => !allowedKeys.has(key))) return null;
+    if (payload.user_activation_before !== null && typeof payload.user_activation_before !== "boolean") return null;
+    if (event === "fb_login_threw" && (typeof payload.error_name !== "string" || typeof payload.error_message !== "string")) return null;
+
+    const log = {
+      event,
+      user_activation_before: payload.user_activation_before,
+    };
+    if (event === "fb_login_threw") {
+      Object.assign(log, sanitizeBrokerTelemetryError({
+        name: payload.error_name,
+        message: payload.error_message,
+      }));
+    }
+    return { state, log };
+  }
+
   if (event !== "meta_message_received") {
     if (Object.keys(payload).some((key) => !baseKeys.has(key))) return null;
     return { state, log: { event } };

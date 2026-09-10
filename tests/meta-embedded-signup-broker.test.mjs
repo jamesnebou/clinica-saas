@@ -21,6 +21,7 @@ import {
   isTrustedMetaMessageOrigin,
   metaMessageOriginHostname,
   normalizeBrokerTelemetryPayload,
+  sanitizeBrokerTelemetryError,
 } from "../src/lib/whatsapp/broker-client-core.mjs";
 import { hashOpaqueToken } from "../src/lib/whatsapp/core.mjs";
 
@@ -212,6 +213,36 @@ test("timeout restaura a UI sem consumir nem duplicar a sessao", async () => {
   assert.doesNotMatch(launcher.slice(launcher.indexOf("loginTimeoutRef.current = window.setTimeout"), launcher.indexOf("window.FB.login")), /sendOutcome|embedded-signup\/start/);
 });
 
+test("FB.login e a primeira operacao sensivel do clique e preserva a ativacao", async () => {
+  const broker = await source("../src/app/whatsapp/connect/broker-client.js");
+  const launcher = broker.slice(broker.indexOf("function launchMetaSignup"), broker.indexOf("const actionDisabled"));
+  const loginIndex = launcher.indexOf("window.FB.login");
+  const beforeLogin = launcher.slice(0, loginIndex);
+
+  assert.ok(loginIndex > 0);
+  assert.match(beforeLogin, /window\.navigator\.userActivation\?\.isActive \?\? null/);
+  assert.doesNotMatch(beforeLogin, /recordTelemetry|fetch\(|setLaunching|setShowReturnAction|setStatus|setMessage|setTimeout/);
+  assert.ok(launcher.indexOf('recordTelemetry("fb_login_returned_sync"') > loginIndex);
+  assert.ok(launcher.indexOf("loginTimeoutRef.current = window.setTimeout") > loginIndex);
+});
+
+test("exception sincrona do FB.login e capturada sem deixar timeout ativo", async () => {
+  const broker = await source("../src/app/whatsapp/connect/broker-client.js");
+  const launcher = broker.slice(broker.indexOf("function launchMetaSignup"), broker.indexOf("const actionDisabled"));
+  const throwEventIndex = launcher.indexOf('recordTelemetry("fb_login_threw"');
+  const catchStart = launcher.lastIndexOf("} catch (error) {", throwEventIndex);
+  const catchEnd = launcher.indexOf('\n    }\n\n    recordTelemetry("continue_meta_clicked")', throwEventIndex);
+  const catchBlock = launcher.slice(catchStart, catchEnd);
+
+  assert.match(launcher, /window\.FB\.login\([\s\S]+buildEmbeddedSignupV4LoginOptions\(configId\)\);\n    } catch \(error\) \{/);
+  assert.match(catchBlock, /recordTelemetry\("fb_login_threw"/);
+  assert.match(catchBlock, /sanitizeBrokerTelemetryError\(error\)/);
+  assert.match(catchBlock, /clearLoginTimeout\(\)/);
+  assert.match(catchBlock, /Não foi possível iniciar a autorização da Meta\./);
+  assert.match(catchBlock, /return;/);
+  assert.doesNotMatch(catchBlock, /fb_login_timeout|window\.setTimeout/);
+});
+
 test("payload Embedded Signup V4 e exato e encaminhamento FINISH permanece inalterado", async () => {
   const broker = await source("../src/app/whatsapp/connect/broker-client.js");
   assert.deepEqual(buildEmbeddedSignupV4LoginOptions("config-test"), {
@@ -244,7 +275,7 @@ test("SDK do broker usa HTTPS async defer e CORS anonimo sem voltar ao dashboard
 test("telemetria aceita apenas eventos enumerados e metadados Meta sanitizados", () => {
   assert.deepEqual(BROKER_TELEMETRY_EVENTS, [
     "broker_rendered", "sdk_script_loading", "sdk_script_loaded", "fb_init_completed",
-    "continue_meta_clicked", "fb_login_invoked", "document_visibility_hidden",
+    "continue_meta_clicked", "fb_login_invoked", "fb_login_returned_sync", "fb_login_threw", "document_visibility_hidden",
     "document_visibility_visible", "pagehide", "pageshow", "meta_message_received",
     "meta_finish", "meta_cancel", "meta_error", "fb_login_callback_received",
     "fb_login_callback_without_code", "fb_login_timeout",
@@ -278,6 +309,64 @@ test("telemetria aceita apenas eventos enumerados e metadados Meta sanitizados",
     meta_type: "WA_EMBEDDED_SIGNUP",
     meta_event: "FINISH",
   }), null);
+});
+
+test("telemetria de FB.login aceita somente ativacao e erro sanitizado", () => {
+  assert.deepEqual(normalizeBrokerTelemetryPayload({
+    state: "opaque",
+    event: "fb_login_returned_sync",
+    user_activation_before: true,
+  }), {
+    state: "opaque",
+    log: { event: "fb_login_returned_sync", user_activation_before: true },
+  });
+  assert.deepEqual(normalizeBrokerTelemetryPayload({
+    state: "opaque",
+    event: "fb_login_returned_sync",
+    user_activation_before: null,
+  }), {
+    state: "opaque",
+    log: { event: "fb_login_returned_sync", user_activation_before: null },
+  });
+  assert.equal(normalizeBrokerTelemetryPayload({
+    state: "opaque",
+    event: "fb_login_returned_sync",
+    user_activation_before: "true",
+  }), null);
+  assert.equal(normalizeBrokerTelemetryPayload({
+    state: "opaque",
+    event: "fb_login_returned_sync",
+    user_activation_before: true,
+    config_id: "forbidden",
+  }), null);
+  assert.equal(normalizeBrokerTelemetryPayload({
+    state: "opaque",
+    event: "fb_login_threw",
+    user_activation_before: true,
+  }), null);
+
+  const thrown = normalizeBrokerTelemetryPayload({
+    state: "opaque",
+    event: "fb_login_threw",
+    user_activation_before: false,
+    error_name: "TypeError",
+    error_message: "Falha https://example.test/callback?state=secret access_token=secret-value app_id=1726181268669685 id 550e8400-e29b-41d4-a716-446655440000",
+  });
+  assert.equal(thrown.log.event, "fb_login_threw");
+  assert.equal(thrown.log.user_activation_before, false);
+  assert.equal(thrown.log.error_name, "TypeError");
+  assert.doesNotMatch(thrown.log.error_message, /https:|example\.test|secret-value|1726181268669685|550e8400/i);
+  assert.ok(thrown.log.error_message.length <= 240);
+});
+
+test("sanitizacao de exception nao preserva credenciais, URLs, IDs ou texto ilimitado", () => {
+  const error = sanitizeBrokerTelemetryError({
+    name: "InvalidStateError",
+    message: `Bearer abcdefghijklmnopqrstuvwxyz password=hunter2 https://example.test/path?code=abc 1435901121729318 ${"x".repeat(260)}`,
+  });
+  assert.equal(error.error_name, "InvalidStateError");
+  assert.ok(error.error_message.length <= 240);
+  assert.doesNotMatch(error.error_message, /abcdefghijklmnopqrstuvwxyz|hunter2|https:|example\.test|1435901121729318/);
 });
 
 test("endpoint de telemetria valida origem e sessao e nunca registra state ou secrets", async () => {

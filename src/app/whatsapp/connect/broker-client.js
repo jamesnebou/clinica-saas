@@ -7,6 +7,7 @@ import {
   buildEmbeddedSignupV4LoginOptions,
   isTrustedMetaMessageOrigin,
   metaMessageOriginHostname,
+  sanitizeBrokerTelemetryError,
 } from "@/lib/whatsapp/broker-client-core.mjs";
 
 const META_LOGIN_UI_TIMEOUT_MS = 30_000;
@@ -189,53 +190,71 @@ export function BrokerClient({ state, sessionId, status: initialStatus, returnOr
 
   function launchMetaSignup() {
     if (!sdkReady || !window.FB || launchingRef.current || terminal.current) return;
-    recordTelemetry("continue_meta_clicked");
+    const userActivationBefore = window.navigator.userActivation?.isActive ?? null;
     const attempt = ++attemptRef.current;
     launchingRef.current = true;
     assets.current = {};
+    try {
+      window.FB.login(async (response) => {
+        if (attempt !== attemptRef.current || terminal.current) return;
+        recordTelemetry("fb_login_callback_received");
+        clearLoginTimeout();
+        const code = response?.authResponse?.code;
+        const { wabaId, phoneNumberId } = assets.current;
+        if (!code) {
+          recordTelemetry("fb_login_callback_without_code");
+          attemptRef.current += 1;
+          resetForRetry("Conexão cancelada. Toque para tentar novamente.", true);
+          return;
+        }
+        if (!wabaId || !phoneNumberId) {
+          terminal.current = true;
+          launchingRef.current = false;
+          setLaunching(false);
+          await sendOutcome({ outcome: "assets_missing" }).catch(() => {});
+          setStatus("error"); setMessage("A Meta não retornou a conta e o número selecionados."); notifyOpener("assets_missing");
+          return;
+        }
+        terminal.current = true;
+        launchingRef.current = false;
+        setLaunching(false);
+        setStatus("processing"); setMessage("Validando sua conexão com segurança...");
+        try {
+          const outcome = await sendOutcome({ code, wabaId, phoneNumberId });
+          setStatus("done"); setMessage("WhatsApp conectado com sucesso.");
+          finishBrowserFlow("completed", outcome.returnUrl || completedReturnUrl);
+        } catch (error) {
+          setStatus("error"); setMessage(error?.message || "Não foi possível concluir a conexão."); setShowReturnAction(true); notifyOpener("failed");
+        }
+      }, buildEmbeddedSignupV4LoginOptions(configId));
+    } catch (error) {
+      recordTelemetry("continue_meta_clicked");
+      recordTelemetry("fb_login_invoked");
+      recordTelemetry("fb_login_threw", {
+        user_activation_before: userActivationBefore,
+        ...sanitizeBrokerTelemetryError(error),
+      });
+      clearLoginTimeout();
+      attemptRef.current += 1;
+      resetForRetry("Não foi possível iniciar a autorização da Meta.", true);
+      return;
+    }
+
+    recordTelemetry("continue_meta_clicked");
+    recordTelemetry("fb_login_invoked");
+    recordTelemetry("fb_login_returned_sync", {
+      user_activation_before: userActivationBefore,
+    });
+    if (attempt !== attemptRef.current || terminal.current) return;
     setLaunching(true);
     setShowReturnAction(false);
     setStatus("opening");
     setMessage("Abrindo janela oficial da Meta...");
-    clearLoginTimeout();
     loginTimeoutRef.current = window.setTimeout(() => {
       if (attempt !== attemptRef.current || terminal.current) return;
       recordTelemetry("fb_login_timeout");
       resetForRetry("Não foi possível abrir a Meta. Tente novamente.", true);
     }, META_LOGIN_UI_TIMEOUT_MS);
-    recordTelemetry("fb_login_invoked");
-    window.FB.login(async (response) => {
-      if (attempt !== attemptRef.current || terminal.current) return;
-      recordTelemetry("fb_login_callback_received");
-      clearLoginTimeout();
-      const code = response?.authResponse?.code;
-      const { wabaId, phoneNumberId } = assets.current;
-      if (!code) {
-        recordTelemetry("fb_login_callback_without_code");
-        attemptRef.current += 1;
-        resetForRetry("Conexão cancelada. Toque para tentar novamente.", true);
-        return;
-      }
-      if (!wabaId || !phoneNumberId) {
-        terminal.current = true;
-        launchingRef.current = false;
-        setLaunching(false);
-        await sendOutcome({ outcome: "assets_missing" }).catch(() => {});
-        setStatus("error"); setMessage("A Meta não retornou a conta e o número selecionados."); notifyOpener("assets_missing");
-        return;
-      }
-      terminal.current = true;
-      launchingRef.current = false;
-      setLaunching(false);
-      setStatus("processing"); setMessage("Validando sua conexão com segurança...");
-      try {
-        const outcome = await sendOutcome({ code, wabaId, phoneNumberId });
-        setStatus("done"); setMessage("WhatsApp conectado com sucesso.");
-        finishBrowserFlow("completed", outcome.returnUrl || completedReturnUrl);
-      } catch (error) {
-        setStatus("error"); setMessage(error?.message || "Não foi possível concluir a conexão."); setShowReturnAction(true); notifyOpener("failed");
-      }
-    }, buildEmbeddedSignupV4LoginOptions(configId));
   }
 
   const actionDisabled = !sdkReady || launching || ["processing", "done", "error"].includes(status);
