@@ -42,10 +42,10 @@ export class MetaGraphClient {
   listTemplates(id, after, token) { return this.request(`${id}/message_templates`, { query: { fields: "id,name,language,category,status,components,rejected_reason", limit: 100, after }, accessToken: token }); }
   createTemplate(id, payload) { return this.request(`${id}/message_templates`, { method: "POST", body: payload }); }
   getPhoneNumber(id, token) { return this.request(id, { query: { fields: "id,display_phone_number,verified_name,quality_rating,code_verification_status,platform_type,throughput" }, accessToken: token }); }
-  listSystemUsers(businessId, token) { return this.request(`${businessId}/system_users`, { query: { fields: "id,name,role" }, accessToken: token }); }
+  listSystemUsers(businessId, token, after) { return this.request(`${businessId}/system_users`, { query: { fields: "id,name,role", limit: 100, after }, accessToken: token }); }
   listAssignedUsers(wabaId, businessId, token) { return this.request(`${wabaId}/assigned_users`, { query: { business: businessId, fields: "id,name,tasks" }, accessToken: token }); }
   assignSystemUser(wabaId, systemUserId, token) { return this.request(`${wabaId}/assigned_users`, { method: "POST", query: { user: systemUserId, tasks: JSON.stringify(["MANAGE"]) }, accessToken: token }); }
-  listClientWabas(businessId, token) { return this.request(`${businessId}/client_whatsapp_business_accounts`, { query: { fields: "id,name" }, accessToken: token }); }
+  listClientWabas(businessId, token, after) { return this.request(`${businessId}/client_whatsapp_business_accounts`, { query: { fields: "id,name", limit: 100, after }, accessToken: token }); }
   registerPhoneNumber(phoneNumberId, pin, token) { return this.request(`${phoneNumberId}/register`, { method: "POST", body: { messaging_product: "whatsapp", pin }, accessToken: token }); }
   sendTemplate(id, body) { return this.request(`${id}/messages`, { method: "POST", body }); }
 }

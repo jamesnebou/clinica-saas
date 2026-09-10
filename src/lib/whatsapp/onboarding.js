@@ -117,7 +117,8 @@ export async function completeEmbeddedSignup({ state, code, wabaId, phoneNumberI
     return { connectionId: connection.id, sync };
   } catch (error) {
     const message = sanitizeMetaError(error);
-    await supabaseAdmin.from("whatsapp_onboarding_sessions").update({ status: "failed", last_error: message, metadata: { ...(session.metadata || {}), stage: "failed" } }).eq("id", session.id).eq("status", "processing");
+    const failedStage = session.metadata?.stage || "processing";
+    await supabaseAdmin.from("whatsapp_onboarding_sessions").update({ status: "failed", last_error: message, metadata: { ...(session.metadata || {}), failed_stage: failedStage, stage: "failed" } }).eq("id", session.id).eq("status", "processing");
     if (touchedConnectionId && previousConnection) {
       await supabaseAdmin.from("whatsapp_connections").update({
         is_primary: previousConnection.is_primary,

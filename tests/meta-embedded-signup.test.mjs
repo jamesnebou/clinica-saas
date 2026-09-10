@@ -52,13 +52,30 @@ function metaMock(options = {}) {
       const phoneId = options.wrongPhone ? "99999" : PHONE_ID;
       return { data: [{ id: phoneId, display_phone_number: "+55 77 99999-9999", verified_name: "Clinica Teste" }] };
     },
-    async listSystemUsers() { calls.push(["system-users"]); return { data: options.systemUserMissing ? [] : [{ id: SYSTEM_USER_ID }] }; },
+    async listSystemUsers(_businessId, _token, after) {
+      calls.push(["system-users", after || null]);
+      if (options.systemUserOnSecondPage && !after) {
+        return { data: [], paging: { next: "next", cursors: { after: "system-page-2" } } };
+      }
+      return { data: options.systemUserMissing ? [] : [{ id: SYSTEM_USER_ID }] };
+    },
     async listAssignedUsers() {
       calls.push(["assigned-users"]);
       return { data: assigned && !options.assignmentNeverVisible ? [{ id: SYSTEM_USER_ID }] : [] };
     },
-    async assignSystemUser() { calls.push(["assign"]); assigned = true; return { success: true }; },
-    async listClientWabas() { calls.push(["shared-wabas"]); return { data: options.sharedWabaMissing ? [] : [{ id: WABA_ID }] }; },
+    async assignSystemUser() {
+      calls.push(["assign"]);
+      if (options.assignmentPostFails) throw new Error("assignment already exists");
+      assigned = true;
+      return { success: true };
+    },
+    async listClientWabas(_businessId, _token, after) {
+      calls.push(["shared-wabas", after || null]);
+      if (options.sharedWabaOnSecondPage && !after) {
+        return { data: [], paging: { next: "next", cursors: { after: "waba-page-2" } } };
+      }
+      return { data: options.sharedWabaMissing ? [] : [{ id: WABA_ID }] };
+    },
     async subscribeApp() { calls.push(["subscribe"]); subscribed = true; return { success: true }; },
     async listSubscribedApps() {
       calls.push(["subscriptions"]);
@@ -119,18 +136,44 @@ test("System User sem WABA não permite estado ready", async () => {
   await assert.rejects(run(metaMock({ assignmentNeverVisible: true })), /não confirmou a atribuição/i);
 });
 
-test("atribuição bem-sucedida é verificada novamente", async () => {
+test("WABA não compartilhada interrompe antes do POST de atribuição", async () => {
+  const client = metaMock({ sharedWabaMissing: true });
+  await assert.rejects(run(client), /não aparece entre os ativos compartilhados/i);
+  assert.equal(client.calls.some(([name]) => name === "assign"), false);
+  assert.equal(client.calls.some(([name]) => name === "assigned-users"), false);
+});
+
+test("WABA compartilhada executa POST antes do GET assigned_users", async () => {
   const client = metaMock();
   const result = await run(client);
   assert.equal(result.assignmentCreated, true);
-  assert.equal(client.calls.filter(([name]) => name === "assigned-users").length, 2);
+  assert.equal(client.calls.filter(([name]) => name === "assigned-users").length, 1);
+  const names = client.calls.map(([name]) => name);
+  assert.ok(names.indexOf("shared-wabas") < names.indexOf("assign"));
+  assert.ok(names.indexOf("assign") < names.indexOf("assigned-users"));
 });
 
-test("atribuição já existente não é duplicada", async () => {
-  const client = metaMock({ assignedInitially: true });
+test("retry com POST inconclusivo só prossegue após confirmação por GET", async () => {
+  const client = metaMock({ assignedInitially: true, assignmentPostFails: true });
   const result = await run(client);
   assert.equal(result.assignmentCreated, false);
-  assert.equal(client.calls.some(([name]) => name === "assign"), false);
+  assert.equal(client.calls.some(([name]) => name === "assign"), true);
+  assert.equal(client.calls.some(([name]) => name === "assigned-users"), true);
+});
+
+test("POST bem-sucedido sem confirmação posterior falha", async () => {
+  const client = metaMock({ assignmentNeverVisible: true });
+  await assert.rejects(run(client), /não confirmou a atribuição/i);
+  const names = client.calls.map(([name]) => name);
+  assert.ok(names.indexOf("assign") < names.indexOf("assigned-users"));
+  assert.equal(names.includes("subscribe"), false);
+});
+
+test("system_users e WABAs compartilhadas percorrem paginação", async () => {
+  const client = metaMock({ systemUserOnSecondPage: true, sharedWabaOnSecondPage: true });
+  await run(client);
+  assert.deepEqual(client.calls.filter(([name]) => name === "system-users").map(([, after]) => after), [null, "system-page-2"]);
+  assert.deepEqual(client.calls.filter(([name]) => name === "shared-wabas").map(([, after]) => after), [null, "waba-page-2"]);
 });
 
 test("subscribed_apps precisa confirmar o App da NexaWi", async () => {
@@ -142,6 +185,12 @@ test("callback repetido retorna conexão concluída sem consumir o code novament
   const source = await readFile(new URL("../src/lib/whatsapp/onboarding.js", import.meta.url), "utf8");
   assert.match(source, /existing\.status === "completed" && existing\.metadata\?\.connection_id/);
   assert.match(source, /return \{ connectionId: session\.metadata\.connection_id[^}]+replay: true \}/s);
+});
+
+test("falha persiste o estágio operacional anterior sem migration", async () => {
+  const source = await readFile(new URL("../src/lib/whatsapp/onboarding.js", import.meta.url), "utf8");
+  assert.match(source, /failed_stage: failedStage/);
+  assert.match(source, /stage: "failed"/);
 });
 
 test("falha de reconexão restaura conexão pronta anterior", async () => {
@@ -190,6 +239,8 @@ test("sucesso end-to-end mockado alcança todos os estágios obrigatórios", asy
   assert.deepEqual(stages, [
     "meta_authorized",
     "assets_validated",
+    "system_user_validated",
+    "waba_sharing_confirmed",
     "system_user_assignment_pending",
     "system_user_assigned",
     "webhook_subscribed",
@@ -206,6 +257,7 @@ test("cliente Graph usa endpoints oficiais sem enviar token permanente ao navega
   assert.match(clientSource, /system_users/);
   assert.match(clientSource, /assigned_users/);
   assert.match(clientSource, /client_whatsapp_business_accounts/);
+  assert.match(clientSource, /limit: 100, after/);
   assert.match(clientSource, /\/register/);
   assert.doesNotMatch(browserSource, /META_SYSTEM_USER_ACCESS_TOKEN|META_APP_SECRET|META_PHONE_REGISTRATION_SECRET/);
 });

@@ -70,6 +70,27 @@ export function hasSubscribedApp(payload, appId) {
   });
 }
 
+async function collectMetaPages(fetchPage) {
+  const items = [];
+  const seenCursors = new Set();
+  let after;
+
+  for (let pageNumber = 0; pageNumber < 100; pageNumber += 1) {
+    const page = await fetchPage(after);
+    items.push(...(Array.isArray(page?.data) ? page.data : []));
+    if (!page?.paging?.next) return { data: items };
+
+    const nextAfter = id(page?.paging?.cursors?.after);
+    if (!nextAfter || seenCursors.has(nextAfter)) {
+      throw new Error("A paginação da Meta retornou um cursor inválido ou repetido.");
+    }
+    seenCursors.add(nextAfter);
+    after = nextAfter;
+  }
+
+  throw new Error("A paginação da Meta excedeu o limite seguro de páginas.");
+}
+
 export function registrationPin(phoneNumberId, secret) {
   if (!secret || String(secret).length < 32) throw new Error("Segredo de registro dos números Meta não configurado com segurança.");
   const digest = createHmac("sha256", String(secret)).update(`meta-phone:${id(phoneNumberId)}`).digest();
@@ -126,27 +147,42 @@ export async function provisionMetaOnboarding({
     wabaId: selectedWabaId,
   });
 
-  await onStage("system_user_assignment_pending");
-  const systemUsers = await client.listSystemUsers(configuredBusinessId, permanentToken);
+  const systemUsers = await collectMetaPages((after) => (
+    client.listSystemUsers(configuredBusinessId, permanentToken, after)
+  ));
   if (!hasSystemUser(systemUsers, configuredSystemUserId)) {
     throw new Error("O System User configurado não pertence ao Business Portfolio da NexaWi.");
   }
+  await onStage("system_user_validated");
 
-  let assignedUsers = await client.listAssignedUsers(selectedWabaId, configuredBusinessId, permanentToken);
-  let assignmentCreated = false;
-  if (!hasSystemUser(assignedUsers, configuredSystemUserId)) {
-    await client.assignSystemUser(selectedWabaId, configuredSystemUserId, permanentToken);
-    assignmentCreated = true;
-    assignedUsers = await client.listAssignedUsers(selectedWabaId, configuredBusinessId, permanentToken);
-  }
-  if (!hasSystemUser(assignedUsers, configuredSystemUserId)) {
-    throw new Error("A Meta não confirmou a atribuição do System User à WABA.");
-  }
-
-  const sharedWabas = await client.listClientWabas(configuredBusinessId, permanentToken);
+  const sharedWabas = await collectMetaPages((after) => (
+    client.listClientWabas(configuredBusinessId, permanentToken, after)
+  ));
   if (!hasSharedWaba(sharedWabas, selectedWabaId)) {
     throw new Error("A WABA não aparece entre os ativos compartilhados com a NexaWi.");
   }
+  const sharedWaba = await client.getWaba(selectedWabaId, permanentToken);
+  if (id(sharedWaba?.id) !== selectedWabaId) {
+    throw new Error("A WABA compartilhada não pôde ser confirmada pela credencial permanente.");
+  }
+  await onStage("waba_sharing_confirmed");
+
+  await onStage("system_user_assignment_pending");
+  let assignmentCreated = false;
+  let assignmentError = null;
+  try {
+    await client.assignSystemUser(selectedWabaId, configuredSystemUserId, permanentToken);
+    assignmentCreated = true;
+  } catch (error) {
+    assignmentError = error;
+  }
+
+  const assignedUsers = await client.listAssignedUsers(selectedWabaId, configuredBusinessId, permanentToken);
+  if (!hasSystemUser(assignedUsers, configuredSystemUserId)) {
+    if (assignmentError) throw assignmentError;
+    throw new Error("A Meta não confirmou a atribuição do System User à WABA.");
+  }
+
   await onStage("system_user_assigned", { assignment_created: assignmentCreated });
 
   await client.subscribeApp(selectedWabaId, permanentToken);
