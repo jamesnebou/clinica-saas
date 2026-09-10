@@ -9,12 +9,14 @@ const bookingFormPath = new URL("../src/app/c/[slug]/booking-form.js", import.me
 const publicActionsPath = new URL("../src/app/c/[slug]/actions.js", import.meta.url);
 const directBookingPagePath = new URL("../src/app/c/[slug]/agendamento/page.js", import.meta.url);
 const migrationPath = new URL("../supabase/migrations/20260909100000_agenda_safe_delete.sql", import.meta.url);
+const publicBookingDeleteFixPath = new URL("../supabase/migrations/20260909110000_agenda_delete_public_booking_fix.sql", import.meta.url);
 
 test("exclusão de agendamento usa RPC atômica e retorna feedback na agenda", async () => {
-  const [actions, agendaPage, migration] = await Promise.all([
+  const [actions, agendaPage, migration, publicBookingDeleteFix] = await Promise.all([
     readFile(dashboardActionsPath, "utf8"),
     readFile(agendaPagePath, "utf8"),
     readFile(migrationPath, "utf8"),
+    readFile(publicBookingDeleteFixPath, "utf8"),
   ]);
   const deleteAction = actions.slice(actions.indexOf("export async function deleteAgendamentoAction"), actions.indexOf("export async function updateClienteFichaAction"));
 
@@ -28,6 +30,13 @@ test("exclusão de agendamento usa RPC atômica e retorna feedback na agenda", a
   assert.match(migration, /finance_liquidacoes/);
   assert.match(migration, /movimentação financeira não podem ser excluídos/);
   assert.ok(migration.indexOf("delete from public.finance_recebiveis") < migration.indexOf("delete from public.agendamentos"));
+  assert.doesNotMatch(publicBookingDeleteFix, /Agendamentos feitos pelo site devem ser cancelados/);
+  assert.match(publicBookingDeleteFix, /pagamento_status = 'pago'/);
+  assert.match(publicBookingDeleteFix, /asaas_payment_id is not null/);
+  assert.match(publicBookingDeleteFix, /pagamento_external_id is not null/);
+  assert.match(publicBookingDeleteFix, /update public\.site_agendamentos_publicos[\s\S]*set pagamento_status = 'cancelado'/);
+  assert.match(publicBookingDeleteFix, /solicitacoes_site_preservadas/);
+  assert.ok(publicBookingDeleteFix.indexOf("update public.site_agendamentos_publicos") < publicBookingDeleteFix.indexOf("delete from public.agendamentos"));
 });
 
 test("menu mobile bloqueia o fundo e mantém navegação rolável", async () => {
