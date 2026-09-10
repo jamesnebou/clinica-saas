@@ -15,6 +15,13 @@ import {
   requestOriginFromHeaders,
   shouldUseTopLevelBroker,
 } from "../src/lib/whatsapp/broker-core.mjs";
+import {
+  BROKER_TELEMETRY_EVENTS,
+  buildEmbeddedSignupV4LoginOptions,
+  isTrustedMetaMessageOrigin,
+  metaMessageOriginHostname,
+  normalizeBrokerTelemetryPayload,
+} from "../src/lib/whatsapp/broker-client-core.mjs";
 import { hashOpaqueToken } from "../src/lib/whatsapp/core.mjs";
 
 const source = (path) => readFile(new URL(path, import.meta.url), "utf8");
@@ -165,6 +172,17 @@ test("fbAsyncInit apenas inicializa o SDK e habilita a acao do usuario", async (
   assert.doesNotMatch(initializer, /FB\.login/);
 });
 
+test("origem de mensagens Meta aceita apenas HTTPS e host facebook.com legitimo", () => {
+  assert.equal(isTrustedMetaMessageOrigin("https://www.facebook.com"), true);
+  assert.equal(isTrustedMetaMessageOrigin("https://business.facebook.com"), true);
+  assert.equal(isTrustedMetaMessageOrigin("https://facebook.com"), true);
+  assert.equal(metaMessageOriginHostname("https://web.facebook.com"), "web.facebook.com");
+  assert.equal(isTrustedMetaMessageOrigin("http://www.facebook.com"), false);
+  assert.equal(isTrustedMetaMessageOrigin("https://facebook.com.evil.example"), false);
+  assert.equal(isTrustedMetaMessageOrigin("https://evilfacebook.com"), false);
+  assert.equal(isTrustedMetaMessageOrigin("https://www.facebook.com:444"), false);
+});
+
 test("FB.login ocorre somente no handler ligado ao clique explicito", async () => {
   const broker = await source("../src/app/whatsapp/connect/broker-client.js");
   const launcher = broker.slice(broker.indexOf("function launchMetaSignup"));
@@ -194,17 +212,91 @@ test("timeout restaura a UI sem consumir nem duplicar a sessao", async () => {
   assert.doesNotMatch(launcher.slice(launcher.indexOf("loginTimeoutRef.current = window.setTimeout"), launcher.indexOf("window.FB.login")), /sendOutcome|embedded-signup\/start/);
 });
 
-test("payload Embedded Signup e encaminhamento FINISH permanecem inalterados", async () => {
+test("payload Embedded Signup V4 e exato e encaminhamento FINISH permanece inalterado", async () => {
   const broker = await source("../src/app/whatsapp/connect/broker-client.js");
-  assert.match(broker, /config_id: configId/);
-  assert.match(broker, /response_type: "code"/);
-  assert.match(broker, /override_default_response_type: true/);
-  assert.match(broker, /extras: \{ setup: \{\}, featureType: "", sessionInfoVersion: "3" \}/);
+  assert.deepEqual(buildEmbeddedSignupV4LoginOptions("config-test"), {
+    config_id: "config-test",
+    auth_type: "rerequest",
+    response_type: "code",
+    override_default_response_type: true,
+    extras: { setup: {} },
+  });
+  assert.match(broker, /buildEmbeddedSignupV4LoginOptions\(configId\)/);
+  assert.doesNotMatch(broker, /sessionInfoVersion|featureType|\bscope\b/);
   assert.match(broker, /data\.event === "FINISH"/);
   assert.match(broker, /wabaId: data\?\.data\?\.waba_id/);
   assert.match(broker, /phoneNumberId: data\?\.data\?\.phone_number_id/);
   assert.match(broker, /sendOutcome\(\{ code, wabaId, phoneNumberId \}\)/);
-  assert.doesNotMatch(broker, /auth_type/);
+});
+
+test("SDK do broker usa HTTPS async defer e CORS anonimo sem voltar ao dashboard", async () => {
+  const [broker, dashboard] = await Promise.all([
+    source("../src/app/whatsapp/connect/broker-client.js"),
+    source("../src/app/dashboard/whatsapp/embedded-signup-button.js"),
+  ]);
+  assert.match(broker, /script\.src = "https:\/\/connect\.facebook\.net\/pt_BR\/sdk\.js"/);
+  assert.match(broker, /script\.async = true/);
+  assert.match(broker, /script\.defer = true/);
+  assert.match(broker, /script\.crossOrigin = "anonymous"/);
+  assert.doesNotMatch(dashboard, /connect\.facebook\.net|FB\.init|FB\.login/);
+});
+
+test("telemetria aceita apenas eventos enumerados e metadados Meta sanitizados", () => {
+  assert.deepEqual(BROKER_TELEMETRY_EVENTS, [
+    "broker_rendered", "sdk_script_loading", "sdk_script_loaded", "fb_init_completed",
+    "continue_meta_clicked", "fb_login_invoked", "document_visibility_hidden",
+    "document_visibility_visible", "pagehide", "pageshow", "meta_message_received",
+    "meta_finish", "meta_cancel", "meta_error", "fb_login_callback_received",
+    "fb_login_callback_without_code", "fb_login_timeout",
+  ]);
+  assert.deepEqual(normalizeBrokerTelemetryPayload({ state: "opaque", event: "fb_login_invoked" }), {
+    state: "opaque",
+    log: { event: "fb_login_invoked" },
+  });
+  assert.equal(normalizeBrokerTelemetryPayload({ state: "opaque", event: "arbitrary" }), null);
+  assert.equal(normalizeBrokerTelemetryPayload({ state: "opaque", event: "fb_login_invoked", payload: "forbidden" }), null);
+  assert.equal(normalizeBrokerTelemetryPayload({ state: "x".repeat(129), event: "fb_login_invoked" }), null);
+  assert.deepEqual(normalizeBrokerTelemetryPayload({
+    state: "opaque",
+    event: "meta_message_received",
+    meta_hostname: "business.facebook.com",
+    meta_type: "WA_EMBEDDED_SIGNUP",
+    meta_event: "FINISH",
+  }), {
+    state: "opaque",
+    log: {
+      event: "meta_message_received",
+      meta_hostname: "business.facebook.com",
+      meta_type: "WA_EMBEDDED_SIGNUP",
+      meta_event: "FINISH",
+    },
+  });
+  assert.equal(normalizeBrokerTelemetryPayload({
+    state: "opaque",
+    event: "meta_message_received",
+    meta_hostname: "facebook.com.evil.example",
+    meta_type: "WA_EMBEDDED_SIGNUP",
+    meta_event: "FINISH",
+  }), null);
+});
+
+test("endpoint de telemetria valida origem e sessao e nunca registra state ou secrets", async () => {
+  const route = await source("../src/app/api/whatsapp/embedded-signup/broker/telemetry/route.js");
+  assert.match(route, /isMetaConnectRequestOrigin\(requestOrigin\)/);
+  assert.match(route, /isMetaConnectRequestOrigin\(suppliedOrigin\)/);
+  assert.match(route, /normalizeBrokerTelemetryPayload\(await request\.json\(\)\)/);
+  assert.match(route, /getEmbeddedSignupBrokerSession\(\{ state: telemetry\.state \}\)/);
+  const log = route.slice(route.indexOf('console.info("meta_embedded_signup_telemetry"'), route.indexOf("return new Response"));
+  assert.match(log, /session_id: session\.sessionId/);
+  assert.doesNotMatch(log, /telemetry\.state|\bstate\b|code|token|waba|phone|authorization|cookie/i);
+  assert.doesNotMatch(route, /META_SYSTEM_USER_ACCESS_TOKEN|META_APP_SECRET|SUPABASE_SERVICE_ROLE_KEY|META_PHONE_REGISTRATION_SECRET/);
+});
+
+test("broker emite a sequencia operacional sem enviar ativos ou credenciais", async () => {
+  const broker = await source("../src/app/whatsapp/connect/broker-client.js");
+  for (const event of BROKER_TELEMETRY_EVENTS) assert.match(broker, new RegExp(`"${event}"`));
+  const telemetry = broker.slice(broker.indexOf("const recordTelemetry"), broker.indexOf("const notifyOpener"));
+  assert.doesNotMatch(telemetry, /code|wabaId|phoneNumberId|access.?token|app.?secret|authorization|cookie/i);
 });
 
 test("dashboard escolhe o fluxo somente pelo mode retornado pelo backend", async () => {

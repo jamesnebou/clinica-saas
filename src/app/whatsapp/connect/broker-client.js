@@ -3,13 +3,24 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowLeft, LoaderCircle, MessageCircle, X } from "lucide-react";
 import { META_BROKER_MESSAGE_TYPE, META_BROKER_NAVIGATION_TOP_LEVEL } from "@/lib/whatsapp/broker-core.mjs";
+import {
+  buildEmbeddedSignupV4LoginOptions,
+  isTrustedMetaMessageOrigin,
+  metaMessageOriginHostname,
+} from "@/lib/whatsapp/broker-client-core.mjs";
 
-const META_MESSAGE_ORIGINS = new Set(["https://www.facebook.com", "https://web.facebook.com"]);
 const META_LOGIN_UI_TIMEOUT_MS = 30_000;
 
 function parseMetaMessage(event) {
-  if (!META_MESSAGE_ORIGINS.has(event.origin)) return null;
-  try { return typeof event.data === "string" ? JSON.parse(event.data) : event.data; } catch { return null; }
+  if (!isTrustedMetaMessageOrigin(event.origin)) return null;
+  try {
+    const data = typeof event.data === "string" ? JSON.parse(event.data) : event.data;
+    return data && typeof data === "object"
+      ? { data, hostname: metaMessageOriginHostname(event.origin) }
+      : null;
+  } catch {
+    return null;
+  }
 }
 
 export function BrokerClient({ state, sessionId, status: initialStatus, returnOrigin, navigationMode, cancelReturnUrl, completedReturnUrl, appId, configId, graphVersion }) {
@@ -24,6 +35,15 @@ export function BrokerClient({ state, sessionId, status: initialStatus, returnOr
   const attemptRef = useRef(0);
   const loginTimeoutRef = useRef(null);
   const topLevelNavigation = navigationMode === META_BROKER_NAVIGATION_TOP_LEVEL;
+
+  const recordTelemetry = useCallback((event, details = {}) => {
+    void fetch("/api/whatsapp/embedded-signup/broker/telemetry", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ state, event, ...details }),
+      keepalive: true,
+    }).catch(() => {});
+  }, [state]);
 
   const notifyOpener = useCallback((result) => {
     if (!window.opener || window.opener.closed) return false;
@@ -68,24 +88,35 @@ export function BrokerClient({ state, sessionId, status: initialStatus, returnOr
   }, [cancelReturnUrl]);
 
   useEffect(() => {
+    recordTelemetry("broker_rendered");
     if (initialStatus === "completed") {
       finishBrowserFlow("completed", completedReturnUrl);
       return;
     }
 
     const metaListener = (event) => {
-      const data = parseMetaMessage(event);
+      const parsed = parseMetaMessage(event);
+      const data = parsed?.data;
       if (data?.type !== "WA_EMBEDDED_SIGNUP") return;
+      if (!["FINISH", "CANCEL", "ERROR"].includes(data.event)) return;
+      recordTelemetry("meta_message_received", {
+        meta_hostname: parsed.hostname,
+        meta_type: data.type,
+        meta_event: data.event,
+      });
       if (data.event === "FINISH") {
+        recordTelemetry("meta_finish");
         clearLoginTimeout();
         assets.current = { wabaId: data?.data?.waba_id, phoneNumberId: data?.data?.phone_number_id };
         setStatus("processing");
         setMessage("Validando sua conexão com segurança...");
       } else if (data.event === "CANCEL" && !terminal.current) {
+        recordTelemetry("meta_cancel");
         clearLoginTimeout();
         attemptRef.current += 1;
         resetForRetry("Conexão cancelada. Toque para tentar novamente.", true);
       } else if (data.event === "ERROR" && !terminal.current) {
+        recordTelemetry("meta_error");
         clearLoginTimeout();
         terminal.current = true;
         attemptRef.current += 1;
@@ -101,9 +132,21 @@ export function BrokerClient({ state, sessionId, status: initialStatus, returnOr
     };
     window.addEventListener("message", metaListener);
 
+    const visibilityListener = () => {
+      recordTelemetry(document.visibilityState === "hidden"
+        ? "document_visibility_hidden"
+        : "document_visibility_visible");
+    };
+    const pageHideListener = () => recordTelemetry("pagehide");
+    const pageShowListener = () => recordTelemetry("pageshow");
+    document.addEventListener("visibilitychange", visibilityListener);
+    window.addEventListener("pagehide", pageHideListener);
+    window.addEventListener("pageshow", pageShowListener);
+
     const initializeSdk = () => {
       if (terminal.current) return;
       window.FB.init({ appId, autoLogAppEvents: true, xfbml: true, version: graphVersion });
+      recordTelemetry("fb_init_completed");
       setSdkReady(true);
       setStatus("ready");
       setMessage("Tudo pronto para continuar.");
@@ -118,6 +161,8 @@ export function BrokerClient({ state, sessionId, status: initialStatus, returnOr
       script.src = "https://connect.facebook.net/pt_BR/sdk.js";
       script.async = true;
       script.defer = true;
+      script.crossOrigin = "anonymous";
+      script.onload = () => recordTelemetry("sdk_script_loaded");
       script.onerror = () => {
         if (terminal.current) return;
         terminal.current = true;
@@ -128,18 +173,23 @@ export function BrokerClient({ state, sessionId, status: initialStatus, returnOr
           notifyOpener("failed");
         });
       };
+      recordTelemetry("sdk_script_loading");
       document.body.appendChild(script);
     }
     return () => {
       window.removeEventListener("message", metaListener);
+      document.removeEventListener("visibilitychange", visibilityListener);
+      window.removeEventListener("pagehide", pageHideListener);
+      window.removeEventListener("pageshow", pageShowListener);
       clearLoginTimeout();
       script?.remove();
       delete window.fbAsyncInit;
     };
-  }, [appId, clearLoginTimeout, completedReturnUrl, finishBrowserFlow, graphVersion, initialStatus, notifyOpener, resetForRetry, sendOutcome]);
+  }, [appId, clearLoginTimeout, completedReturnUrl, finishBrowserFlow, graphVersion, initialStatus, notifyOpener, recordTelemetry, resetForRetry, sendOutcome]);
 
   function launchMetaSignup() {
     if (!sdkReady || !window.FB || launchingRef.current || terminal.current) return;
+    recordTelemetry("continue_meta_clicked");
     const attempt = ++attemptRef.current;
     launchingRef.current = true;
     assets.current = {};
@@ -150,14 +200,18 @@ export function BrokerClient({ state, sessionId, status: initialStatus, returnOr
     clearLoginTimeout();
     loginTimeoutRef.current = window.setTimeout(() => {
       if (attempt !== attemptRef.current || terminal.current) return;
+      recordTelemetry("fb_login_timeout");
       resetForRetry("Não foi possível abrir a Meta. Tente novamente.", true);
     }, META_LOGIN_UI_TIMEOUT_MS);
+    recordTelemetry("fb_login_invoked");
     window.FB.login(async (response) => {
       if (attempt !== attemptRef.current || terminal.current) return;
+      recordTelemetry("fb_login_callback_received");
       clearLoginTimeout();
       const code = response?.authResponse?.code;
       const { wabaId, phoneNumberId } = assets.current;
       if (!code) {
+        recordTelemetry("fb_login_callback_without_code");
         attemptRef.current += 1;
         resetForRetry("Conexão cancelada. Toque para tentar novamente.", true);
         return;
@@ -181,7 +235,7 @@ export function BrokerClient({ state, sessionId, status: initialStatus, returnOr
       } catch (error) {
         setStatus("error"); setMessage(error?.message || "Não foi possível concluir a conexão."); setShowReturnAction(true); notifyOpener("failed");
       }
-    }, { config_id: configId, response_type: "code", override_default_response_type: true, extras: { setup: {}, featureType: "", sessionInfoVersion: "3" } });
+    }, buildEmbeddedSignupV4LoginOptions(configId));
   }
 
   const actionDisabled = !sdkReady || launching || ["processing", "done", "error"].includes(status);
