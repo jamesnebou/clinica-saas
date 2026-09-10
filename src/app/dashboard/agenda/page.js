@@ -133,6 +133,7 @@ export default async function AgendaPage({ searchParams }) {
   const params = await searchParams;
   const selectedProfessional = String(params?.profissional || "");
   const errorMessage = params?.error ? String(params.error) : "";
+  const successMessage = params?.ok ? String(params.ok) : "";
   const { activeClinic } = await requireClinicSection("agenda");
 
   if (!activeClinic) {
@@ -208,6 +209,8 @@ export default async function AgendaPage({ searchParams }) {
     <main className="min-w-0 w-full px-4 py-8 sm:px-6 lg:px-8">
   <section className="w-full min-w-0 max-w-[1480px] mx-auto">
         <PageHeader eyebrow={segment.name} title="Agenda diária" description={`Visão por dia, ${terminology.profissional.toLocaleLowerCase("pt-BR")}, status, WhatsApp e edição de horários.`} />
+
+        {successMessage ? <div className="mt-5 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-800">{successMessage}</div> : null}
 
         <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <div className="rounded-lg border border-neutral-200 bg-white p-4 shadow-sm"><p className="text-sm text-neutral-500">Atendimentos</p><strong className="mt-2 block text-2xl">{agendamentos.length}</strong></div>

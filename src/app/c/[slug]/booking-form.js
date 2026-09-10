@@ -67,7 +67,7 @@ function readableDialogAccent(primaryColor, accentColor) {
   ), "#f2b35d");
 }
 
-export function PublicBookingForm({ slug, procedimentos, profissionais, query, timeZone = "America/Bahia", terminology = {}, primaryColor = "#6f5434", accentColor = "#d9ad4e" }) {
+export function PublicBookingForm({ slug, procedimentos, profissionais, query, timeZone = "America/Bahia", terminology = {}, primaryColor = "#6f5434", accentColor = "#d9ad4e", returnTo = "" }) {
   const serviceSingular = terminology.procedimento || "Procedimento";
   const servicePlural = terminology.procedimentos || "Procedimentos";
   const professionalSingular = terminology.profissional || "Profissional";
@@ -233,6 +233,7 @@ export function PublicBookingForm({ slug, procedimentos, profissionais, query, t
   return (
     <form action={createPublicBookingAction} className="rounded-[1.75rem] border border-white/70 bg-[#15120f] p-4 text-white shadow-[0_32px_90px_rgba(20,18,15,0.26)] sm:p-7">
       <input type="hidden" name="slug" value={slug} />
+      {returnTo ? <input type="hidden" name="return_to" value={returnTo} /> : null}
       <AttributionFields />
       <input type="hidden" name="data_hora" value={selectedSlot} />
       <input type="hidden" name="data_agenda" value={date} />

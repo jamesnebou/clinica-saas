@@ -841,11 +841,18 @@ export async function deleteAgendamentoAction(formData) {
   const { supabase, clinicaId } = await getScopedSupabase();
   const id = requireValue(text(formData, "id"), "Agendamento não informado.");
 
-  const { error } = await supabase.from("agendamentos").delete().eq("id", id).eq("clinica_id", clinicaId);
+  const { error } = await supabase.rpc("agenda_excluir_agendamento_v2", {
+    p_clinica_id: clinicaId,
+    p_agendamento_id: id,
+  });
+  if (error?.code === "P0001" || error?.code === "23503") {
+    redirectAgendaError(formData, error.message || "Este agendamento possui vínculos que impedem sua exclusão. Cancele-o para preservar o histórico.");
+  }
   if (error) throw error;
   revalidatePath("/dashboard/agenda");
   revalidatePath("/dashboard");
-  redirect(agendaRedirectUrl(formData));
+  const url = agendaRedirectUrl(formData);
+  redirect(`${url}&ok=${encodeURIComponent("Agendamento excluído.")}`);
 }
 
 export async function updateClienteFichaAction(formData) {

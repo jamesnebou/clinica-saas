@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { BarChart3, Bell, BookOpenCheck, CalendarDays, CreditCard, KanbanSquare, LayoutDashboard, Menu, MessageCircleMore, ReceiptText, Scissors, ShoppingBag, PackageCheck, Settings, Stethoscope, UserCog, UsersRound, Workflow, X } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 const iconMap = {
   dashboard: LayoutDashboard,
@@ -64,6 +64,23 @@ export function MobileSidebarMenu({ items, brandName, logoUrl, forceDocumentNavi
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
 
+  useEffect(() => {
+    if (!open) return undefined;
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    function closeOnEscape(event) {
+      if (event.key === "Escape") setOpen(false);
+    }
+
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [open]);
+
   return (
     <>
       <header className="sticky top-0 z-40 border-b border-neutral-200 bg-white/95 px-5 py-3 shadow-sm backdrop-blur-xl md:hidden">
@@ -90,9 +107,9 @@ export function MobileSidebarMenu({ items, brandName, logoUrl, forceDocumentNavi
       </header>
 
       {open ? (
-        <div className="fixed inset-0 z-50 bg-neutral-950/35 backdrop-blur-sm md:hidden" onClick={() => setOpen(false)}>
-          <nav className="premium-panel h-full w-[min(340px,86vw)] rounded-none border-y-0 border-l-0 p-5 shadow-xl" onClick={(event) => event.stopPropagation()}>
-            <div className="mb-5 flex items-start justify-between gap-3">
+        <div className="fixed inset-0 z-50 overflow-hidden overscroll-none bg-neutral-950/35 backdrop-blur-sm md:hidden" onClick={() => setOpen(false)}>
+          <aside className="premium-panel flex h-[100dvh] w-[min(340px,86vw)] flex-col overflow-hidden rounded-none border-y-0 border-l-0 p-5 shadow-xl" onClick={(event) => event.stopPropagation()}>
+            <div className="mb-5 flex shrink-0 items-start justify-between gap-3">
               <div className="min-w-0 flex-1 text-center">
                 {logoUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
@@ -107,7 +124,7 @@ export function MobileSidebarMenu({ items, brandName, logoUrl, forceDocumentNavi
                 <X size={18} />
               </button>
             </div>
-            <div className="space-y-2">
+            <nav className="min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain pb-8 pr-1" style={{ WebkitOverflowScrolling: "touch" }} aria-label="Navegação principal">
               {items.map((item) => {
                 const Icon = iconMap[item.icon] || LayoutDashboard;
                 const active = item.href === "/dashboard" ? pathname === "/dashboard" : pathname === item.href || pathname.startsWith(`${item.href}/`);
@@ -134,8 +151,8 @@ export function MobileSidebarMenu({ items, brandName, logoUrl, forceDocumentNavi
                   </NavigationLink>
                 );
               })}
-            </div>
-          </nav>
+            </nav>
+          </aside>
         </div>
       ) : null}
     </>

@@ -96,9 +96,10 @@ async function recordPublicEvent({ clinicId, clienteId = null, eventName, attrib
   if (error && !["42P01", "PGRST205"].includes(error.code)) console.error(`Erro ao registrar evento ${eventName}:`, error.message);
 }
 
-function publicRedirect(slug, params) {
+function publicRedirect(slug, params, returnTo = "") {
   const query = new URLSearchParams(params).toString();
-  redirect(`/c/${slug}${query ? `?${query}` : ""}#agendar`);
+  const pathname = returnTo === "agendamento" ? `/c/${slug}/agendamento` : `/c/${slug}`;
+  redirect(`${pathname}${query ? `?${query}` : ""}#agendar`);
 }
 
 async function publicAppOrigin() {
@@ -118,15 +119,15 @@ function calculateDeposit(procedimento) {
   return Math.max(0, Math.min(price, Number(value.toFixed(2))));
 }
 
-function assertWorkingHours({ clinic, start, end, slug, timeZone }) {
+function assertWorkingHours({ clinic, start, end, slug, timeZone, returnTo }) {
   const schedule = clinic?.metadata?.horario_funcionamento || {};
 
   if (!isWithinWorkingPeriods({ schedule, startDate: start, endDate: end, timeZone })) {
-    publicRedirect(slug, { erro: "agenda", mensagem: "Este horário está fora do expediente da clínica." });
+    publicRedirect(slug, { erro: "agenda", mensagem: "Este horário está fora do expediente da clínica." }, returnTo);
   }
 }
 
-async function assertSlotAvailable({ clinicId, profissionalId, startISO, endISO, slug }) {
+async function assertSlotAvailable({ clinicId, profissionalId, startISO, endISO, slug, returnTo }) {
   if (!profissionalId) return;
 
   const { data, error } = await supabaseAdmin
@@ -141,12 +142,13 @@ async function assertSlotAvailable({ clinicId, profissionalId, startISO, endISO,
 
   if (error) throw error;
   if (data?.length) {
-    publicRedirect(slug, { erro: "agenda", mensagem: "Este horário acabou de ser preenchido. Escolha outro horário." });
+    publicRedirect(slug, { erro: "agenda", mensagem: "Este horário acabou de ser preenchido. Escolha outro horário." }, returnTo);
   }
 }
 
 export async function createPublicBookingAction(formData) {
   const slug = text(formData, "slug");
+  const returnTo = text(formData, "return_to") === "agendamento" ? "agendamento" : "";
   const procedimentoIds = uniqueTexts(formData, "procedimento_ids");
   const procedimentoId = procedimentoIds[0] || text(formData, "procedimento_id");
   const profissionalId = nullableText(formData, "profissional_id") || nullableText(formData, "profissional_disponivel_id");
@@ -160,11 +162,11 @@ export async function createPublicBookingAction(formData) {
   const attribution = attributionFromForm(formData);
 
   if (!slug || !procedimentoId || !nome || !telefone || !email || !dataHora) {
-    publicRedirect(slug || "", { erro: "dados", mensagem: "Preencha nome, WhatsApp e e-mail para concluir o agendamento." });
+    publicRedirect(slug || "", { erro: "dados", mensagem: "Preencha nome, WhatsApp e e-mail para concluir o agendamento." }, returnTo);
   }
 
   if (!consentimento) {
-    publicRedirect(slug, { erro: "lgpd", mensagem: "Aceite a política de privacidade para concluir o agendamento." });
+    publicRedirect(slug, { erro: "lgpd", mensagem: "Aceite a política de privacidade para concluir o agendamento." }, returnTo);
   }
 
   const { data: clinic, error: clinicError } = await supabaseAdmin
@@ -175,7 +177,7 @@ export async function createPublicBookingAction(formData) {
     .maybeSingle();
 
   if (clinicError) throw clinicError;
-  if (!clinic) publicRedirect(slug, { erro: "clínica", mensagem: "Clínica indisponível para agendamento online." });
+  if (!clinic) publicRedirect(slug, { erro: "clínica", mensagem: "Clínica indisponível para agendamento online." }, returnTo);
 
   const { data: integration, error: integrationError } = await supabaseAdmin
     .from("clinica_integracoes")
@@ -190,7 +192,7 @@ export async function createPublicBookingAction(formData) {
 
   const siteConfig = clinic.metadata?.site_publico || {};
   if (siteConfig.publicado === false) {
-    publicRedirect(slug, { erro: "site", mensagem: "O agendamento online desta clínica ainda nao esta publicado." });
+    publicRedirect(slug, { erro: "site", mensagem: "O agendamento online desta clínica ainda nao esta publicado." }, returnTo);
   }
 
   const selectedIds = procedimentoIds.length ? procedimentoIds : [procedimentoId];
@@ -204,7 +206,7 @@ export async function createPublicBookingAction(formData) {
 
   if (procedimentoError) throw procedimentoError;
   if (procedimentosSelecionados.length !== selectedIds.length) {
-    publicRedirect(slug, { erro: "procedimento", mensagem: "Um ou mais procedimentos estão indisponíveis para agendamento online." });
+    publicRedirect(slug, { erro: "procedimento", mensagem: "Um ou mais procedimentos estão indisponíveis para agendamento online." }, returnTo);
   }
 
   const procedimentosById = new Map(procedimentosSelecionados.map((item) => [item.id, item]));
@@ -215,15 +217,15 @@ export async function createPublicBookingAction(formData) {
   const timeZone = clinicTimeZone(clinic);
   const start = dateFromClinicLocal(dataHora, timeZone);
   if (!start || start < new Date()) {
-    publicRedirect(slug, { erro: "agenda", mensagem: "Escolha uma data futura válida." });
+    publicRedirect(slug, { erro: "agenda", mensagem: "Escolha uma data futura válida." }, returnTo);
   }
 
   const duracaoTotal = totalAppointmentMinutes(procedimentos, { defaultDuration: 60, includeIntervals: true });
   const end = new Date(start.getTime() + duracaoTotal * 60000);
-  assertWorkingHours({ clinic, start, end, slug, timeZone });
+  assertWorkingHours({ clinic, start, end, slug, timeZone, returnTo });
 
   if (!profissionalId) {
-    publicRedirect(slug, { erro: "agenda", mensagem: "Escolha um horário disponível para concluir o agendamento." });
+    publicRedirect(slug, { erro: "agenda", mensagem: "Escolha um horário disponível para concluir o agendamento." }, returnTo);
   }
 
   await assertSlotAvailable({
@@ -232,6 +234,7 @@ export async function createPublicBookingAction(formData) {
     startISO: start.toISOString(),
     endISO: end.toISOString(),
     slug,
+    returnTo,
   });
 
   const valorTotal = Number(procedimentos.reduce((total, item) => total + Number(item.preco_promocional ?? item.preco ?? 0), 0).toFixed(2));
@@ -239,7 +242,7 @@ export async function createPublicBookingAction(formData) {
   const pagamentoStatus = valorSinal > 0 ? "pendente" : "sem_sinal";
 
   if (valorSinal > 0 && !paymentProvider) {
-    publicRedirect(slug, { erro: "pagamento", mensagem: "Checkout online indisponível no momento. A clínica precisa conectar Asaas ou InfinitePay para receber o sinal pelo site." });
+    publicRedirect(slug, { erro: "pagamento", mensagem: "Checkout online indisponível no momento. A clínica precisa conectar Asaas ou InfinitePay para receber o sinal pelo site." }, returnTo);
   }
 
   const operationKey = text(formData, "booking_request_id") || `public:${clinic.id}:${email}:${profissionalId}:${start.toISOString()}:${selectedIds.join(",")}`;
@@ -258,7 +261,7 @@ export async function createPublicBookingAction(formData) {
   });
 
   if (agendaError?.code === "23P01") {
-    publicRedirect(slug, { erro: "horario", mensagem: "Este horário acabou de ser ocupado. Escolha outra opção disponível." });
+    publicRedirect(slug, { erro: "horario", mensagem: "Este horário acabou de ser ocupado. Escolha outra opção disponível." }, returnTo);
   }
   if (agendaError) throw agendaError;
   const agendamento = { id: bookingCore.agendamento_id };
@@ -295,10 +298,11 @@ export async function createPublicBookingAction(formData) {
       } else if (paymentProvider === "infinitepay") {
         const origin = await publicAppOrigin();
         const orderNsu = `agendamento:${agendamento.id}`;
+        const bookingPath = `/c/${slug}${returnTo === "agendamento" ? "/agendamento" : ""}`;
         const checkout = await createInfinitePayCheckout({
           handle: clinicIntegration.infinitepay_handle,
           orderNsu,
-          redirectUrl: `${origin}/c/${slug}?pagamento=retorno#agendar`,
+          redirectUrl: `${origin}${bookingPath}?pagamento=retorno#agendar`,
           webhookUrl: `${origin}/api/webhooks/infinitepay`,
           items: [{
             quantity: 1,
@@ -313,7 +317,7 @@ export async function createPublicBookingAction(formData) {
       }
     } catch (error) {
       await supabaseAdmin.from("site_agendamentos_publicos").update({ pagamento_status: "erro" }).eq("clinica_id", clinic.id).eq("id", publicBookingId);
-      publicRedirect(slug, { erro: "pagamento", mensagem: error.message || "Não foi possível gerar o checkout do sinal. Tente novamente." });
+      publicRedirect(slug, { erro: "pagamento", mensagem: error.message || "Não foi possível gerar o checkout do sinal. Tente novamente." }, returnTo);
     }
   }
 
@@ -374,6 +378,7 @@ export async function createPublicBookingAction(formData) {
   }
 
   revalidatePath(`/c/${slug}`);
+  revalidatePath(`/c/${slug}/agendamento`);
   revalidatePath("/dashboard");
   revalidatePath("/dashboard/agenda");
 
@@ -389,7 +394,7 @@ export async function createPublicBookingAction(formData) {
     redirect(invoiceUrl);
   }
 
-  publicRedirect(slug, { ok: "agendamento", mensagem: "Agendamento solicitado com sucesso." });
+  publicRedirect(slug, { ok: "agendamento", mensagem: "Agendamento solicitado com sucesso." }, returnTo);
 }
 
 export async function createPublicLeadAction(formData) {
