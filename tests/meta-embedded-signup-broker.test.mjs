@@ -8,6 +8,7 @@ import {
   isExpectedBrokerOrigin,
   isMetaConnectCanary,
   isPlatformReturnOrigin,
+  isSafeTopLevelPost,
   isTrustedBrokerMessage,
   normalizeBrokerNavigationMode,
   normalizeHttpOrigin,
@@ -79,10 +80,18 @@ test("navegacao top-level e escolhida somente para tela pequena com toque sem us
   assert.equal(normalizeBrokerNavigationMode("tampered"), META_BROKER_NAVIGATION_POPUP);
 });
 
+test("POST top-level rejeita origem ou contexto cross-site sem exigir headers ausentes no Safari", () => {
+  const base = { requestOrigin: "https://ingridestetica.com.br" };
+  assert.equal(isSafeTopLevelPost({ ...base, originHeader: "https://ingridestetica.com.br", secFetchSite: "same-origin" }), true);
+  assert.equal(isSafeTopLevelPost({ ...base, originHeader: "", secFetchSite: "" }), true);
+  assert.equal(isSafeTopLevelPost({ ...base, originHeader: "https://evil.example", secFetchSite: "same-origin" }), false);
+  assert.equal(isSafeTopLevelPost({ ...base, originHeader: "https://ingridestetica.com.br", secFetchSite: "cross-site" }), false);
+});
+
 test("dashboard abre popup no clique, nao executa JSSDK e confirma ready no servidor", async () => {
   const dashboard = await source("../src/app/dashboard/whatsapp/embedded-signup-button.js");
   assert.ok(dashboard.indexOf('window.open("about:blank"') < dashboard.indexOf('fetch("/api/whatsapp/embedded-signup/start"'));
-  assert.match(dashboard, /navigationMode === META_BROKER_NAVIGATION_POPUP[\s\S]+window\.open\("about:blank"/);
+  assert.match(dashboard, /async function connectDesktop\(\)[\s\S]+window\.open\("about:blank"/);
   assert.doesNotMatch(dashboard, /FB\.init|FB\.login|connect\.facebook\.net/);
   assert.match(dashboard, /isTrustedBrokerMessage/);
   assert.match(dashboard, /embedded-signup\/status\?sessionId=/);
@@ -90,12 +99,49 @@ test("dashboard abre popup no clique, nao executa JSSDK e confirma ready no serv
   assert.match(dashboard, /window\.location\.replace\(cleanOnboardingReturnUrl\(\)\)/);
 });
 
-test("mobile navega para o broker sem abrir popup", async () => {
+test("mobile usa POST nativo e nao depende de fetch popup ou location.assign", async () => {
   const dashboard = await source("../src/app/dashboard/whatsapp/embedded-signup-button.js");
+  const mobileHandler = dashboard.slice(dashboard.indexOf("function handleConnectClick"), dashboard.indexOf("async function connectDesktop"));
   assert.match(dashboard, /shouldUseTopLevelBroker\(\{/);
   assert.match(dashboard, /window\.matchMedia\?\.\("\(pointer: coarse\)"\)/);
   assert.doesNotMatch(dashboard, /userAgent|navigator\.platform/);
-  assert.match(dashboard, /navigationMode === META_BROKER_NAVIGATION_TOP_LEVEL[\s\S]+window\.location\.assign\(data\.brokerUrl\)/);
+  assert.match(dashboard, /<form ref=\{topLevelFormRef\} method="POST" action="\/api\/whatsapp\/embedded-signup\/start-top-level">/);
+  assert.match(mobileHandler, /if \(prefersTopLevelNavigation\(\)\) return;/);
+  assert.doesNotMatch(mobileHandler, /fetch\(|window\.open|location\.assign|setStatus|setMessage/);
+});
+
+test("endpoint top-level autentica autoriza cria sessao tenant-safe e redireciona com 303", async () => {
+  const route = await source("../src/app/api/whatsapp/embedded-signup/start-top-level/route.js");
+  assert.match(route, /requireClinicSection\("whatsapp"\)/);
+  assert.match(route, /getCurrentMembership\(context\.memberships, context\.activeClinic\.id\)/);
+  assert.match(route, /\["owner", "admin"\]\.includes\(membership\?\.papel\)/);
+  assert.match(route, /if \(!isMetaConfigured\(\)\)/);
+  assert.match(route, /clinicId: context\.activeClinic\.id/);
+  assert.match(route, /userId: context\.user\.id/);
+  assert.match(route, /requestOrigin,/);
+  assert.match(route, /navigationMode: META_BROKER_NAVIGATION_TOP_LEVEL/);
+  assert.match(route, /result\.mode !== "broker" \|\| brokerUrl\.origin !== getMetaConnectOrigin\(\)/);
+  assert.match(route, /NextResponse\.redirect\(brokerUrl, 303\)/);
+});
+
+test("endpoint top-level nao aceita tenant canary host ou retorno do navegador", async () => {
+  const route = await source("../src/app/api/whatsapp/embedded-signup/start-top-level/route.js");
+  assert.match(route, /isSafeTopLevelPost\(\{/);
+  assert.match(route, /originHeader: request\.headers\.get\("origin"\)/);
+  assert.match(route, /secFetchSite: request\.headers\.get\("sec-fetch-site"\)/);
+  assert.doesNotMatch(route, /request\.json\(|request\.formData\(|searchParams/);
+  assert.doesNotMatch(route, /body\?\.(?:clinic|clinica|tenant|return|origin|host)|form\.(?:get|has)/i);
+  assert.match(route, /href="\/dashboard\/whatsapp\?tab=conexao"/);
+});
+
+test("resposta top-level nao expoe segredo e logs nunca incluem state bruto", async () => {
+  const route = await source("../src/app/api/whatsapp/embedded-signup/start-top-level/route.js");
+  const successLog = route.slice(route.indexOf('console.info("meta_top_level_signup_started"'), route.indexOf("return NextResponse.redirect"));
+  assert.doesNotMatch(route, /META_SYSTEM_USER_ACCESS_TOKEN|META_APP_SECRET|SUPABASE_SERVICE_ROLE_KEY|META_PHONE_REGISTRATION_SECRET/);
+  assert.doesNotMatch(successLog, /\bstate\b|brokerUrl/);
+  assert.match(route, /sanitizeMetaError\(error\)/);
+  assert.match(route, /Content-Security-Policy/);
+  assert.match(route, /Referrer-Policy/);
 });
 
 test("fluxo broker carrega e executa o Facebook JSSDK somente na pagina central", async () => {
@@ -171,8 +217,8 @@ test("dashboard escolhe o fluxo somente pelo mode retornado pelo backend", async
   assert.match(dashboard, /data\.mode === "legacy"/);
   assert.match(dashboard, /data\.mode !== "broker"/);
   assert.match(dashboard, /import\("\.\/legacy-embedded-signup"\)/);
-  assert.match(start, /navigationMode: normalizeBrokerNavigationMode\(body\?\.navigationMode\)/);
-  assert.doesNotMatch(start, /body\?\.(?:clinic|clinica|tenant|return|origin)/i);
+  assert.match(start, /navigationMode: META_BROKER_NAVIGATION_POPUP/);
+  assert.doesNotMatch(start, /request\.json\(|request\.formData\(/);
   assert.match(onboarding, /isClinicMetaConnectCanary\(\{ clinicId, returnOrigin \}\)/);
   assert.match(onboarding, /mode: "legacy"/);
   assert.match(onboarding, /mode: "broker"/);

@@ -81,6 +81,15 @@ export function shouldUseTopLevelBroker({ viewportWidth, coarsePointer, maxTouch
   return Boolean(coarsePointer || Number(maxTouchPoints) > 0);
 }
 
+export function isSafeTopLevelPost({ requestOrigin, originHeader, secFetchSite } = {}) {
+  const expectedOrigin = normalizeHttpOrigin(requestOrigin);
+  if (!expectedOrigin) return false;
+  const suppliedOrigin = String(originHeader || "").trim();
+  if (suppliedOrigin && normalizeHttpOrigin(suppliedOrigin) !== expectedOrigin) return false;
+  const fetchSite = String(secFetchSite || "").trim().toLowerCase();
+  return !fetchSite || fetchSite === "same-origin" || fetchSite === "none";
+}
+
 function csvValues(value) {
   return String(value || "").split(",").map((item) => item.trim().toLowerCase()).filter(Boolean);
 }

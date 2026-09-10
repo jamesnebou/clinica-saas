@@ -4,8 +4,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Link2, LoaderCircle } from "lucide-react";
 import {
   isTrustedBrokerMessage,
-  META_BROKER_NAVIGATION_POPUP,
-  META_BROKER_NAVIGATION_TOP_LEVEL,
   shouldUseTopLevelBroker,
 } from "@/lib/whatsapp/broker-core.mjs";
 
@@ -23,6 +21,7 @@ export function EmbeddedSignupButton() {
   const [status, setStatus] = useState("idle");
   const [message, setMessage] = useState("");
   const popupRef = useRef(null);
+  const topLevelFormRef = useRef(null);
   const sessionIdRef = useRef("");
   const expectedOriginRef = useRef("");
   const pollTimerRef = useRef(null);
@@ -80,30 +79,31 @@ export function EmbeddedSignupButton() {
     return () => { window.removeEventListener("message", listener); stopPolling(); if (resumeTimer) window.clearTimeout(resumeTimer); };
   }, [checkServerStatus, stopPolling]);
 
-  async function connect() {
-    const prefersTopLevel = shouldUseTopLevelBroker({
+  function prefersTopLevelNavigation() {
+    return shouldUseTopLevelBroker({
       viewportWidth: window.innerWidth,
       coarsePointer: window.matchMedia?.("(pointer: coarse)")?.matches,
       maxTouchPoints: window.navigator.maxTouchPoints,
     });
-    let navigationMode = prefersTopLevel ? META_BROKER_NAVIGATION_TOP_LEVEL : META_BROKER_NAVIGATION_POPUP;
-    let popup = null;
-    if (navigationMode === META_BROKER_NAVIGATION_POPUP) {
-      popup = window.open("about:blank", "nexawi-whatsapp-connect", "popup=yes,width=560,height=760,resizable=yes,scrollbars=yes");
-      if (popup) {
-        popupRef.current = popup;
-        popup.document.title = "Preparando conexão...";
-      } else {
-        navigationMode = META_BROKER_NAVIGATION_TOP_LEVEL;
-      }
+  }
+
+  function handleConnectClick(event) {
+    if (prefersTopLevelNavigation()) return;
+    event.preventDefault();
+    void connectDesktop();
+  }
+
+  async function connectDesktop() {
+    const popup = window.open("about:blank", "nexawi-whatsapp-connect", "popup=yes,width=560,height=760,resizable=yes,scrollbars=yes");
+    if (!popup) {
+      topLevelFormRef.current?.submit();
+      return;
     }
+    popupRef.current = popup;
+    popup.document.title = "Preparando conexão...";
     setStatus("loading"); setMessage("Preparando conexão segura...");
     try {
-      const response = await fetch("/api/whatsapp/embedded-signup/start", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ navigationMode }),
-      });
+      const response = await fetch("/api/whatsapp/embedded-signup/start", { method: "POST" });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.error || "Não foi possível iniciar a conexão.");
       sessionIdRef.current = data.sessionId;
@@ -122,10 +122,6 @@ export function EmbeddedSignupButton() {
         return;
       }
       if (data.mode !== "broker") throw new Error("Modo de conexão inválido.");
-      if (navigationMode === META_BROKER_NAVIGATION_TOP_LEVEL) {
-        window.location.assign(data.brokerUrl);
-        return;
-      }
       expectedOriginRef.current = data.connectOrigin;
       popup.location.replace(data.brokerUrl);
       setMessage("Conclua a autorização na janela aberta.");
@@ -147,5 +143,5 @@ export function EmbeddedSignupButton() {
     }
   }
 
-  return <div><button type="button" onClick={connect} disabled={status === "loading"} className="inline-flex h-11 items-center gap-2 rounded-lg bg-[#25D366] px-5 text-sm font-black text-white shadow-lg transition hover:-translate-y-0.5 disabled:opacity-60">{status === "loading" ? <LoaderCircle className="animate-spin" size={18} /> : <Link2 size={18} />} Conectar WhatsApp</button>{message ? <p className={`mt-2 text-sm ${status === "error" ? "text-red-700" : "text-emerald-700"}`}>{message}</p> : null}</div>;
+  return <form ref={topLevelFormRef} method="POST" action="/api/whatsapp/embedded-signup/start-top-level"><button type="submit" onClick={handleConnectClick} disabled={status === "loading"} className="inline-flex h-11 items-center gap-2 rounded-lg bg-[#25D366] px-5 text-sm font-black text-white shadow-lg transition hover:-translate-y-0.5 disabled:opacity-60">{status === "loading" ? <LoaderCircle className="animate-spin" size={18} /> : <Link2 size={18} />} Conectar WhatsApp</button>{message ? <p className={`mt-2 text-sm ${status === "error" ? "text-red-700" : "text-emerald-700"}`}>{message}</p> : null}</form>;
 }
