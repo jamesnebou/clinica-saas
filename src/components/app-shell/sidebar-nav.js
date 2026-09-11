@@ -94,15 +94,18 @@ export function MobileSidebarMenu({ items, brandName, logoUrl, forceDocumentNavi
             )}
             <p className="truncate text-sm font-bold uppercase tracking-[0.16em] text-[var(--clinic-primary)]">{brandName}</p>
           </div>
+          <div className="ml-auto flex shrink-0 items-center gap-2">
+            <span className="h-10 w-10" aria-hidden="true" />
             <button
-            type="button"
-            onClick={() => setOpen((value) => !value)}
-            className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-neutral-200 bg-white/70 text-neutral-700 shadow-sm"
-            aria-label={open ? "Fechar menu" : "Abrir menu"}
-            aria-expanded={open}
-          >
-            {open ? <X size={20} /> : <Menu size={20} />}
-          </button>
+              type="button"
+              onClick={() => setOpen((value) => !value)}
+              className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-neutral-200 bg-white/70 text-neutral-700 shadow-sm"
+              aria-label={open ? "Fechar menu" : "Abrir menu"}
+              aria-expanded={open}
+            >
+              {open ? <X size={20} /> : <Menu size={20} />}
+            </button>
+          </div>
         </div>
       </header>
 

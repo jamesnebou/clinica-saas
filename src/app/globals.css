@@ -1244,11 +1244,15 @@ a[href][class*="rounded"]:active {
     );
 }
 
-@media (max-width: 640px) {
+@media (max-width: 767px) {
   .dashboard-theme-toggle {
-    width: 2.85rem;
-    height: 2.85rem;
-    padding: 0.35rem;
+    right: 4.25rem;
+    z-index: 45;
+
+    width: 2.5rem;
+    height: 2.5rem;
+    min-height: 2.5rem;
+    padding: 0.25rem;
 
     justify-content: center;
   }
@@ -1258,8 +1262,8 @@ a[href][class*="rounded"]:active {
   }
 
   .dashboard-theme-toggle__orb {
-    width: 2rem;
-    height: 2rem;
+    width: 1.75rem;
+    height: 1.75rem;
   }
 }
 
