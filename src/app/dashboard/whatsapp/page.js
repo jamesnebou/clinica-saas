@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Activity, CheckCircle2, CircleAlert, Clock3, MessageCircleMore, RefreshCw, ShieldCheck, Unplug, Webhook } from "lucide-react";
+import { Activity, CheckCircle2, CircleAlert, Clock3, MessageCircleMore, ShieldCheck, Unplug, Webhook } from "lucide-react";
 import { PageHeader, Notice } from "@/components/app-shell/ui";
 import { requireClinicSection } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
@@ -14,9 +14,11 @@ import {
 } from "./actions";
 
 import { WhatsAppTemplateActions } from "./template-actions";
+import { TEMPLATE_CATALOG } from "@/lib/whatsapp/meta/templates";
+import { WhatsAppTemplateCard } from "./whatsapp-template-card";
 
 export const metadata = { title: "WhatsApp | NexaWi Clínicas" };
-const TABS = [["conexao","Conexão"],["automacoes","Automações"],["mensagens","Mensagens"],["templates","Templates"],["saude","Saúde"]];
+const TABS = [["conexao","Conexão"],["automacoes","Automações"],["mensagens","Mensagens"],["templates", "Mensagens automáticas"],["saude","Saúde"]];
 const STATUS_LABELS = { APPROVED: "Aprovado", PENDING: "Pendente", REJECTED: "Rejeitado", PAUSED: "Pausado", DISABLED: "Desativado", IN_APPEAL: "Em análise", PENDING_DELETION: "Exclusão pendente", DELETED: "Excluído", LIMIT_EXCEEDED: "Limite excedido" };
 const MESSAGE_LABELS = { submitted: "Submetida", sent: "Enviada", delivered: "Entregue", read: "Lida", failed: "Falhou", received: "Recebida", queued: "Na fila" };
 const PURPOSE_LABELS = { booking_created: "Novo agendamento", booking_payment_pending: "Pagamento pendente", payment_expiring: "Pagamento perto do vencimento", payment_confirmed: "Pagamento confirmado", payment_expired: "Pagamento expirado", appointment_reminder_24h: "Lembrete 24h", appointment_reminder_3h: "Lembrete 3h", booking_cancelled: "Cancelamento", booking_rescheduled: "Remarcação" };
@@ -38,7 +40,34 @@ export default async function WhatsAppPage({ searchParams }) {
   ]);
   const schemaMissing = [connectionResult,settingsResult,templatesResult,messagesResult].some((result) => ["42P01","PGRST205"].includes(result.error?.code));
   const connection = connectionResult.data; const settings = settingsResult.data || {}; const templates = templatesResult.data || []; const messages = messagesResult.data || [];
-  const approved = templates.filter((item) => item.status === "APPROVED").length; const failedJobs = (jobsResult.data || []).filter((item) => item.status === "failed").length;
+  const approved = templates.filter((item) => item.status === "APPROVED").length;
+  const officialTemplateCount =
+  Object.keys(TEMPLATE_CATALOG).length;
+
+const preparedTemplates = templates.length;
+
+const pendingTemplates = templates.filter(
+  (item) =>
+    item.status === "PENDING" ||
+    item.status === "IN_APPEAL"
+).length;
+
+const rejectedTemplates = templates.filter(
+  (item) => item.status === "REJECTED"
+).length;
+
+const preparationPercent =
+  officialTemplateCount > 0
+    ? Math.min(
+        100,
+        Math.round(
+          (preparedTemplates /
+            officialTemplateCount) *
+            100
+        )
+      )
+    : 0;
+  const failedJobs = (jobsResult.data || []).filter((item) => item.status === "failed").length;
   return <main className="min-w-0 overflow-x-hidden px-4 py-8 sm:px-6 lg:px-10">
     <section className="mx-auto max-w-[1480px]">
     <PageHeader eyebrow="Comunicação oficial" title="WhatsApp Cloud API" description="Conexão oficial da Meta, automações transacionais, templates, entrega real e diagnóstico por clínica." />
@@ -57,12 +86,23 @@ export default async function WhatsAppPage({ searchParams }) {
     {active === "mensagens" ? <section className="premium-panel mt-6 rounded-lg p-5 sm:p-6"><h2 className="text-xl font-black">Mensagens</h2><p className="mt-1 text-sm text-neutral-500">Últimas 50 mensagens. Telefone não é exibido integralmente.</p><div className="mt-5 overflow-x-auto"><table className="w-full min-w-[760px] text-left text-sm"><thead><tr className="border-b text-xs uppercase tracking-[.1em] text-neutral-500"><th className="p-3">Data</th><th className="p-3">Cliente</th><th className="p-3">Gatilho</th><th className="p-3">Template</th><th className="p-3">Status</th><th className="p-3">Erro</th></tr></thead><tbody>{messages.map((item) => <tr key={item.id} className="border-b border-neutral-100"><td className="p-3">{date(item.created_at)}</td><td className="p-3 font-bold">{item.clientes?.nome || (item.direction === "inbound" ? "Contato recebido" : "-")}</td><td className="p-3">{PURPOSE_LABELS[item.trigger] || item.trigger || "Recebida"}</td><td className="p-3">{item.template_name || "-"}</td><td className="p-3 font-bold">{MESSAGE_LABELS[item.status] || item.status}</td><td className="max-w-xs p-3 text-red-700">{item.error_message || "-"}</td></tr>)}</tbody></table>{!messages.length ? <p className="py-10 text-center text-sm text-neutral-500">Nenhuma mensagem registrada.</p> : null}</div></section> : null}
 
     {active === "templates" ? (
-  <section className="premium-panel mt-6 rounded-lg p-5 sm:p-6">
-    <div className="flex flex-wrap items-start justify-between gap-3">
+  <section className="premium-panel wa-templates-panel mt-6 rounded-[22px] p-5 sm:p-7">
+    <div className="wa-templates-hero">
       <div>
-        <h2 className="text-xl font-black">Templates Meta</h2>
-        <p className="mt-1 text-sm text-neutral-500">
-          A sincronização exibe o estado retornado pela Meta. Pendente não é considerado pronto.
+        <span className="wa-templates-kicker">
+          <MessageCircleMore size={14} />
+          WhatsApp automático
+        </span>
+
+        <h2 className="wa-templates-title">
+          Mensagens automáticas
+        </h2>
+
+        <p className="wa-templates-description">
+          A NexaWi envia essas mensagens
+          automaticamente nos momentos certos.
+          Você não precisa configurar textos nem
+          entender detalhes técnicos.
         </p>
       </div>
 
@@ -71,54 +111,116 @@ export default async function WhatsAppPage({ searchParams }) {
       ) : null}
     </div>
 
-    <div className="mt-5 grid gap-3 lg:grid-cols-2">
-      {templates.map((item) => (
-        <article
-          key={item.id}
-          className="rounded-lg border border-neutral-200 bg-white p-4"
-        >
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <p className="font-black">
-                {PURPOSE_LABELS[item.purpose] || item.purpose}
-              </p>
+    <div className="wa-summary-grid">
+      <div className="wa-summary-card">
+        <span className="wa-summary-label">
+          Preparadas
+        </span>
 
-              <p className="mt-1 text-xs text-neutral-500">
-                {item.name} · {item.language} · {item.category}
-              </p>
-            </div>
+        <strong className="wa-summary-value">
+          {preparedTemplates}/
+          {officialTemplateCount}
+        </strong>
 
-            <span
-              className={`rounded-full px-2.5 py-1 text-xs font-black ${
-                item.status === "APPROVED"
-                  ? "bg-emerald-50 text-emerald-700"
-                  : item.status === "REJECTED"
-                    ? "bg-red-50 text-red-700"
-                    : "bg-amber-50 text-amber-700"
-              }`}
-            >
-              {STATUS_LABELS[item.status] || item.status}
-            </span>
-          </div>
+        <span className="wa-summary-helper">
+          Mensagens configuradas
+        </span>
+      </div>
 
-          {item.rejection_reason ? (
-            <p className="mt-3 text-sm text-red-700">
-              {item.rejection_reason}
-            </p>
-          ) : null}
+      <div className="wa-summary-card">
+        <span className="wa-summary-label">
+          Prontas
+        </span>
 
-          <p className="mt-3 text-xs text-neutral-500">
-            Última sincronização: {date(item.last_synced_at)}
-          </p>
-        </article>
-      ))}
+        <strong className="wa-summary-value">
+          {approved}
+        </strong>
+
+        <span className="wa-summary-helper">
+          Já podem ser enviadas
+        </span>
+      </div>
+
+      <div className="wa-summary-card">
+        <span className="wa-summary-label">
+          Em análise
+        </span>
+
+        <strong className="wa-summary-value">
+          {pendingTemplates}
+        </strong>
+
+        <span className="wa-summary-helper">
+          Aguardando a Meta
+        </span>
+      </div>
+
+      <div className="wa-summary-card">
+        <span className="wa-summary-label">
+          Precisam de ajuste
+        </span>
+
+        <strong className="wa-summary-value">
+          {rejectedTemplates}
+        </strong>
+
+        <span className="wa-summary-helper">
+          Requerem atenção
+        </span>
+      </div>
     </div>
 
-    {!templates.length ? (
-      <p className="mt-6 rounded-lg border border-dashed p-8 text-center text-sm text-neutral-500">
-        Conecte a WABA e envie os templates transacionais para análise da Meta.
-      </p>
-    ) : null}
+    <div className="wa-progress-block">
+      <div className="wa-progress-heading">
+        <span>
+          Preparação das mensagens
+        </span>
+
+        <strong>
+          {preparationPercent}%
+        </strong>
+      </div>
+
+      <div className="wa-progress-track">
+        <div
+          className="wa-progress-value"
+          style={{
+            width: `${preparationPercent}%`,
+          }}
+        />
+      </div>
+    </div>
+
+    {templates.length ? (
+      <div className="wa-template-grid">
+        {templates.map((item) => (
+          <WhatsAppTemplateCard
+            key={item.id}
+            item={item}
+          />
+        ))}
+      </div>
+    ) : (
+      <div className="mt-6 rounded-2xl border border-dashed border-neutral-200 bg-white/70 p-10 text-center">
+        <MessageCircleMore
+          size={34}
+          className="mx-auto text-[var(--clinic-primary)]"
+        />
+
+        <h3 className="mt-4 text-lg font-black">
+          Suas mensagens ainda não foram preparadas
+        </h3>
+
+        <p className="mx-auto mt-2 max-w-xl text-sm text-neutral-500">
+          Clique em{" "}
+          <strong>
+            Preparar mensagens
+          </strong>{" "}
+          e a NexaWi cuidará da configuração
+          necessária para o WhatsApp.
+        </p>
+      </div>
+    )}
   </section>
 ) : null}
 

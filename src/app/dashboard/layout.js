@@ -12,6 +12,7 @@ import { isDemoLoginEmail } from "@/lib/demo/demo-account";
 import { DemoGuidedTour } from "@/components/demo/demo-guided-tour";
 import { DemoConversionCta } from "@/components/demo/demo-conversion-cta";
 import { switchActiveClinicAction } from "./clinic-actions";
+import { DashboardThemeToggle } from "@/components/app-shell/dashboard-theme-toggle";
 
 
 export async function generateMetadata() {
@@ -160,15 +161,17 @@ export default async function DashboardLayout({ children }) {
     .map((item) => ({ id: item.clinicas.id, name: item.clinicas.nome || "Clínica" }));
 
   return (
-    <div
-      className="premium-shell min-h-screen text-neutral-950 md:pl-[260px]"
-      style={{
-        "--clinic-primary": primaryColor,
-        "--clinic-accent": accentColor,
-        "--clinic-soft": "color-mix(in srgb, var(--clinic-accent) 10%, white)",
-        background: "radial-gradient(circle at 10% 0%, color-mix(in srgb, var(--clinic-accent) 16%, transparent), transparent 30rem), radial-gradient(circle at 100% 10%, color-mix(in srgb, var(--clinic-primary) 13%, transparent), transparent 28rem), radial-gradient(circle at 82% 80%, rgba(18,18,16,0.055), transparent 30rem), linear-gradient(145deg, #f9f8f4 0%, #f1eee7 48%, #ebefeb 100%)",
-      }}
-    >
+  <div
+    className="premium-shell min-h-screen text-neutral-950 md:pl-[260px]"
+    style={{
+      "--clinic-primary": primaryColor,
+      "--clinic-accent": accentColor,
+      "--dashboard-soft-base": "var(--dashboard-theme-soft-base, white)",
+      "--clinic-soft":
+        "color-mix(in srgb, var(--clinic-accent) 10%, var(--dashboard-soft-base))",
+    }}
+  >
+    <DashboardThemeToggle />
       {isDemo ? <><DemoGuidedTour /><DemoConversionCta /></> : null}
       <MobileSidebarMenu items={allowedNavItems} brandName={brandName} logoUrl={logoUrl} forceDocumentNavigation={isDemo} />
       {clinicOptions.length > 1 ? (

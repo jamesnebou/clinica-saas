@@ -1,13 +1,18 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import {
+  useState,
+  useTransition,
+} from "react";
+
 import { useRouter } from "next/navigation";
+
 import {
   CheckCircle2,
   CircleAlert,
   Loader2,
   RefreshCw,
-  Send,
+  Sparkles,
 } from "lucide-react";
 
 import {
@@ -18,9 +23,11 @@ import {
 export function WhatsAppTemplateActions() {
   const router = useRouter();
 
-  const [isPending, startTransition] = useTransition();
+  const [isPending, startTransition] =
+    useTransition();
 
-  const [feedback, setFeedback] = useState(null);
+  const [feedback, setFeedback] =
+    useState(null);
 
   function execute(action, type) {
     if (isPending) return;
@@ -29,8 +36,8 @@ export function WhatsAppTemplateActions() {
       type: "loading",
       message:
         type === "submit"
-          ? "Enviando templates para a Meta..."
-          : "Sincronizando templates com a Meta...",
+          ? "Preparando suas mensagens automáticas..."
+          : "Atualizando o status das mensagens...",
     });
 
     startTransition(async () => {
@@ -38,11 +45,28 @@ export function WhatsAppTemplateActions() {
         const result = await action();
 
         if (result?.ok) {
+          let message =
+            "Operação concluída com sucesso.";
+
+          if (type === "submit") {
+            const submitted = Number(
+              result?.submitted || 0
+            );
+
+            message =
+              submitted > 0
+                ? `${submitted} mensagem(ns) preparada(s) e enviada(s) para aprovação.`
+                : "Todas as mensagens já estão preparadas.";
+          }
+
+          if (type === "sync") {
+            message =
+              "Status das mensagens atualizado com sucesso.";
+          }
+
           setFeedback({
             type: "success",
-            message:
-              result.message ||
-              "Operação concluída com sucesso.",
+            message,
           });
 
           router.refresh();
@@ -52,8 +76,9 @@ export function WhatsAppTemplateActions() {
         setFeedback({
           type: "error",
           message:
-            result?.message ||
-            "Não foi possível concluir a operação.",
+            type === "submit"
+              ? "Não foi possível preparar todas as mensagens. Tente novamente."
+              : "Não foi possível atualizar os status agora. Tente novamente.",
         });
       } catch (error) {
         console.error(
@@ -70,9 +95,23 @@ export function WhatsAppTemplateActions() {
     });
   }
 
+  const submitting =
+    isPending &&
+    feedback?.type === "loading" &&
+    feedback?.message?.startsWith(
+      "Preparando"
+    );
+
+  const syncing =
+    isPending &&
+    feedback?.type === "loading" &&
+    feedback?.message?.startsWith(
+      "Atualizando"
+    );
+
   return (
-    <div className="flex max-w-xl flex-col items-end gap-3">
-      <div className="flex flex-wrap justify-end gap-2">
+    <div className="wa-template-actions">
+      <div className="wa-template-actions__buttons">
         <button
           type="button"
           disabled={isPending}
@@ -82,23 +121,20 @@ export function WhatsAppTemplateActions() {
               "submit"
             )
           }
-          className="inline-flex h-10 items-center gap-2 rounded-lg bg-[var(--clinic-primary)] px-4 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-60"
+          className="wa-action-button wa-action-button--primary"
         >
-          {isPending &&
-          feedback?.type === "loading" &&
-          feedback?.message?.startsWith("Enviando") ? (
+          {submitting ? (
             <Loader2
               size={16}
               className="animate-spin"
             />
           ) : (
-            <Send size={16} />
+            <Sparkles size={16} />
           )}
 
-          {isPending &&
-          feedback?.message?.startsWith("Enviando")
-            ? "Enviando..."
-            : "Enviar ausentes"}
+          {submitting
+            ? "Preparando..."
+            : "Preparar mensagens"}
         </button>
 
         <button
@@ -110,13 +146,9 @@ export function WhatsAppTemplateActions() {
               "sync"
             )
           }
-          className="inline-flex h-10 items-center gap-2 rounded-lg bg-neutral-950 px-4 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-60"
+          className="wa-action-button wa-action-button--secondary"
         >
-          {isPending &&
-          feedback?.type === "loading" &&
-          feedback?.message?.startsWith(
-            "Sincronizando"
-          ) ? (
+          {syncing ? (
             <Loader2
               size={16}
               className="animate-spin"
@@ -125,40 +157,31 @@ export function WhatsAppTemplateActions() {
             <RefreshCw size={16} />
           )}
 
-          {isPending &&
-          feedback?.message?.startsWith(
-            "Sincronizando"
-          )
-            ? "Sincronizando..."
-            : "Sincronizar"}
+          {syncing
+            ? "Atualizando..."
+            : "Atualizar status"}
         </button>
       </div>
 
       {feedback ? (
         <div
           aria-live="polite"
-          className={`flex max-w-xl items-start gap-2 rounded-lg border px-4 py-3 text-sm font-semibold ${
-            feedback.type === "success"
-              ? "border-emerald-200 bg-emerald-50 text-emerald-800"
-              : feedback.type === "error"
-                ? "border-red-200 bg-red-50 text-red-800"
-                : "border-amber-200 bg-amber-50 text-amber-800"
-          }`}
+          className={`wa-action-feedback wa-action-feedback--${feedback.type}`}
         >
           {feedback.type === "success" ? (
             <CheckCircle2
-              size={18}
-              className="mt-0.5 shrink-0"
+              size={17}
+              className="shrink-0"
             />
           ) : feedback.type === "error" ? (
             <CircleAlert
-              size={18}
-              className="mt-0.5 shrink-0"
+              size={17}
+              className="shrink-0"
             />
           ) : (
             <Loader2
-              size={18}
-              className="mt-0.5 shrink-0 animate-spin"
+              size={17}
+              className="shrink-0 animate-spin"
             />
           )}
 
