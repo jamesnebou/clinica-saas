@@ -20,7 +20,7 @@ insert into public.procedimentos(id, clinica_id, nome, preco, ativo)
 values ('e3000000-0000-4000-8000-000000000001', 'e0000000-0000-4000-8000-000000000001', 'Procedimento Upgrade', 100, true);
 
 insert into public.agendamentos(
-  id, clinica_id, cliente_id, profissional_id, procedimento_id,
+  id, clinica_id, cliente_id, profissional_id, procedimento_id, procedimento_ids,
   inicio, fim, status, valor, valor_pago, pagamento_status, forma_pagamento
 ) values (
   'e4000000-0000-4000-8000-000000000001',
@@ -28,11 +28,9 @@ insert into public.agendamentos(
   'e1000000-0000-4000-8000-000000000001',
   'e2000000-0000-4000-8000-000000000001',
   'e3000000-0000-4000-8000-000000000001',
+  array['e3000000-0000-4000-8000-000000000001'::uuid],
   '2031-01-10 12:00+00', '2031-01-10 13:00+00', 'agendado', 100, 40, 'parcial', 'pix'
 );
-
-insert into public.finance_contas(id, clinica_id, nome, tipo, padrao, ativa)
-values ('e5000000-0000-4000-8000-000000000001', 'e0000000-0000-4000-8000-000000000001', 'Conta Upgrade', 'caixa', true, true);
 
 insert into public.finance_recebiveis(
   id, clinica_id, cliente_id, profissional_id, procedimento_id, agendamento_id,
@@ -60,7 +58,14 @@ insert into public.finance_recebivel_parcelas(
 select public.finance_liquidar_recebivel(
   'e0000000-0000-4000-8000-000000000001',
   'e6000000-0000-4000-8000-000000000001',
-  40, 'e5000000-0000-4000-8000-000000000001', 'pix',
+  40, (
+    select id
+    from public.finance_contas
+    where clinica_id = 'e0000000-0000-4000-8000-000000000001'
+      and padrao
+    order by created_at, id
+    limit 1
+  ), 'pix',
   '2031-01-01 12:00+00', 0, 'fixture', 'upgrade-payment',
   'upgrade-liquidation', '{"fixture":true}'::jsonb
 );

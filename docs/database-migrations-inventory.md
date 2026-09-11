@@ -1,6 +1,20 @@
 # Inventario de migrations
 
-Auditoria F0C em 2026-09-08. `COMMON` significa arquivo local e registro remoto; `LOCAL_ONLY` descreve somente o historico, nao necessariamente ausencia fisica do objeto. O remoto e compartilhado com a Barbearia.
+## FONTE CANÔNICA ATUAL — 2026-09-11
+
+- Quantidade oficial: **55 migrations**.
+- Ordem: nomes de arquivo em ordem lexicográfica; nenhum timestamp duplicado.
+- SHA-256 agregado do manifesto `nome=hash`: `cd4f229cdd9c0e77b89e69f4e7dc582657bb9b492a51b5d801d2fe6504d1e4a2`.
+- Staging `ojmszqqxnvmvudhzzzgo`: 55 `COMMON`, 0 `LOCAL_ONLY`, 0 `REMOTE_ONLY`.
+- Produção `sitoiwxalwfybcqivutd`: 9 `COMMON`, 46 `LOCAL_ONLY` no histórico e 13 `REMOTE_ONLY` da Barbearia.
+- `LOCAL_ONLY` descreve exclusivamente o histórico remoto; não significa que o objeto físico esteja ausente. O dump produtivo confirmou todos os objetos canônicos da Clínica.
+- Este inventário pertence à NexaWi Clínicas. A lista Barbearia abaixo é apenas evidência histórica do banco produtivo compartilhado.
+
+O relatório com os 55 hashes individuais e a comparação de schema é `docs/F0C-CLOSE-01-PARITY-2026-09-11.md`.
+
+## Histórico de produção por migration
+
+`COMMON` significa arquivo local e registro no histórico produtivo em 2026-09-11. O staging possui todas as linhas como `COMMON`.
 
 | Migration | Dominio | Operacao | Dependencia/risco | Historico remoto |
 |---|---|---|---|---|
@@ -56,6 +70,9 @@ Auditoria F0C em 2026-09-08. `COMMON` significa arquivo local e registro remoto;
 | 20260907130000 prontuario_seguro_rls | F0A | create/backfill/RLS | clientes e legado clinico | COMMON |
 | 20260908100000 agenda_atomic_finance_canonical | F0B | create/alter/backfill | Agenda/F2/outbox | COMMON |
 | 20260908120000 schema_parity_operational_fix | F0C | constraint/functions | corrige drift confirmado | LOCAL_ONLY |
+| 20260908130000 demo_snapshot_generated_columns_fix | Demo/F0C | function fix-forward | generated/identity columns | LOCAL_ONLY |
+| 20260909100000 agenda_safe_delete | Agenda | function fix-forward | exclusao com historico financeiro | COMMON |
+| 20260909110000 agenda_delete_public_booking_fix | Agenda | function fix-forward | preserva solicitacao publica | COMMON |
 
 ## Anomalias
 
@@ -63,6 +80,7 @@ Auditoria F0C em 2026-09-08. `COMMON` significa arquivo local e registro remoto;
 - Nao existem timestamps duplicados.
 - As 13 migrations `REMOTE_ONLY` foram localizadas no repositorio da Barbearia. Elas nao podem ser inseridas na cadeia ativa da Clinica: o teste comprovou colisao historica de RPCs genericos. A reconciliacao exige baseline compartilhado.
 - Nenhuma migration historica foi editada.
+- O schema produtivo comum e compativel com as 55 migrations, mas o historico produtivo nao e 55/55. Nao executar `migration repair` sem um plano de reconciliacao separado e autorizado.
 
 ## Remote only com origem identificada
 

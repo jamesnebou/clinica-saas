@@ -1,14 +1,28 @@
 # Runbook de migrations, backup e restore
 
+## FONTE CANÔNICA ATUAL — 2026-09-11
+
+- A cadeia oficial da NexaWi Clínicas contém **55 migrations** em `supabase/migrations`, ordenadas pelo nome do arquivo e sem timestamps duplicados.
+- O manifesto `nome=SHA-256` da cadeia possui SHA-256 agregado `cd4f229cdd9c0e77b89e69f4e7dc582657bb9b492a51b5d801d2fe6504d1e4a2`.
+- Produção: Supabase `sitoiwxalwfybcqivutd` (`Clinica-saas`). A aplicação local de produção aponta para esse ref. O schema da Clínica é compatível com o fresh 55/55, mas o histórico remoto continua não reconciliado.
+- Staging: Supabase dedicado `ojmszqqxnvmvudhzzzgo` (`NexaWi Clinicas Staging`). O projeto está vinculado localmente e foi confirmado pela API da Supabase; histórico 55/55.
+- Promoção: migration nova passa por fresh e upgrade locais, staging, validação read-only e só depois pode ser aplicada em produção em janela autorizada. A aplicação compatível é promovida depois do schema necessário.
+- Toda correção de schema é **fix-forward**. Migration já aplicada nunca é editada, renomeada ou removida.
+- `migration repair` não aplica SQL e não é procedimento normal de promoção. Em produção só pode ser considerado em incidente/reconciliação formal, após prova read-only de equivalência física, backup confirmado e autorização explícita.
+- Ownership: este repositório é dono exclusivamente das 55 migrations da NexaWi Clínicas. Migrations da NexaWi Barbearia não entram nesta cadeia.
+- Status temporário das verticais: staging da Clínica é separado; produção ainda contém objetos da Clínica e da Barbearia no mesmo PostgreSQL. Até a separação, qualquer mudança produtiva exige coordenação entre as verticais.
+
 ## Regras
 
 1. Toda alteracao usa migration nova e fix-forward.
 2. Migrations aplicadas nunca sao renomeadas ou editadas.
-3. O projeto Supabase e compartilhado por Clinica e Barbearia; a cadeia canonica precisa conter migrations dos dois produtos.
+3. O staging da Clinica e dedicado. A producao ainda e compartilhada com a Barbearia, mas cada repositorio preserva sua cadeia; nao concatenar migrations historicas.
 4. `migration repair` altera somente o historico. Ele nunca substitui a execucao do SQL.
 5. Nenhuma correcao massiva de dados ocorre sem diagnostico, backup e autorizacao.
 
-## Estado auditado
+## Histórico — estado auditado em 2026-09-08
+
+> Esta seção preserva a evidência da reconciliação anterior. Ela não substitui a fonte canônica de 2026-09-11 acima.
 
 - 52 migrations ativas no repositorio da Clinica.
 - 13 migrations `REMOTE_ONLY`, todas localizadas com o SQL original no repositorio da Barbearia.
@@ -25,7 +39,7 @@
 5. Executar `npm run lint`, `npm test`, `npm run build` e `git diff --check`.
 6. Fazer dump de schema e revisar o diff antes de qualquer ambiente remoto.
 
-## Reconciliacao do historico compartilhado
+## Histórico — reconciliação do banco compartilhado
 
 1. Congelar mudancas de schema nos dois repositorios.
 2. Confirmar que cada versao remota possui o arquivo SQL original na cadeia canonica combinada.
@@ -64,13 +78,15 @@ As cadeias historicas nao podem ser simplesmente concatenadas: o fresh reset com
 
 ## Staging
 
-Nenhum projeto Supabase de staging dedicado foi comprovado pelo repositorio ou pela configuracao local auditada. Producao nao deve ser usada como staging. O minimo recomendado e um projeto Supabase isolado, sem dados clinicos reais, com as mesmas extensions, variaveis nao produtivas e uma instancia Preview da aplicacao apontada exclusivamente para ele.
+O projeto dedicado de staging e `ojmszqqxnvmvudhzzzgo` (`NexaWi Clinicas Staging`). Em 2026-09-11 ele foi confirmado como `ACTIVE_HEALTHY`, separado da producao e com 55/55 migrations. O dump read-only do schema confirmou todos os objetos canonicos da Clinica; `rls_auto_enable()` e seus tres grants aparecem apenas no hospedado como infraestrutura da plataforma.
+
+Antes de qualquer escrita, repetir `projects list`, confirmar nome/ref e comparar com `supabase/.temp/project-ref`. Nunca inferir o ambiente apenas pelo hostname da aplicacao. Staging nao recebe dados clinicos reais nem credenciais/gateways produtivos.
 
 ## CI, deploy e sincronismo
 
 - Os workflows existentes executam workers; nao existe pipeline versionado que aplique migrations automaticamente.
 - O deploy da aplicacao e feito pela Vercel a partir do repositorio, enquanto migrations dependem de operacao humana. Portanto, schema e aplicacao podem ficar fora de sincronia.
-- Antes de promover codigo que dependa de schema novo, o responsavel deve confirmar backup, aplicar e validar a migration em staging, aplicar a migration produtiva em janela controlada e somente entao promover a aplicacao compativel.
+- Antes de promover codigo que dependa de schema novo, o responsavel deve provar fresh/upgrade local, confirmar staging pelo ref, aplicar e validar a migration em staging, confirmar backup produtivo, aplicar a migration produtiva em janela controlada e somente entao promover a aplicacao compativel.
 - Protecao de branch e regras do repositorio GitHub nao sao observaveis pelo codigo local e precisam ser confirmadas externamente.
 
 ## Pos-deploy

@@ -1,5 +1,21 @@
 # F0C-R: reconciliacao Clinica e Barbearia
 
+## FONTE CANÔNICA ATUAL — 2026-09-11
+
+Este documento preserva a auditoria histórica de 2026-09-08. O procedimento vigente está em `docs/database-migration-runbook.md` e o inventário vigente em `docs/database-migrations-inventory.md`.
+
+Estado atual comprovado:
+
+- NexaWi Clínicas possui 55 migrations; SHA-256 agregado da cadeia: `cd4f229cdd9c0e77b89e69f4e7dc582657bb9b492a51b5d801d2fe6504d1e4a2`.
+- Staging dedicado `ojmszqqxnvmvudhzzzgo`: histórico 55/55 e schema compatível.
+- Produção `sitoiwxalwfybcqivutd`: schema da Clínica compatível, mas histórico com 9 `COMMON`, 46 `LOCAL_ONLY` e 13 `REMOTE_ONLY` da Barbearia.
+- O banco produtivo continua fisicamente compartilhado entre as verticais; o staging da Clínica não é compartilhado.
+- Ownership atual: este repositório controla somente a cadeia da Clínica. A cadeia da Barbearia não deve ser incorporada.
+- Nenhum baseline foi criado e nenhum `migration repair` foi executado nesta atualização.
+- A reconciliação produtiva permanece uma atividade separada, condicionada a backup, equivalência física read-only, plano aprovado e autorização explícita.
+
+## Evidência histórica — 2026-09-08
+
 Auditoria realizada em 2026-09-08. Os dois repositorios possuem o mesmo
 `project-ref` (`sitoiwxalwfybcqivutd`), portanto compartilham banco PostgreSQL e
 `supabase_migrations.schema_migrations`.
