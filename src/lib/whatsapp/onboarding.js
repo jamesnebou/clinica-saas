@@ -6,15 +6,13 @@ import { MetaCloudProvider } from "./meta/provider";
 import { sanitizeMetaError } from "./meta/errors";
 import { provisionMetaOnboarding } from "./meta/onboarding-core.mjs";
 import { templatePurposeFromName } from "./meta/templates";
-import { getMetaConnectOrigin, isClinicMetaConnectCanary, resolveClinicReturnOrigin } from "./broker";
+import { getMetaConnectOrigin, resolveClinicReturnOrigin } from "./broker";
 import { normalizeBrokerNavigationMode } from "./broker-core.mjs";
 
 const META_TEMPLATE_STATUSES = new Set(["APPROVED","PENDING","REJECTED","PAUSED","DISABLED","IN_APPEAL","PENDING_DELETION","DELETED","LIMIT_EXCEEDED"]);
 
 export async function createEmbeddedSignupSession({ clinicId, userId, role, requestOrigin, navigationMode }) {
   const returnOrigin = await resolveClinicReturnOrigin({ clinicId, requestOrigin });
-  const brokerEnabled = isClinicMetaConnectCanary({ clinicId, returnOrigin });
-  const connectOrigin = brokerEnabled ? getMetaConnectOrigin() : null;
   const normalizedNavigationMode = normalizeBrokerNavigationMode(navigationMode);
   const state = secureOpaqueToken(); const expiresAt = new Date(Date.now() + 15 * 60_000).toISOString();
   const { data, error } = await supabaseAdmin.from("whatsapp_onboarding_sessions").insert({
@@ -22,23 +20,18 @@ export async function createEmbeddedSignupSession({ clinicId, userId, role, requ
     user_id: userId,
     state_hash: hashOpaqueToken(state),
     expires_at: expiresAt,
-    metadata: { stage: "started", flow_mode: brokerEnabled ? "broker" : "legacy", return_origin: returnOrigin, broker_origin: connectOrigin, navigation_mode: normalizedNavigationMode, initiated_role: role },
+    metadata: { stage: "started", flow_mode: "legacy", return_origin: returnOrigin, broker_origin: null, navigation_mode: normalizedNavigationMode, initiated_role: role },
   }).select("id").single();
   if (error) throw error;
-  if (!brokerEnabled) {
-    return {
-      mode: "legacy",
-      sessionId: data.id,
-      state,
-      appId: process.env.META_APP_ID,
-      configId: process.env.META_WHATSAPP_CONFIG_ID,
-      graphVersion: process.env.META_GRAPH_API_VERSION,
-      expiresAt,
-    };
-  }
-  const brokerUrl = new URL("/whatsapp/connect", connectOrigin);
-  brokerUrl.searchParams.set("state", state);
-  return { mode: "broker", sessionId: data.id, brokerUrl: brokerUrl.toString(), connectOrigin, expiresAt };
+  return {
+    mode: "legacy",
+    sessionId: data.id,
+    state,
+    appId: process.env.META_APP_ID,
+    configId: process.env.META_WHATSAPP_CONFIG_ID,
+    graphVersion: process.env.META_GRAPH_API_VERSION,
+    expiresAt,
+  };
 }
 
 async function sessionByState(state) {
