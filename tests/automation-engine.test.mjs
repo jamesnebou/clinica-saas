@@ -38,7 +38,7 @@ import { AUTOMATION_TEMPLATES } from "../src/lib/automations/templates.mjs";
 import { assertAutomationOperation, canPerformAutomationOperation } from "../src/lib/automations/permissions.mjs";
 import { calculateWaitResumeAt, zonedLocalToUtc } from "../src/lib/automations/time.mjs";
 import { buildDemoDataset } from "../src/lib/demo/dataset.mjs";
-import { isAutomationCronAuthorized } from "../src/lib/automations/cron-auth.mjs";
+import { isCronAuthorizationValid } from "../src/lib/cron/auth-core.mjs";
 import { automationRetryDecision } from "../src/lib/automations/retry-policy.mjs";
 import { canExecuteAutomationAction, HIGH_RISK_AUTOMATION_ACTIONS } from "../src/lib/automations/risk-policy.mjs";
 
@@ -516,17 +516,17 @@ test("Demo 2.0 inclui automações pausadas e histórico coerente", () => {
 });
 
 test("Cron de automações rejeita request sem segredo", () => {
-  assert.equal(isAutomationCronAuthorized("", "secret-value"), false);
-  assert.equal(isAutomationCronAuthorized("Bearer secret-value", ""), false);
+  assert.equal(isCronAuthorizationValid("", "secret-value"), false);
+  assert.equal(isCronAuthorizationValid("Bearer secret-value", ""), false);
 });
 
 test("Cron de automações rejeita segredo inválido", () => {
-  assert.equal(isAutomationCronAuthorized("Bearer wrong", "secret-value"), false);
+  assert.equal(isCronAuthorizationValid("Bearer wrong", "secret-value"), false);
 });
 
 test("Cron de automações aceita somente Bearer com o CRON_SECRET exato", () => {
-  assert.equal(isAutomationCronAuthorized("Bearer secret-value", "secret-value"), true);
-  assert.equal(isAutomationCronAuthorized("secret-value", "secret-value"), false);
+  assert.equal(isCronAuthorizationValid("Bearer secret-value", "secret-value"), true);
+  assert.equal(isCronAuthorizationValid("secret-value", "secret-value"), false);
 });
 
 test("Retry transitório agenda backoff exponencial", () => {

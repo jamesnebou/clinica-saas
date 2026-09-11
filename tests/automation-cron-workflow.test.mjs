@@ -11,11 +11,11 @@ const migration = await readFile(new URL("../supabase/migrations/20260831100000_
 test("workflow executa o worker aproximadamente a cada cinco minutos e manualmente", () => {
   assert.match(workflow, /cron: "\*\/5 \* \* \* \*"/);
   assert.match(workflow, /workflow_dispatch:/);
-  assert.match(workflow, /https:\/\/clinicas\.nexawi\.com\.br\/api\/cron\/automations/);
+  assert.match(workflow, /\$\{PRODUCTION_APP_URL%\/\}\/api\/cron\/automations/);
 });
 
 test("workflow usa secret sem imprimir o valor", () => {
-  assert.match(workflow, /CRON_SECRET: \$\{\{ secrets\.CRON_SECRET \}\}/);
+  assert.match(workflow, /CRON_SECRET: \$\{\{ secrets\.PRODUCTION_CRON_SECRET \}\}/);
   assert.match(workflow, /Authorization: Bearer \$\{CRON_SECRET\}/);
   assert.doesNotMatch(workflow, /echo[^\n]*\$\{CRON_SECRET\}/);
   assert.doesNotMatch(workflow, /set -x/);
@@ -35,13 +35,13 @@ test("concurrency impede dois workers simultâneos deste workflow", () => {
 });
 
 test("endpoint rejeita ausência de secret com 401", () => {
-  assert.match(route, /if \(!authorized\(request\)\)[\s\S]*status: 401/);
-  assert.match(route, /isAutomationCronAuthorized/);
+  assert.match(route, /if \(!isCronRequestAuthorized\(request\)\) return cronUnauthorizedResponse\(\)/);
 });
 
-test("endpoint autorizado retorna 200 e o resumo do worker", () => {
+test("endpoint autorizado classifica o resumo operacional do worker", () => {
   assert.match(route, /await runAutomationWorker\(\{ batchSize: 25 \}\)/);
-  assert.match(route, /NextResponse\.json\(\{ ok: true, \.\.\.result \}/);
+  assert.match(route, /workerHttpResult\(result\)/);
+  assert.match(route, /status: response\.status/);
 });
 
 test("worker suporta lote vazio e consome eventos waits e runs", () => {
@@ -56,7 +56,7 @@ test("worker suporta lote vazio e consome eventos waits e runs", () => {
 
 test("retry e SKIP LOCKED permanecem ativos", () => {
   assert.match(scheduler, /retryAutomationEvent\(event, error\)/);
-  assert.match(scheduler, /status: Number\(wait\.attempts \|\| 1\) >= 5 \? "failed" : "pending"/);
+  assert.match(scheduler, /status: permanent \? "failed" : "pending"/);
   assert.match(migration, /for update skip locked/gi);
   assert.match(migration, /claim_domain_outbox_events_for_consumer/);
   assert.match(migration, /claim_automation_waits/);

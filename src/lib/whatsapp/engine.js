@@ -101,8 +101,9 @@ export async function processOutboxEvent(event) {
     return { jobs: jobs.length };
   } catch (error) {
     const permanent = Number(event.attempts || 0) >= 5;
-    await supabaseAdmin.from("domain_outbox_events").update({ status: permanent ? "failed" : "retry", available_at: nextRetryAt(event.attempts), locked_at: null, locked_by: null, last_error: safeError(error) }).eq("id", event.id);
-    throw error;
+    const { error: updateError } = await supabaseAdmin.from("domain_outbox_events").update({ status: permanent ? "failed" : "retry", available_at: nextRetryAt(event.attempts), locked_at: null, locked_by: null, last_error: safeError(error) }).eq("id", event.id);
+    if (updateError) throw updateError;
+    throw Object.assign(error instanceof Error ? error : new Error(safeError(error)), { workerDisposition: permanent ? "dead" : "retry" });
   }
 }
 
@@ -207,19 +208,57 @@ export async function processNotificationJob(job, { provider = new MetaCloudProv
   } catch (error) {
     const permanent = error?.permanent === true || error?.transient === false || Number(job.attempt_count || 0) >= Number(job.max_attempts || 5);
     const message = sanitizeMetaError(error);
-    await supabaseAdmin.from("notification_jobs").update({ status: permanent ? "failed" : "retry", scheduled_at: permanent ? job.scheduled_at : nextRetryAt(job.attempt_count), locked_at: null, locked_by: null, last_error: message }).eq("id", job.id);
+    const { error: updateError } = await supabaseAdmin.from("notification_jobs").update({ status: permanent ? "failed" : "retry", scheduled_at: permanent ? job.scheduled_at : nextRetryAt(job.attempt_count), locked_at: null, locked_by: null, last_error: message }).eq("id", job.id);
+    if (updateError) throw updateError;
     await analytics(job.clinica_id, "whatsapp_failed", { job_id: job.id, purpose: job.template_purpose, permanent });
-    throw error;
+    throw Object.assign(error instanceof Error ? error : new Error(message), { workerDisposition: permanent ? "dead" : "retry" });
   }
 }
 
 export async function runNotificationWorker({ workerId = `worker:${randomUUID()}`, batchSize = 25 } = {}) {
-  const summary = { workerId, outbox: 0, jobs: 0, errors: 0 };
+  const summary = {
+    workerId,
+    batchSize,
+    outbox: 0,
+    jobs: 0,
+    errors: 0,
+    processed: 0,
+    succeeded: 0,
+    skipped: 0,
+    retryScheduled: 0,
+    failed: 0,
+    dead: 0,
+  };
   const { data: events, error: outboxError } = await supabaseAdmin.rpc("claim_domain_outbox_events", { p_worker: workerId, p_limit: batchSize });
   if (outboxError) throw outboxError;
-  for (const event of events || []) { try { await processOutboxEvent(event); summary.outbox += 1; } catch { summary.errors += 1; } }
+  for (const event of events || []) {
+    summary.processed += 1;
+    try {
+      const result = await processOutboxEvent(event);
+      summary.outbox += 1;
+      if (result?.skipped) summary.skipped += 1;
+      else summary.succeeded += 1;
+    } catch (error) {
+      if (error?.workerDisposition === "retry") summary.retryScheduled += 1;
+      else if (error?.workerDisposition === "dead") summary.dead += 1;
+      else summary.failed += 1;
+    }
+  }
   const { data: jobs, error: jobsError } = await supabaseAdmin.rpc("claim_notification_jobs", { p_worker: workerId, p_limit: batchSize });
   if (jobsError) throw jobsError;
-  for (const job of jobs || []) { try { await processNotificationJob(job); summary.jobs += 1; } catch { summary.errors += 1; } }
+  for (const job of jobs || []) {
+    summary.processed += 1;
+    try {
+      const result = await processNotificationJob(job);
+      summary.jobs += 1;
+      if (result?.cancelled) summary.skipped += 1;
+      else summary.succeeded += 1;
+    } catch (error) {
+      if (error?.workerDisposition === "retry") summary.retryScheduled += 1;
+      else if (error?.workerDisposition === "dead") summary.dead += 1;
+      else summary.failed += 1;
+    }
+  }
+  summary.errors = summary.retryScheduled + summary.failed + summary.dead;
   return summary;
 }

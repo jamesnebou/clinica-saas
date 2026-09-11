@@ -20,6 +20,12 @@ export async function runAutomationWorker({ batchSize = 25, workerId = `automati
     runsContinued: 0,
     retriesExecuted: 0,
     failures: 0,
+    processed: 0,
+    succeeded: 0,
+    skipped: 0,
+    retryScheduled: 0,
+    failed: 0,
+    dead: 0,
     durationMs: 0,
   };
   const health = await startWorkerHealth(summary).catch(() => null);
@@ -33,14 +39,19 @@ export async function runAutomationWorker({ batchSize = 25, workerId = `automati
     summary.eventsFound = (events || []).length;
     summary.retriesExecuted += (events || []).filter((event) => Number(event.attempts || 0) > 1).length;
     for (const event of events || []) {
+      summary.processed += 1;
       try {
         const result = await processAutomationOutboxEvent(event);
         await completeAutomationEvent(event.id);
         summary.eventsProcessed += 1;
         summary.runsStarted += Number(result?.matched || 0);
+        if (Number(result?.matched || 0) === 0) summary.skipped += 1;
+        else summary.succeeded += 1;
       } catch (error) {
+        const permanent = Number(event.attempts || 1) >= 5 || error?.permanent === true;
         await retryAutomationEvent(event, error);
-        summary.failures += 1;
+        if (permanent) summary.dead += 1;
+        else summary.retryScheduled += 1;
       }
     }
 
@@ -49,12 +60,20 @@ export async function runAutomationWorker({ batchSize = 25, workerId = `automati
     summary.waitsFound = (waits || []).length;
     summary.retriesExecuted += (waits || []).filter((wait) => Number(wait.attempts || 0) > 1).length;
     for (const wait of waits || []) {
+      summary.processed += 1;
       try {
-        await resumeAutomationWait(wait);
+        const result = await resumeAutomationWait(wait);
         summary.waitsResumed += 1;
+        if (["cancelled", "skipped"].includes(result?.status)) summary.skipped += 1;
+        else if (result?.status === "queued") summary.retryScheduled += 1;
+        else if (result?.status === "failed") summary.dead += 1;
+        else summary.succeeded += 1;
       } catch (error) {
-        await supabaseAdmin.from("automation_waits").update({ status: Number(wait.attempts || 1) >= 5 ? "failed" : "pending", resume_at: new Date(Date.now() + 5 * 60_000).toISOString(), locked_at: null, locked_by: null, last_error: String(error.message || error).slice(0, 800) }).eq("id", wait.id);
-        summary.failures += 1;
+        const permanent = Number(wait.attempts || 1) >= 5;
+        const { error: updateError } = await supabaseAdmin.from("automation_waits").update({ status: permanent ? "failed" : "pending", resume_at: new Date(Date.now() + 5 * 60_000).toISOString(), locked_at: null, locked_by: null, last_error: String(error.message || error).slice(0, 800) }).eq("id", wait.id);
+        if (updateError) throw updateError;
+        if (permanent) summary.dead += 1;
+        else summary.retryScheduled += 1;
       }
     }
 
@@ -63,19 +82,25 @@ export async function runAutomationWorker({ batchSize = 25, workerId = `automati
     summary.runsFound = (runs || []).length;
     summary.retriesExecuted += (runs || []).filter((run) => Number(run.attempts || 0) > 1).length;
     for (const run of runs || []) {
+      summary.processed += 1;
       try {
         const result = await continueAutomationRun(run.id);
         summary.runsContinued += 1;
-        if (result?.status === "queued") summary.failures += 1;
+        if (["cancelled", "skipped"].includes(result?.status)) summary.skipped += 1;
+        else if (result?.status === "queued") summary.retryScheduled += 1;
+        else if (result?.status === "failed") summary.dead += 1;
+        else summary.succeeded += 1;
       } catch {
-        summary.failures += 1;
+        summary.failed += 1;
       }
     }
+    summary.failures = summary.retryScheduled + summary.failed + summary.dead;
     summary.durationMs = Math.max(0, Date.now() - startedAt);
-    await finishWorkerHealth(health, summary, "completed").catch(() => {});
+    await finishWorkerHealth(health, summary, summary.failures > 0 ? "failed" : "completed").catch(() => {});
     return publicSummary(summary);
   } catch (error) {
-    summary.failures += 1;
+    summary.failed += 1;
+    summary.failures = summary.retryScheduled + summary.failed + summary.dead;
     summary.durationMs = Math.max(0, Date.now() - startedAt);
     await finishWorkerHealth(health, summary, "failed", error).catch(() => {});
     throw error;
@@ -126,6 +151,12 @@ function publicSummary(summary) {
     runsContinued: summary.runsContinued,
     retriesExecuted: summary.retriesExecuted,
     failures: summary.failures,
+    processed: summary.processed,
+    succeeded: summary.succeeded,
+    skipped: summary.skipped,
+    retryScheduled: summary.retryScheduled,
+    failed: summary.failed,
+    dead: summary.dead,
     durationMs: summary.durationMs,
   };
 }

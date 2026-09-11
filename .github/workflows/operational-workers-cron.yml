@@ -16,33 +16,73 @@ jobs:
   notifications:
     runs-on: ubuntu-latest
     timeout-minutes: 4
+    environment: production
     steps:
-      - name: Processar notificacoes e WhatsApp
+      - name: Validar alvo produtivo
         env:
-          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_REF: ${{ github.ref }}
+          PRODUCTION_APP_URL: ${{ vars.PRODUCTION_APP_URL }}
+          CRON_SECRET: ${{ secrets.PRODUCTION_CRON_SECRET }}
         run: |
           set -euo pipefail
-          test -n "${CRON_SECRET}" || { echo "::error::CRON_SECRET nao configurado."; exit 1; }
+          if [ "${EVENT_NAME}" = "workflow_dispatch" ] && [ "${EVENT_REF}" != "refs/heads/main" ]; then
+            echo "::error::Execucao manual produtiva permitida somente a partir de main."
+            exit 1
+          fi
+          test -n "${PRODUCTION_APP_URL}" || { echo "::error::PRODUCTION_APP_URL nao configurada no environment production."; exit 1; }
+          test -n "${CRON_SECRET}" || { echo "::error::CRON_SECRET nao configurado no environment production."; exit 1; }
+          if [ "${PRODUCTION_APP_URL%/}" != "https://clinicas.nexawi.com.br" ]; then
+            echo "::error::PRODUCTION_APP_URL nao corresponde ao host produtivo autorizado."
+            exit 1
+          fi
+
+      - name: Processar notificacoes e WhatsApp
+        env:
+          CRON_SECRET: ${{ secrets.PRODUCTION_CRON_SECRET }}
+          PRODUCTION_APP_URL: ${{ vars.PRODUCTION_APP_URL }}
+        run: |
+          set -euo pipefail
           curl --fail-with-body --silent --show-error \
             --connect-timeout 10 --max-time 50 \
             --retry 2 --retry-delay 10 --retry-max-time 150 \
             --header "Authorization: Bearer ${CRON_SECRET}" \
             --header "Accept: application/json" \
-            https://clinicas.nexawi.com.br/api/cron/notifications
+            "${PRODUCTION_APP_URL%/}/api/cron/notifications"
 
   store-expirations:
     runs-on: ubuntu-latest
     timeout-minutes: 4
+    environment: production
     steps:
-      - name: Expirar reservas da loja
+      - name: Validar alvo produtivo
         env:
-          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_REF: ${{ github.ref }}
+          PRODUCTION_APP_URL: ${{ vars.PRODUCTION_APP_URL }}
+          CRON_SECRET: ${{ secrets.PRODUCTION_CRON_SECRET }}
         run: |
           set -euo pipefail
-          test -n "${CRON_SECRET}" || { echo "::error::CRON_SECRET nao configurado."; exit 1; }
+          if [ "${EVENT_NAME}" = "workflow_dispatch" ] && [ "${EVENT_REF}" != "refs/heads/main" ]; then
+            echo "::error::Execucao manual produtiva permitida somente a partir de main."
+            exit 1
+          fi
+          test -n "${PRODUCTION_APP_URL}" || { echo "::error::PRODUCTION_APP_URL nao configurada no environment production."; exit 1; }
+          test -n "${CRON_SECRET}" || { echo "::error::CRON_SECRET nao configurado no environment production."; exit 1; }
+          if [ "${PRODUCTION_APP_URL%/}" != "https://clinicas.nexawi.com.br" ]; then
+            echo "::error::PRODUCTION_APP_URL nao corresponde ao host produtivo autorizado."
+            exit 1
+          fi
+
+      - name: Expirar reservas da loja
+        env:
+          CRON_SECRET: ${{ secrets.PRODUCTION_CRON_SECRET }}
+          PRODUCTION_APP_URL: ${{ vars.PRODUCTION_APP_URL }}
+        run: |
+          set -euo pipefail
           curl --fail-with-body --silent --show-error \
             --connect-timeout 10 --max-time 50 \
             --retry 2 --retry-delay 10 --retry-max-time 150 \
             --header "Authorization: Bearer ${CRON_SECRET}" \
             --header "Accept: application/json" \
-            https://clinicas.nexawi.com.br/api/cron/store-expirations
+            "${PRODUCTION_APP_URL%/}/api/cron/store-expirations"

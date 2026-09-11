@@ -6,15 +6,43 @@ on:
 
   workflow_dispatch:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: meta-capi-worker-production
+  cancel-in-progress: false
+
 jobs:
   process-meta-capi:
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    environment: production
 
     steps:
+      - name: Validar alvo produtivo
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_REF: ${{ github.ref }}
+          PRODUCTION_APP_URL: ${{ vars.PRODUCTION_APP_URL }}
+          CRON_SECRET: ${{ secrets.PRODUCTION_CRON_SECRET }}
+        run: |
+          set -euo pipefail
+          if [ "${EVENT_NAME}" = "workflow_dispatch" ] && [ "${EVENT_REF}" != "refs/heads/main" ]; then
+            echo "::error::Execucao manual produtiva permitida somente a partir de main."
+            exit 1
+          fi
+          test -n "${PRODUCTION_APP_URL}" || { echo "::error::PRODUCTION_APP_URL nao configurada no environment production."; exit 1; }
+          test -n "${CRON_SECRET}" || { echo "::error::CRON_SECRET nao configurado no environment production."; exit 1; }
+          if [ "${PRODUCTION_APP_URL%/}" != "https://clinicas.nexawi.com.br" ]; then
+            echo "::error::PRODUCTION_APP_URL nao corresponde ao host produtivo autorizado."
+            exit 1
+          fi
+
       - name: Processar fila Meta CAPI
         env:
-          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          CRON_SECRET: ${{ secrets.PRODUCTION_CRON_SECRET }}
+          PRODUCTION_APP_URL: ${{ vars.PRODUCTION_APP_URL }}
 
         run: |
           set -euo pipefail
@@ -22,7 +50,12 @@ jobs:
           curl --fail-with-body \
             --silent \
             --show-error \
+            --connect-timeout 10 \
+            --max-time 50 \
             --retry 2 \
             --retry-delay 5 \
-            -H "Authorization: Bearer ${CRON_SECRET}" \
-            https://clinicas.nexawi.com.br/api/cron/meta-capi
+            --retry-max-time 150 \
+            --request GET \
+            --header "Authorization: Bearer ${CRON_SECRET}" \
+            --header "Accept: application/json" \
+            "${PRODUCTION_APP_URL%/}/api/cron/meta-capi"

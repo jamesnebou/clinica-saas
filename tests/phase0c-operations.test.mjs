@@ -12,21 +12,21 @@ test("workers operacionais possuem scheduler, segredo, timeout e retry", () => {
   assert.match(workflow, /workflow_dispatch:/);
   assert.match(workflow, /concurrency:/);
   assert.match(workflow, /timeout-minutes: 4/g);
-  assert.match(workflow, /secrets\.CRON_SECRET/);
+  assert.match(workflow, /secrets\.PRODUCTION_CRON_SECRET/);
   assert.match(workflow, /curl --fail-with-body/);
   assert.match(workflow, /--retry 2/);
   assert.match(workflow, /\/api\/cron\/notifications/);
   assert.match(workflow, /\/api\/cron\/store-expirations/);
 });
 
-test("endpoints operacionais exigem CRON_SECRET e expõem somente GET", () => {
+test("endpoints operacionais usam autenticação cron compartilhada e expõem somente GET", () => {
   for (const file of [
     "src/app/api/cron/notifications/route.js",
     "src/app/api/cron/store-expirations/route.js",
   ]) {
     const source = read(file);
-    assert.match(source, /process\.env\.CRON_SECRET/);
-    assert.match(source, /Bearer/);
+    assert.match(source, /isCronRequestAuthorized/);
+    assert.match(source, /cronUnauthorizedResponse/);
     assert.match(source, /export async function GET/);
     assert.doesNotMatch(source, /export const POST\s*=/);
   }

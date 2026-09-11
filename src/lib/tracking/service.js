@@ -145,15 +145,31 @@ export async function processPendingMetaConversionEvents({ batchSize = 25 } = {}
   const { data, error } = await supabaseAdmin.rpc("claim_meta_conversion_events", { p_limit: limit });
   if (error) throw error;
   const records = data || [];
-  const summary = { claimed: records.length, sent: 0, retried: 0, dead: 0, failed: 0 };
+  const summary = {
+    claimed: records.length,
+    sent: 0,
+    retried: 0,
+    processed: records.length,
+    succeeded: 0,
+    skipped: 0,
+    retryScheduled: 0,
+    dead: 0,
+    failed: 0,
+  };
 
   for (const record of records) {
     try {
       const result = await deliverMetaConversionRecord(record);
-      if (result.ok) summary.sent += 1;
+      if (result.ok) {
+        summary.sent += 1;
+        summary.succeeded += 1;
+      }
       else {
         const refreshed = await loadQueueRecord(record.id);
-        if (refreshed?.status === "retry") summary.retried += 1;
+        if (refreshed?.status === "retry") {
+          summary.retried += 1;
+          summary.retryScheduled += 1;
+        }
         else if (refreshed?.status === "dead") summary.dead += 1;
         else summary.failed += 1;
       }
