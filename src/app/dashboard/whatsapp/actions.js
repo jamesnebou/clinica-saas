@@ -36,39 +36,218 @@ export async function updateWhatsAppAutomationsAction(formData) {
 }
 
 export async function syncWhatsAppTemplatesAction() {
-  const context = await managerContext(); const connection = await primaryConnection(context.activeClinic.id);
-  await supabaseAdmin.from("whatsapp_connections").update({ onboarding_status: "templates_syncing" }).eq("id", connection.id);
-  try { const result = await syncConnectionTemplates(connection); await supabaseAdmin.from("whatsapp_connections").update({ onboarding_status: "ready", last_error: null }).eq("id", connection.id); await audit(context,"whatsapp.templates.synced",connection.id,result); }
-  catch (error) { await supabaseAdmin.from("whatsapp_connections").update({ onboarding_status: "error", last_error: sanitizeMetaError(error) }).eq("id", connection.id); throw error; }
-  revalidatePath("/dashboard/whatsapp");
+  let context = null;
+  let connection = null;
+
+  try {
+    context = await managerContext();
+    connection = await primaryConnection(context.activeClinic.id);
+
+    const result = await syncConnectionTemplates(connection);
+
+    await supabaseAdmin
+      .from("whatsapp_connections")
+      .update({ last_error: null })
+      .eq("id", connection.id)
+      .eq("clinica_id", context.activeClinic.id);
+
+    try {
+      await audit(
+        context,
+        "whatsapp.templates.synced",
+        connection.id,
+        result
+      );
+    } catch (auditError) {
+      console.error("whatsapp_templates_sync_audit_failed", {
+        connectionId: connection.id,
+        message: sanitizeMetaError(auditError),
+      });
+    }
+
+    revalidatePath("/dashboard/whatsapp");
+
+    return {
+      ok: true,
+      action: "sync",
+      total: Number(result?.total || 0),
+      remoteTotal: Number(result?.remoteTotal || 0),
+      message:
+        Number(result?.total || 0) > 0
+          ? `${Number(result.total)} template(s) sincronizado(s) com a Meta.`
+          : "Sincronização concluída. Nenhum template NexaWi encontrado na Meta.",
+    };
+  } catch (error) {
+    const sanitized = sanitizeMetaError(error);
+
+    console.error("whatsapp_templates_sync_failed", {
+      connectionId: connection?.id || null,
+      status: error?.status ?? null,
+      code: error?.code ?? null,
+      subcode: error?.subcode ?? null,
+      message: sanitized,
+    });
+
+    if (connection?.id && context?.activeClinic?.id) {
+      try {
+        await supabaseAdmin
+          .from("whatsapp_connections")
+          .update({ last_error: sanitized })
+          .eq("id", connection.id)
+          .eq("clinica_id", context.activeClinic.id);
+      } catch (persistError) {
+        console.error("whatsapp_templates_sync_error_persist_failed", {
+          connectionId: connection.id,
+          message: sanitizeMetaError(persistError),
+        });
+      }
+    }
+
+    return {
+      ok: false,
+      action: "sync",
+      message:
+        "Não foi possível sincronizar os templates com a Meta. A conexão do WhatsApp continua ativa.",
+    };
+  }
 }
 
 export async function submitWhatsAppTemplatesAction() {
-  const context = await managerContext();
-  const connection = await primaryConnection(context.activeClinic.id);
-  const provider = new MetaCloudProvider();
-  await syncConnectionTemplates(connection, provider);
-  const { data: existing, error: existingError } = await supabaseAdmin
-    .from("whatsapp_templates")
-    .select("name,language")
-    .eq("connection_id", connection.id);
-  if (existingError) throw existingError;
-  const existingKeys = new Set((existing || []).map((item) => `${item.name}:${item.language}`));
-  let submitted = 0;
+  let context = null;
+  let connection = null;
+
   try {
+    context = await managerContext();
+    connection = await primaryConnection(context.activeClinic.id);
+
+    const provider = new MetaCloudProvider();
+
+    // Primeiro traz o estado real da Meta para evitar duplicações.
+    await syncConnectionTemplates(connection, provider);
+
+    const { data: existing, error: existingError } = await supabaseAdmin
+      .from("whatsapp_templates")
+      .select("name,language")
+      .eq("clinica_id", context.activeClinic.id)
+      .eq("connection_id", connection.id);
+
+    if (existingError) throw existingError;
+
+    const existingKeys = new Set(
+      (existing || []).map(
+        (item) => `${item.name}:${item.language}`
+      )
+    );
+
+    let submitted = 0;
+
     for (const purpose of Object.keys(TEMPLATE_CATALOG)) {
       const payload = buildTemplateSubmission(purpose);
-      if (existingKeys.has(`${payload.name}:${payload.language}`)) continue;
-      await provider.client.createTemplate(connection.waba_id, payload);
+      const key = `${payload.name}:${payload.language}`;
+
+      if (existingKeys.has(key)) continue;
+
+      await provider.client.createTemplate(
+        connection.waba_id,
+        payload
+      );
+
       submitted += 1;
+      existingKeys.add(key);
     }
-    await syncConnectionTemplates(connection);
-    await audit(context, "whatsapp.templates.submitted", connection.id, { submitted });
+
+    // Traz imediatamente da Meta tudo que foi criado.
+    const syncResult = await syncConnectionTemplates(
+      connection,
+      provider
+    );
+
+    await supabaseAdmin
+      .from("whatsapp_connections")
+      .update({ last_error: null })
+      .eq("id", connection.id)
+      .eq("clinica_id", context.activeClinic.id);
+
+    try {
+      await audit(
+        context,
+        "whatsapp.templates.submitted",
+        connection.id,
+        {
+          submitted,
+          synced: Number(syncResult?.total || 0),
+        }
+      );
+    } catch (auditError) {
+      console.error("whatsapp_templates_submit_audit_failed", {
+        connectionId: connection.id,
+        message: sanitizeMetaError(auditError),
+      });
+    }
+
+    revalidatePath("/dashboard/whatsapp");
+
+    if (submitted === 0) {
+      return {
+        ok: true,
+        action: "submit",
+        submitted: 0,
+        synced: Number(syncResult?.total || 0),
+        message:
+          "Nenhum template novo precisava ser enviado.",
+      };
+    }
+
+    return {
+      ok: true,
+      action: "submit",
+      submitted,
+      synced: Number(syncResult?.total || 0),
+      message: `${submitted} template(s) enviado(s) para análise da Meta.`,
+    };
   } catch (error) {
-    await supabaseAdmin.from("whatsapp_connections").update({ last_error: sanitizeMetaError(error) }).eq("id", connection.id);
-    throw error;
+    const sanitized = sanitizeMetaError(error);
+
+    console.error("whatsapp_templates_submit_failed", {
+      connectionId: connection?.id || null,
+      status: error?.status ?? null,
+      code: error?.code ?? null,
+      subcode: error?.subcode ?? null,
+      message: sanitized,
+    });
+
+    if (connection?.id && context?.activeClinic?.id) {
+      try {
+        await supabaseAdmin
+          .from("whatsapp_connections")
+          .update({ last_error: sanitized })
+          .eq("id", connection.id)
+          .eq("clinica_id", context.activeClinic.id);
+      } catch (persistError) {
+        console.error("whatsapp_templates_submit_error_persist_failed", {
+          connectionId: connection.id,
+          message: sanitizeMetaError(persistError),
+        });
+      }
+    }
+
+    /*
+     * IMPORTANTE:
+     * Não relançamos a exceção.
+     * Assim um erro da Graph API não derruba a página inteira.
+     *
+     * Se alguns templates já foram criados antes do erro,
+     * uma nova tentativa sincronizará a Meta primeiro e
+     * continuará somente com os ausentes.
+     */
+    return {
+      ok: false,
+      action: "submit",
+      submitted: 0,
+      message:
+        "Não foi possível enviar todos os templates. A conexão do WhatsApp continua ativa. Tente novamente.",
+    };
   }
-  revalidatePath("/dashboard/whatsapp");
 }
 
 export async function checkWhatsAppHealthAction() {
