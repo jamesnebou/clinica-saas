@@ -12,8 +12,11 @@ export const TEMPLATE_CATALOG = Object.freeze({
 
 const TEMPLATE_COPY = Object.freeze({
   booking_created: "Olá, {{1}}. A {{2}} recebeu sua solicitação para {{3}} às {{4}}. Acompanhe as próximas atualizações por este WhatsApp.",
-  booking_payment_pending: "Olá, {{1}}. Sua reserva na {{2}} para {{3}} às {{4}} aguarda o sinal de {{5}} até {{6}}. Pagamento: {{7}}",
-  payment_expiring: "Olá, {{1}}. O prazo do sinal da sua reserva na {{2}}, marcada para {{3}} às {{4}}, está terminando. Valor: {{5}}. Prazo: {{6}}. Pagamento: {{7}}",
+  booking_payment_pending:
+  "Olá, {{1}}. Recebemos sua solicitação de agendamento na {{2}} para o dia {{3}}, às {{4}}. Para concluir a reserva do horário, é necessário realizar o pagamento do sinal no valor de {{5}}. O pagamento pode ser efetuado até {{6}}. Após a confirmação, sua reserva ficará garantida. Para realizar o pagamento, utilize o link a seguir: {{7}}",
+
+payment_expiring:
+  "Olá, {{1}}. Este é um lembrete sobre sua reserva na {{2}}, agendada para o dia {{3}}, às {{4}}. O pagamento do sinal no valor de {{5}} ainda está pendente e o prazo para conclusão termina em {{6}}. Para evitar que a reserva do horário expire, realize o pagamento utilizando o link a seguir: {{7}}",
   payment_confirmed: "Olá, {{1}}. Pagamento confirmado pela {{2}}. Seu atendimento de {{3}} às {{4}} está garantido.",
   payment_expired: "Olá, {{1}}. O prazo de pagamento da reserva na {{2}}, prevista para {{3}} às {{4}}, expirou. Fale com a clínica para consultar uma nova disponibilidade.",
   appointment_reminder_24h: "Olá, {{1}}. A {{2}} lembra que seu atendimento está marcado para {{3}} às {{4}}. Confirme sua presença pelo botão.",
