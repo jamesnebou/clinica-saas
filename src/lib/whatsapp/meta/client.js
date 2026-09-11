@@ -23,8 +23,18 @@ export class MetaGraphClient {
     const payload = await response.json().catch(() => ({}));
     if (!response.ok || payload?.error) {
       const meta = payload?.error || {}; const transient = response.status === 429 || response.status >= 500 || meta.is_transient === true || [1,2,4,17,32,613].includes(Number(meta.code));
-      throw new MetaCloudError(meta.message || `Meta Graph API retornou HTTP ${response.status}.`, { status: response.status, code: meta.code, subcode: meta.error_subcode, transient });
-    }
+throw new MetaCloudError(
+  meta.message || `Meta Graph API retornou HTTP ${response.status}.`,
+  {
+    status: response.status,
+    code: meta.code,
+    subcode: meta.error_subcode,
+    transient,
+    details: meta?.error_data?.details || null,
+    userTitle: meta?.error_user_title || null,
+    userMessage: meta?.error_user_msg || null,
+  }
+);    }
     return payload;
   }
   exchangeEmbeddedSignupCode(code) {
