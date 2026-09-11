@@ -12,17 +12,14 @@ export const TEMPLATE_CATALOG = Object.freeze({
 
 const TEMPLATE_COPY = Object.freeze({
   booking_created: "Olá, {{1}}. A {{2}} recebeu sua solicitação para {{3}} às {{4}}. Acompanhe as próximas atualizações por este WhatsApp.",
-  booking_payment_pending:
-  "Olá, {{1}}. Recebemos sua solicitação de agendamento na {{2}} para o dia {{3}}, às {{4}}. Para concluir a reserva do horário, é necessário realizar o pagamento do sinal no valor de {{5}}. O pagamento pode ser efetuado até {{6}}. Após a confirmação, sua reserva ficará garantida. Para realizar o pagamento, utilize o link a seguir: {{7}}",
-
-payment_expiring:
-  "Olá, {{1}}. Este é um lembrete sobre sua reserva na {{2}}, agendada para o dia {{3}}, às {{4}}. O pagamento do sinal no valor de {{5}} ainda está pendente e o prazo para conclusão termina em {{6}}. Para evitar que a reserva do horário expire, realize o pagamento utilizando o link a seguir: {{7}}",
+booking_payment_pending: "Olá, {{1}}. Recebemos sua solicitação de agendamento na {{2}} para o dia {{3}}, às {{4}}. Para concluir a reserva do horário, é necessário realizar o pagamento do sinal no valor de {{5}}. O pagamento pode ser efetuado até {{6}}. Após a confirmação, sua reserva ficará garantida. Para realizar o pagamento, utilize o link a seguir: {{7}}. Se precisar de ajuda com o pagamento, entre em contato com a clínica.",
+payment_expiring: "Olá, {{1}}. Este é um lembrete sobre sua reserva na {{2}}, agendada para o dia {{3}}, às {{4}}. O pagamento do sinal no valor de {{5}} ainda está pendente e o prazo para conclusão termina em {{6}}. Para evitar que a reserva do horário expire, realize o pagamento utilizando o link a seguir: {{7}}. Se o pagamento já foi realizado, desconsidere esta mensagem.",
   payment_confirmed: "Olá, {{1}}. Pagamento confirmado pela {{2}}. Seu atendimento de {{3}} às {{4}} está garantido.",
   payment_expired: "Olá, {{1}}. O prazo de pagamento da reserva na {{2}}, prevista para {{3}} às {{4}}, expirou. Fale com a clínica para consultar uma nova disponibilidade.",
   appointment_reminder_24h: "Olá, {{1}}. A {{2}} lembra que seu atendimento está marcado para {{3}} às {{4}}. Confirme sua presença pelo botão.",
   appointment_reminder_3h: "Olá, {{1}}. Seu atendimento na {{2}} será hoje, {{3}}, às {{4}}. Confirme sua presença pelo botão.",
   booking_cancelled: "Olá, {{1}}. Seu atendimento na {{2}}, antes previsto para {{3}} às {{4}}, foi cancelado. Fale com a clínica se precisar de ajuda.",
-  booking_rescheduled: "Olá, {{1}}. Seu atendimento na {{2}} foi remarcado para {{3}} às {{4}}.",
+  booking_rescheduled: "Olá, {{1}}. Seu atendimento na {{2}} foi remarcado para {{3}} às {{4}}. Se precisar de alguma alteração ou ajuda, entre em contato com a clínica.",
 });
 
 const BODY_EXAMPLES = Object.freeze({
