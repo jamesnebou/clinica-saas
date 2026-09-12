@@ -5,6 +5,7 @@ import { clinicTimeZone } from "@/lib/clinic/schedule";
 import { AUTOMATION_FLAG_BY_PURPOSE, PURPOSE_BY_EVENT, deterministicInteractionToken, hashOpaqueToken, nextRetryAt, normalizeWhatsAppPhone } from "./core.mjs";
 import { MetaCloudProvider } from "./meta/provider";
 import { sanitizeMetaError } from "./meta/errors";
+import { classifyTemplateLifecycle, deferredTemplateJobUpdate, notificationCancellationReason } from "./template-lifecycle.mjs";
 
 const PURPOSE_LABELS = Object.freeze({
   booking_created: "Novo agendamento", booking_payment_pending: "Pagamento pendente",
@@ -110,14 +111,30 @@ export async function processOutboxEvent(event) {
 async function sendContext(job) {
   const { data: event, error: eventError } = await supabaseAdmin.from("domain_outbox_events").select("*").eq("id", job.event_id).eq("clinica_id", job.clinica_id).single();
   if (eventError) throw eventError;
-  const [{ booking, publicBooking }, connectionResult, templateResult, preferenceResult, settingsResult] = await Promise.all([
+  const [{ booking, publicBooking }, connectionResult, preferenceResult, settingsResult] = await Promise.all([
     bookingContext(event),
     supabaseAdmin.from("whatsapp_connections").select("*").eq("clinica_id", job.clinica_id).eq("is_primary", true).eq("connection_status", "connected").eq("onboarding_status", "ready").maybeSingle(),
-    supabaseAdmin.from("whatsapp_templates").select("*").eq("clinica_id", job.clinica_id).eq("purpose", job.template_purpose).eq("status", "APPROVED").maybeSingle(),
     supabaseAdmin.from("communication_preferences").select("whatsapp_transactional_opt_in,opt_out_at").eq("clinica_id", job.clinica_id).eq("phone_normalized", job.recipient).maybeSingle(),
     supabaseAdmin.from("whatsapp_automation_settings").select("payment_expiration_minutes").eq("clinica_id", job.clinica_id).maybeSingle(),
   ]);
-  return { event, booking, publicBooking, connection: connectionResult.data, template: templateResult.data, preference: preferenceResult.data, settings: settingsResult.data };
+  if (connectionResult.error) throw connectionResult.error;
+  if (preferenceResult.error) throw preferenceResult.error;
+  if (settingsResult.error) throw settingsResult.error;
+
+  let template = null;
+  if (connectionResult.data) {
+    const { data, error } = await supabaseAdmin.from("whatsapp_templates")
+      .select("*")
+      .eq("clinica_id", job.clinica_id)
+      .eq("connection_id", connectionResult.data.id)
+      .eq("purpose", job.template_purpose)
+      .order("updated_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (error) throw error;
+    template = data;
+  }
+  return { event, booking, publicBooking, connection: connectionResult.data, template, preference: preferenceResult.data, settings: settingsResult.data };
 }
 
 function templateVariables({ job, booking, publicBooking, settings }) {
@@ -172,17 +189,30 @@ async function trackedPaymentLink(job, booking, publicBooking) {
 export async function processNotificationJob(job, { provider = new MetaCloudProvider() } = {}) {
   try {
     const context = await sendContext(job);
+    const cancellationReason = notificationCancellationReason({
+      purpose: job.template_purpose,
+      bookingStatus: context.booking.status,
+      paymentStatus: context.publicBooking?.pagamento_status,
+    });
+    if (cancellationReason) {
+      const { error: cancelError } = await supabaseAdmin.from("notification_jobs").update({ status: "cancelled", cancelled_at: new Date().toISOString(), locked_at: null, locked_by: null, last_error: null }).eq("id", job.id);
+      if (cancelError) throw cancelError;
+      return { cancelled: true };
+    }
     if (!context.connection) throw Object.assign(new Error("Conexão WhatsApp indisponível."), { permanent: true });
-    if (!context.template) throw Object.assign(new Error("Template Meta ainda não aprovado para este gatilho."), { permanent: true });
+
+    const templateLifecycle = classifyTemplateLifecycle(context.template);
+    if (templateLifecycle.action === "defer") {
+      const update = { ...deferredTemplateJobUpdate(job), last_error: templateLifecycle.message };
+      const { error: deferError } = await supabaseAdmin.from("notification_jobs").update(update).eq("id", job.id);
+      if (deferError) throw deferError;
+      await analytics(job.clinica_id, "whatsapp_deferred", { job_id: job.id, purpose: job.template_purpose, template_status: templateLifecycle.status });
+      return { deferred: true, templateStatus: templateLifecycle.status };
+    }
+    if (templateLifecycle.action === "dead") {
+      throw Object.assign(new Error(templateLifecycle.message), { permanent: true });
+    }
     if (!context.preference?.whatsapp_transactional_opt_in || context.preference?.opt_out_at) throw Object.assign(new Error("Destinatário sem consentimento transacional ativo."), { permanent: true });
-    if (["appointment_reminder_24h","appointment_reminder_3h"].includes(job.template_purpose) && ["cancelado","faltou","concluido"].includes(context.booking.status)) {
-      await supabaseAdmin.from("notification_jobs").update({ status: "cancelled", cancelled_at: new Date().toISOString(), locked_at: null, locked_by: null }).eq("id", job.id);
-      return { cancelled: true };
-    }
-    if (["booking_payment_pending","payment_expiring","payment_expired"].includes(job.template_purpose) && context.publicBooking?.pagamento_status !== "pendente") {
-      await supabaseAdmin.from("notification_jobs").update({ status: "cancelled", cancelled_at: new Date().toISOString(), locked_at: null, locked_by: null }).eq("id", job.id);
-      return { cancelled: true };
-    }
     const quickReplyPayload = await confirmationInteraction(job, context.booking);
     const paymentLink = await trackedPaymentLink(job, context.booking, context.publicBooking);
     const { data: stored, error: storeError } = await supabaseAdmin.from("whatsapp_messages").upsert({
@@ -221,6 +251,7 @@ export async function runNotificationWorker({ workerId = `worker:${randomUUID()}
     batchSize,
     outbox: 0,
     jobs: 0,
+    deferred: 0,
     errors: 0,
     processed: 0,
     succeeded: 0,
@@ -252,6 +283,7 @@ export async function runNotificationWorker({ workerId = `worker:${randomUUID()}
       const result = await processNotificationJob(job);
       summary.jobs += 1;
       if (result?.cancelled) summary.skipped += 1;
+      else if (result?.deferred) summary.deferred += 1;
       else summary.succeeded += 1;
     } catch (error) {
       if (error?.workerDisposition === "retry") summary.retryScheduled += 1;
