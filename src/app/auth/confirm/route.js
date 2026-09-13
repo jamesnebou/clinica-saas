@@ -2,10 +2,13 @@ import { NextResponse } from "next/server";
 import { buildSignupConfirmationDestination } from "@/lib/auth/self-service.mjs";
 import { getTrustedAppOrigin } from "@/lib/security/app-origin";
 import { createClient } from "@/lib/supabase/server";
+import { consumePublicRateLimit, publicRateLimitResponse } from "@/lib/security/public-antiabuse";
 
 const CONFIRMATION_ERROR_PATH = "/login-cliente?erro=confirmacao";
 
 export async function GET(request) {
+  const rateLimit = await consumePublicRateLimit({ scope: "auth_exchange", headers: request.headers });
+  if (!rateLimit.allowed) return publicRateLimitResponse(rateLimit);
   const requestUrl = new URL(request.url);
   const tokenHash = String(requestUrl.searchParams.get("token_hash") || "").trim();
   const type = requestUrl.searchParams.get("type");

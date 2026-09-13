@@ -7,6 +7,7 @@ import { MarketingAttributionHiddenFields } from "@/components/marketing/attribu
 import { signUpAction } from "./actions";
 import { trackMarketingEvent } from "@/components/marketing/conversion-tracker";
 import { fireGoogleAdsConversion, fireGoogleAnalyticsEvent, setGoogleEnhancedUserData } from "@/lib/tracking/google-client";
+import { PublicFormGuard } from "@/components/public-site/public-form-guard";
 
 const initialState = { ok: true, message: "" };
 
@@ -52,10 +53,7 @@ export default function CadastroForm({ selectedPlan }) {
     <form action={formAction} onSubmit={handleSubmit} className="mt-6 space-y-4">
       <MarketingAttributionHiddenFields pageType="self_service_signup" includeRegistrationEvent={false} includeSession />
       <input type="hidden" name="selected_plan" value={selectedPlan} />
-      <label className="absolute -left-[10000px] top-auto h-px w-px overflow-hidden" aria-hidden="true">
-        Site
-        <input name="website" type="text" tabIndex={-1} autoComplete="off" />
-      </label>
+      <PublicFormGuard />
 
       <label className="block">
         <span className="text-sm font-semibold text-neutral-700">Nome completo</span>

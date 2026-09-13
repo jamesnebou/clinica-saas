@@ -1,6 +1,5 @@
 "use server";
 
-import { createHash } from "node:crypto";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { DEMO_EMAIL } from "@/lib/demo/demo-account";
@@ -14,9 +13,8 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { cleanText, normalizeMarketingAttribution } from "@/lib/tracking/core.mjs";
 import { getTrustedAppOrigin } from "@/lib/security/app-origin";
-
-const SIGNUP_LIMIT = 5;
-const SIGNUP_WINDOW_MINUTES = 10;
+import { consumePublicRateLimit, publicRequestFingerprint } from "@/lib/security/public-antiabuse";
+import { looksLikeAutomatedForm, validPublicForm } from "@/lib/security/public-antiabuse-core.mjs";
 
 function parseAttribution(value) {
   try {
@@ -28,30 +26,11 @@ function parseAttribution(value) {
 
 async function requestContext() {
   const headerStore = await headers();
-  const forwarded = headerStore.get("x-forwarded-for")?.split(",")[0]?.trim();
-  const ip = forwarded || headerStore.get("x-real-ip") || "unknown";
-  const salt = process.env.SIGNUP_HASH_SALT || process.env.LEAD_HASH_SALT || process.env.CLINIC_SECRETS_KEY || "nexawi-clinicas-public-signup";
   return {
     baseUrl: await getTrustedAppOrigin(),
-    ipHash: createHash("sha256").update(`${salt}:${ip}`).digest("hex"),
+    headers: headerStore,
     userAgent: cleanText(headerStore.get("user-agent"), 300),
   };
-}
-
-async function isRateLimited(ipHash) {
-  const since = new Date(Date.now() - SIGNUP_WINDOW_MINUTES * 60 * 1000).toISOString();
-  const { count, error } = await supabaseAdmin
-    .from("clinica_marketing_eventos")
-    .select("id", { count: "exact", head: true })
-    .eq("event_name", "signup_started")
-    .eq("ip_hash", ipHash)
-    .gte("created_at", since);
-
-  if (error) {
-    console.error("self_service_signup_rate_limit_unavailable", { code: error.code || "unknown" });
-    return false;
-  }
-  return (count || 0) >= SIGNUP_LIMIT;
 }
 
 async function recordSignupEvent({ eventName, ipHash, attribution, sessionId, selectedPlan, userAgent, authUserId = null }) {
@@ -81,7 +60,8 @@ async function recordSignupEvent({ eventName, ipHash, attribution, sessionId, se
 }
 
 export async function signUpAction(_previousState, formData) {
-  if (String(formData.get("website") || "").trim()) {
+  if (!validPublicForm(formData)) return { ok: false, message: "Dados inválidos." };
+  if (looksLikeAutomatedForm(formData)) {
     return { ok: true, message: "Cadastro recebido." };
   }
 
@@ -105,9 +85,11 @@ export async function signUpAction(_previousState, formData) {
   const sessionId = cleanText(formData.get("marketing_session_id"), 100);
   const context = await requestContext();
 
-  if (await isRateLimited(context.ipHash)) {
+  const signupRateLimit = await consumePublicRateLimit({ scope: "signup", headers: context.headers, target: email });
+  if (!signupRateLimit.allowed) {
     return { ok: false, message: "Muitas tentativas foram realizadas. Aguarde alguns minutos e tente novamente." };
   }
+  context.ipHash = publicRequestFingerprint(context.headers);
 
   await recordSignupEvent({
     eventName: "signup_started",
@@ -137,7 +119,6 @@ export async function signUpAction(_previousState, formData) {
       name: error?.name || null,
       code: error?.code || null,
       status: error?.status || null,
-      message: error?.message || null,
     });
     return { ok: false, message: friendlySignupError(error) };
   }

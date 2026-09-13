@@ -1,6 +1,13 @@
-import { createHash } from "node:crypto";
-import { after, NextResponse } from "next/server";
+import { after } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import {
+  consumePublicRateLimit,
+  noStoreJson,
+  publicRateLimitResponse,
+  publicRequestFingerprint,
+  trustedPublicRequestIp,
+} from "@/lib/security/public-antiabuse";
+import { looksLikeAutomatedForm, readBoundedJson } from "@/lib/security/public-antiabuse-core.mjs";
 import {
   allowsMarketing,
   cleanText,
@@ -20,17 +27,6 @@ import { hasContactConsent } from "@/lib/tracking/marketing-lead.mjs";
 export const runtime = "nodejs";
 
 const PLANS = new Set(["starter", "growth", "premium", "nao_sei"]);
-
-function requestIp(request) {
-  const forwarded = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
-  return forwarded || request.headers.get("x-real-ip") || "unknown";
-}
-
-function requestHash(request) {
-  const ip = requestIp(request);
-  const salt = process.env.LEAD_HASH_SALT || process.env.CLINIC_SECRETS_KEY || "nexawi-clinicas-public-lead";
-  return createHash("sha256").update(`${salt}:${ip}`).digest("hex");
-}
 
 function eventSourceUrl(request, attribution) {
   const path = cleanText(attribution?.first_page || attribution?.last_touch?.landing_page || attribution?.first_touch?.landing_page, 500) || "/";
@@ -54,30 +50,31 @@ function scheduleDelivery(record, fallbackInput) {
 
 export async function POST(request) {
   try {
-    const body = await request.json();
-    if (cleanText(body.website)) return NextResponse.json({ ok: true });
+    const parsed = await readBoundedJson(request, 32_768);
+    if (!parsed.ok) return noStoreJson({ ok: false, error: parsed.error }, { status: parsed.status });
+    const body = parsed.value;
+    const limits = { name: 100, whatsapp: 40, email: 254, clinic_name: 120, session_id: 100, meta_event_id: 160 };
+    if (Object.entries(limits).some(([key, max]) => body[key] != null && (typeof body[key] !== "string" || body[key].length > max))) {
+      return noStoreJson({ ok: false, error: "Dados inválidos." }, { status: 400 });
+    }
+    if (looksLikeAutomatedForm(body)) return noStoreJson({ ok: true });
 
     const nome = cleanText(body.name, 100);
     const whatsapp = String(body.whatsapp || "").replace(/\D/g, "").slice(0, 15);
-    const email = cleanText(body.email, 160)?.toLowerCase() || null;
+    const email = cleanText(body.email, 254)?.toLowerCase() || null;
+    if (email && !/^\S+@\S+\.\S+$/.test(email)) return noStoreJson({ ok: false, error: "Dados inválidos." }, { status: 400 });
     const profissionais = Math.min(500, Math.max(1, Number.parseInt(body.professionals_count, 10) || 1));
     const plano = PLANS.has(body.plan_interest) ? body.plan_interest : "nao_sei";
     const attribution = normalizeMarketingAttribution(body);
     const segment = cleanText(body.segment || attribution.segment, 120);
 
-    if (!nome || nome.length < 2) return NextResponse.json({ error: "Informe seu nome." }, { status: 400 });
-    if (whatsapp.length < 10) return NextResponse.json({ error: "Informe um WhatsApp válido com DDD." }, { status: 400 });
-    if (!hasContactConsent(body)) return NextResponse.json({ error: "Autorize o contato para continuar." }, { status: 400 });
+    if (!nome || nome.length < 2) return noStoreJson({ ok: false, error: "Informe seu nome." }, { status: 400 });
+    if (whatsapp.length < 10) return noStoreJson({ ok: false, error: "Informe um WhatsApp válido com DDD." }, { status: 400 });
+    if (!hasContactConsent(body)) return noStoreJson({ ok: false, error: "Autorize o contato para continuar." }, { status: 400 });
 
-    const ipHash = requestHash(request);
-    const twoMinutesAgo = new Date(Date.now() - 2 * 60 * 1000).toISOString();
-    const { count } = await supabaseAdmin
-      .from("clinica_marketing_leads")
-      .select("id", { count: "exact", head: true })
-      .eq("ip_hash", ipHash)
-      .gte("created_at", twoMinutesAgo);
-
-    if ((count || 0) >= 3) return NextResponse.json({ error: "Aguarde alguns minutos antes de enviar novamente." }, { status: 429 });
+    const rateLimit = await consumePublicRateLimit({ scope: "marketing_leads", headers: request.headers, target: whatsapp });
+    if (!rateLimit.allowed) return publicRateLimitResponse(rateLimit);
+    const ipHash = publicRequestFingerprint(request.headers);
 
     const requestedEventId = cleanText(body.meta_event_id, 160);
     const preInsertEventId = isValidMetaEventId(requestedEventId) ? requestedEventId : null;
@@ -160,7 +157,7 @@ export async function POST(request) {
         externalId: data.id,
         fbc: attribution.fbc,
         fbp: attribution.fbp,
-        clientIpAddress: requestIp(request),
+        clientIpAddress: trustedPublicRequestIp(request.headers),
         clientUserAgent: request.headers.get("user-agent"),
       }),
       customData: {
@@ -186,9 +183,9 @@ export async function POST(request) {
       }
     }
 
-    return NextResponse.json({ ok: true, lead_id: data.id, event_id: eventId });
+    return noStoreJson({ ok: true, lead_id: data.id, event_id: eventId });
   } catch (error) {
     console.error("marketing_lead_submit_failed", { code: error?.code || "unknown" });
-    return NextResponse.json({ error: "Não foi possível enviar agora. Tente novamente." }, { status: 500 });
+    return noStoreJson({ ok: false, error: "Não foi possível enviar agora. Tente novamente." }, { status: 500 });
   }
 }

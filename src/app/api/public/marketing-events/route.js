@@ -1,12 +1,18 @@
-import { createHash } from "node:crypto";
-import { after, NextResponse } from "next/server";
+import { after } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import {
+  consumePublicRateLimit,
+  noStoreJson,
+  publicRateLimitResponse,
+  publicRequestFingerprint,
+  trustedPublicRequestIp,
+} from "@/lib/security/public-antiabuse";
+import { readBoundedJson, safeMarketingMetadata, safeAnalyticsPath } from "@/lib/security/public-antiabuse-core.mjs";
 import {
   allowsMarketing,
   cleanText,
   isValidMetaEventId,
   normalizeMarketingAttribution,
-  sanitizeInternalMetadata,
 } from "@/lib/tracking/core.mjs";
 import { buildMetaUserData, sendMetaConversionEvent } from "@/lib/tracking/meta-capi";
 
@@ -29,11 +35,6 @@ const EVENTS = new Set([
   "signup_completed",
 ]);
 
-function requestIp(request) {
-  const forwarded = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
-  return forwarded || request.headers.get("x-real-ip") || "unknown";
-}
-
 function sourceUrl(request, page) {
   try {
     return new URL(cleanText(page, 500) || "/", request.nextUrl.origin).toString();
@@ -44,13 +45,17 @@ function sourceUrl(request, page) {
 
 export async function POST(request) {
   try {
-    const body = await request.json();
-    if (!EVENTS.has(body.event_name)) return NextResponse.json({ ok: false }, { status: 400 });
+    const parsed = await readBoundedJson(request, 24_576);
+    if (!parsed.ok) return noStoreJson({ ok: false }, { status: parsed.status });
+    const body = parsed.value;
+    if (!EVENTS.has(body.event_name)) return noStoreJson({ ok: false }, { status: 400 });
 
-    const ip = requestIp(request);
-    const salt = process.env.LEAD_HASH_SALT || process.env.CLINIC_SECRETS_KEY || "nexawi-clinicas-public-event";
-    const ipHash = createHash("sha256").update(`${salt}:${ip}`).digest("hex");
-    const metadata = sanitizeInternalMetadata(body.metadata);
+    const rateLimit = await consumePublicRateLimit({ scope: "marketing_events", headers: request.headers });
+    if (!rateLimit.allowed) return publicRateLimitResponse(rateLimit);
+
+    const ip = trustedPublicRequestIp(request.headers);
+    const ipHash = publicRequestFingerprint(request.headers);
+    const metadata = safeMarketingMetadata(body.metadata);
     const attribution = normalizeMarketingAttribution(body);
     const page = cleanText(body.page, 500) || attribution.last_touch?.landing_page || attribution.first_page || "/";
     const eventId = isValidMetaEventId(body.meta_event_id) ? body.meta_event_id : null;
@@ -59,8 +64,8 @@ export async function POST(request) {
       const { error } = await supabaseAdmin.from("clinica_marketing_eventos").insert({
         event_name: body.event_name,
         session_id: cleanText(body.session_id, 100),
-        pagina: page,
-        referrer: cleanText(body.referrer, 500),
+        pagina: safeAnalyticsPath(page),
+        referrer: safeAnalyticsPath(body.referrer),
         utm_source: attribution.utm_source || null,
         utm_medium: attribution.utm_medium || null,
         utm_campaign: attribution.utm_campaign || null,
@@ -105,9 +110,9 @@ export async function POST(request) {
       });
     }
 
-    return NextResponse.json({ ok: true });
+    return noStoreJson({ ok: true });
   } catch (error) {
     console.error("marketing_event_register_failed", { code: error?.code || "unknown" });
-    return NextResponse.json({ ok: false }, { status: 500 });
+    return noStoreJson({ ok: false }, { status: 500 });
   }
 }

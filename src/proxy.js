@@ -1,8 +1,10 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse } from "next/server";
+import { consumePublicRateLimit, noStoreJson, publicRateLimitResponse } from "@/lib/security/public-antiabuse";
 
 export const config = {
   matcher: [
+    "/api/public/:path*",
     "/dashboard/:path*",
     "/dashboard-admin/:path*",
     "/admin/:path*",
@@ -95,6 +97,23 @@ async function findSlugByDomain(host) {
 }
 
 export async function proxy(request) {
+  const pathname = request.nextUrl.pathname;
+  const privatePath = /^\/(dashboard(?:-admin)?|admin|onboarding|whatsapp)(\/|$)/.test(pathname);
+  const publicPost = request.method === "POST" && !privatePath;
+  if (publicPost) {
+    if (Number(request.headers.get("content-length")) > 65536) {
+      return noStoreJson({ ok: false, error: "Payload muito grande." }, { status: 413 });
+    }
+    const gate = await consumePublicRateLimit({
+      scope: "public_form_ingress", headers: request.headers,
+      tenantId: /^\/c\/([a-z0-9-]{1,80})(\/|$)/i.exec(pathname)?.[1] || request.nextUrl.hostname,
+    });
+    if (!gate.allowed) return publicRateLimitResponse(gate);
+  } else if (request.method === "GET" && (pathname.startsWith("/c/") || pathname.startsWith("/api/public/") || ["/", "/loja", "/agendamento", "/checkout"].includes(pathname))) {
+    const gate = await consumePublicRateLimit({ scope: "public_read", headers: request.headers });
+    if (!gate.allowed) return publicRateLimitResponse(gate);
+  }
+  if (pathname.startsWith("/api/public/")) return NextResponse.next();
   if (isSessionAwarePath(request.nextUrl.pathname)) {
     return refreshAuthSession(request);
   }

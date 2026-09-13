@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { CalendarDays, Check, ChevronLeft, ChevronRight, Search, X } from "lucide-react";
 import { createPublicBookingAction } from "./actions";
 import { AttributionFields } from "@/components/public-site/attribution-fields";
+import { PublicFormGuard } from "@/components/public-site/public-form-guard";
 import {
   addDaysToDateKey,
   buildCalendarMonth,
@@ -233,6 +234,7 @@ export function PublicBookingForm({ slug, procedimentos, profissionais, query, t
   return (
     <form action={createPublicBookingAction} className="rounded-[1.75rem] border border-white/70 bg-[#15120f] p-4 text-white shadow-[0_32px_90px_rgba(20,18,15,0.26)] sm:p-7">
       <input type="hidden" name="slug" value={slug} />
+      <PublicFormGuard requestField="booking_request_id" />
       {returnTo ? <input type="hidden" name="return_to" value={returnTo} /> : null}
       <AttributionFields />
       <input type="hidden" name="data_hora" value={selectedSlot} />

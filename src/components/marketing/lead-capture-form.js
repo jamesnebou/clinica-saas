@@ -6,6 +6,7 @@ import { createMarketingEventId, getMarketingAttribution, getMarketingSessionId 
 import { trackMarketingEvent, trackMetaStandardEvent } from "./conversion-tracker";
 import { fireGoogleAdsConversion, fireGoogleAnalyticsEvent, setGoogleEnhancedUserData } from "@/lib/tracking/google-client";
 import { buildMarketingLeadPayload } from "@/lib/tracking/marketing-lead.mjs";
+import { PublicFormGuard } from "@/components/public-site/public-form-guard";
 
 const WHATSAPP_URL = "https://wa.me/5577988656394?text=Ol%C3%A1%2C%20quero%20conhecer%20a%20NexaWi%20Cl%C3%ADnicas.";
 
@@ -81,7 +82,7 @@ export function LeadCaptureForm({
           </div>
         </div>
         <form onSubmit={submit} className="grid gap-4 bg-white/[0.07] p-7 backdrop-blur lg:p-10 sm:grid-cols-2">
-          <input name="website" tabIndex="-1" autoComplete="off" className="hidden" aria-hidden="true" />
+          <PublicFormGuard />
           <label className="text-sm font-bold text-white/80">Seu nome
             <input name="name" required minLength={2} maxLength={100} placeholder="Como podemos chamar você?" className="mt-2 h-12 w-full rounded-md border border-white/12 bg-black/25 px-4 text-white outline-none placeholder:text-white/30 focus:border-orange-400" />
           </label>

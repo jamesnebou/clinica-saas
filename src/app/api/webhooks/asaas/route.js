@@ -1,4 +1,6 @@
 import { after, NextResponse } from "next/server";
+import { consumePublicRateLimit, noStoreJson, publicRateLimitResponse } from "@/lib/security/public-antiabuse";
+import { readBoundedJson } from "@/lib/security/public-antiabuse-core.mjs";
 import { timingSafeEqual } from "node:crypto";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { decryptClinicSecrets } from "@/lib/security/clinic-secrets";
@@ -278,13 +280,17 @@ async function findClinicBySubscription(subscription, authorizedClinicId = null)
 }
 
 export async function POST(request) {
+  const rateLimit = await consumePublicRateLimit({ scope: "webhook_auth", headers: request.headers });
+  if (!rateLimit.allowed) return publicRateLimitResponse(rateLimit);
   const authorization = await authorizeWebhookToken(request, getWebhookToken(request));
   if (!authorization) {
     return unauthorized();
   }
   const authorizedClinicId = authorization.global ? null : authorization.clinicId;
 
-  const payload = await request.json();
+  const parsed = await readBoundedJson(request, 131072);
+  if (!parsed.ok) return noStoreJson({ ok: false }, { status: parsed.status });
+  const payload = parsed.value;
   const event = payload?.event || "";
   const subscription = payload?.subscription || null;
 

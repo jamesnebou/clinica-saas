@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useActionState } from "react";
 import { useFormStatus } from "react-dom";
 import { requestAdminPasswordResetAction, updateRecoveredPasswordAction } from "./actions";
+import { PublicFormGuard } from "@/components/public-site/public-form-guard";
 
 const initialState = { ok: true, message: "" };
 
@@ -26,6 +27,7 @@ export function RequestPasswordResetForm() {
 
   return (
     <form action={formAction} className="mt-6 space-y-4">
+      <PublicFormGuard />
       <label className="block">
         <span className="text-sm font-medium text-neutral-700">E-mail administrativo</span>
         <input

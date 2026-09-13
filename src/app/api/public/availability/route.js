@@ -1,5 +1,6 @@
-import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import { consumePublicRateLimit, noStoreJson, publicRateLimitResponse } from "@/lib/security/public-antiabuse";
+import { isUuid, isValidPublicSlug } from "@/lib/security/public-antiabuse-core.mjs";
 import {
   clinicTimeZone,
   dateFromClinicLocal,
@@ -76,6 +77,7 @@ function slotsForDate({ date, schedule, timeZone, duration, profissionais, booki
 }
 
 export async function GET(request) {
+  if (request.url.length > 8192) return noStoreJson({ slots: [], message: "Parametros invalidos." }, { status: 414 });
   const { searchParams } = new URL(request.url);
   const slug = String(searchParams.get("slug") || "").trim();
   const procedimentoIds = Array.from(new Set([
@@ -85,11 +87,15 @@ export async function GET(request) {
   const profissionalId = String(searchParams.get("profissional_id") || "").trim();
   const date = String(searchParams.get("date") || "").trim();
   const month = String(searchParams.get("month") || "").trim();
-  const validDate = /^\d{4}-\d{2}-\d{2}$/.test(date);
-  const validMonth = /^\d{4}-\d{2}$/.test(month);
+  const validDate = /^\d{4}-(0[1-9]|1[0-2])-([012]\d|3[01])$/.test(date)
+    && Number.isFinite(Date.parse(date)) && new Date(date).toISOString().slice(0, 10) === date;
+  const validMonth = /^\d{4}-(0[1-9]|1[0-2])$/.test(month);
 
-  if (!slug || !procedimentoIds.length || (!validDate && !validMonth)) {
-    return NextResponse.json({ slots: [], message: "Parametros invalidos." }, { status: 400 });
+  if (!isValidPublicSlug(slug) || !procedimentoIds.length || procedimentoIds.length > 50
+    || procedimentoIds.some((id) => !isUuid(id)) || (profissionalId && !isUuid(profissionalId))
+    || (date ? !validDate || Boolean(month) : !validMonth)
+    || searchParams.has("clinica_id") || searchParams.has("tenant_id")) {
+    return noStoreJson({ slots: [], message: "Parametros invalidos." }, { status: 400 });
   }
 
   const { data: clinic, error: clinicError } = await supabaseAdmin
@@ -101,8 +107,11 @@ export async function GET(request) {
 
   if (clinicError) throw clinicError;
   if (!clinic || clinic.metadata?.site_publico?.publicado === false) {
-    return NextResponse.json({ slots: [], message: "Clínica indisponível." }, { status: 404 });
+    return noStoreJson({ slots: [], message: "Clínica indisponível." }, { status: 404 });
   }
+
+  const rateLimit = await consumePublicRateLimit({ scope: "availability", headers: request.headers, tenantId: clinic.id });
+  if (!rateLimit.allowed) return publicRateLimitResponse(rateLimit);
 
   const { data: procedimentos = [], error: procedimentoError } = await supabaseAdmin
     .from("procedimentos")
@@ -113,7 +122,7 @@ export async function GET(request) {
     .eq("publicado_site", true);
 
   if (procedimentoError) throw procedimentoError;
-  if (procedimentos.length !== procedimentoIds.length) return NextResponse.json({ slots: [], message: "Um ou mais procedimentos estao indisponiveis." }, { status: 404 });
+  if (procedimentos.length !== procedimentoIds.length) return noStoreJson({ slots: [], message: "Um ou mais procedimentos estao indisponiveis." }, { status: 404 });
 
   let profissionaisQuery = supabaseAdmin
     .from("profissionais")
@@ -126,7 +135,7 @@ export async function GET(request) {
 
   const { data: profissionais = [], error: profissionaisError } = await profissionaisQuery;
   if (profissionaisError) throw profissionaisError;
-  if (!profissionais.length) return NextResponse.json({ slots: [], message: "Nenhum profissional disponivel." });
+  if (!profissionais.length) return noStoreJson({ slots: [], message: "Nenhum profissional disponivel." });
 
   const schedule = clinic.metadata?.horario_funcionamento || {};
   const timeZone = clinicTimeZone(clinic);
@@ -140,7 +149,7 @@ export async function GET(request) {
   const endRange = validMonth
     ? utcRangeForClinicDate(`${nextMonth}-01`, timeZone)
     : utcRangeForClinicDate(date, timeZone);
-  if (!startRange || !endRange) return NextResponse.json({ slots: [], message: "Data inválida." }, { status: 400 });
+  if (!startRange || !endRange) return noStoreJson({ slots: [], message: "Data inválida." }, { status: 400 });
 
   const { data: bookings = [], error: bookingsError } = await supabaseAdmin
     .from("agendamentos")
@@ -171,8 +180,8 @@ export async function GET(request) {
       bookings: bookingsByDate.get(item) || [],
       now,
     }).slots.length > 0);
-    return NextResponse.json({ available_dates: availableDates });
+    return noStoreJson({ available_dates: availableDates });
   }
 
-  return NextResponse.json(slotsForDate({ date, schedule, timeZone, duration, profissionais, bookings, now }));
+  return noStoreJson(slotsForDate({ date, schedule, timeZone, duration, profissionais, bookings, now }));
 }

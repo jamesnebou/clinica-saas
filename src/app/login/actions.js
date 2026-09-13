@@ -1,6 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { headers } from "next/headers";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { isInternalAdminUser } from "@/lib/auth/session";
 import { safeInternalNext } from "@/lib/auth/self-service.mjs";
@@ -9,6 +10,8 @@ import { isInternalAdminEmail } from "@/lib/saas/plans";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { getTrustedAppOrigin } from "@/lib/security/app-origin";
+import { consumePublicRateLimit } from "@/lib/security/public-antiabuse";
+import { looksLikeAutomatedForm, validPublicForm } from "@/lib/security/public-antiabuse-core.mjs";
 
 function normalizeEmail(value) {
   return String(value || "").trim().toLowerCase();
@@ -54,6 +57,7 @@ async function findInternalAdminByEmail(email) {
 }
 
 export async function signInAction(_prevState, formData) {
+  if (!validPublicForm(formData)) return { ok: false, message: "Dados inválidos." };
   const email = normalizeEmail(formData.get("email"));
   const password = String(formData.get("password") || "");
   const mode = String(formData.get("mode") || "cliente");
@@ -63,11 +67,17 @@ export async function signInAction(_prevState, formData) {
     return { ok: false, message: "Informe e-mail e senha." };
   }
 
+  if (looksLikeAutomatedForm(formData)) return { ok: false, message: "E-mail ou senha inválidos." };
+  const loginRateLimit = await consumePublicRateLimit({ scope: "login", headers: await headers(), target: email });
+  if (!loginRateLimit.allowed) {
+    return { ok: false, message: "Muitas tentativas. Aguarde alguns instantes e tente novamente." };
+  }
+
   if (isDemoLoginEmail(email) && isDemoPassword(password)) {
     try {
       await ensureDemoAccountAndReset();
-    } catch (error) {
-      console.error("Erro ao preparar conta demo:", error);
+    } catch {
+      console.error("demo_login_prepare_failed");
       return { ok: false, message: "Não foi possível preparar a demonstração agora. Tente novamente em alguns instantes." };
     }
   }
@@ -99,11 +109,17 @@ export async function signInAction(_prevState, formData) {
 }
 
 export async function requestAdminPasswordResetAction(_prevState, formData) {
+  if (!validPublicForm(formData)) return { ok: false, message: "Dados inválidos." };
   const email = normalizeEmail(formData.get("email"));
 
   if (!email) {
     return { ok: false, message: "Informe o e-mail administrativo." };
   }
+
+  const genericSuccess = { ok: true, message: "Se este e-mail for um administrador interno, enviaremos um link para redefinir a senha." };
+  if (looksLikeAutomatedForm(formData)) return genericSuccess;
+  const rateLimit = await consumePublicRateLimit({ scope: "password_recovery", headers: await headers(), target: email });
+  if (!rateLimit.allowed) return { ok: false, message: "Muitas tentativas. Aguarde alguns instantes e tente novamente." };
 
   try {
     const user = await findInternalAdminByEmail(email);
@@ -116,20 +132,23 @@ export async function requestAdminPasswordResetAction(_prevState, formData) {
       if (error) throw error;
     }
 
-    return {
-      ok: true,
-      message: "Se este e-mail for um administrador interno, enviaremos um link para redefinir a senha.",
-    };
-  } catch (error) {
-    console.error("Erro ao solicitar recuperação de senha admin:", error);
-    return { ok: false, message: "Não foi possível enviar o link agora. Confira as configurações de Auth do Supabase e tente novamente." };
+    return genericSuccess;
+  } catch {
+    console.error("admin_password_recovery_failed");
+    return genericSuccess;
   }
 }
 
 export async function requestClientPasswordResetAction(_prevState, formData) {
+  if (!validPublicForm(formData)) return { ok: false, message: "Dados inválidos." };
   const email = normalizeEmail(formData.get("email"));
 
   if (!email) return { ok: false, message: "Informe seu e-mail." };
+
+  const genericSuccess = { ok: true, message: "Se este e-mail possuir uma conta de clínica, enviaremos um link para redefinir a senha." };
+  if (looksLikeAutomatedForm(formData)) return genericSuccess;
+  const rateLimit = await consumePublicRateLimit({ scope: "password_recovery", headers: await headers(), target: email });
+  if (!rateLimit.allowed) return { ok: false, message: "Muitas tentativas. Aguarde alguns instantes e tente novamente." };
 
   try {
     if (!isInternalAdminEmail(email) && !isDemoLoginEmail(email)) {
@@ -140,14 +159,15 @@ export async function requestClientPasswordResetAction(_prevState, formData) {
       if (error) throw error;
     }
 
-    return { ok: true, message: "Se este e-mail possuir uma conta de clínica, enviaremos um link para redefinir a senha." };
-  } catch (error) {
-    console.error("Erro ao solicitar recuperação de senha cliente:", { code: error?.code || "unknown" });
-    return { ok: false, message: "Não foi possível enviar o link agora. Aguarde alguns minutos e tente novamente." };
+    return genericSuccess;
+  } catch {
+    console.error("client_password_recovery_failed");
+    return genericSuccess;
   }
 }
 
 export async function updateRecoveredPasswordAction(_prevState, formData) {
+  if (!validPublicForm(formData)) return { ok: false, message: "Dados inválidos." };
   const password = String(formData.get("password") || "");
   const passwordConfirm = String(formData.get("password_confirm") || "");
 
@@ -179,6 +199,7 @@ export async function updateRecoveredPasswordAction(_prevState, formData) {
 }
 
 export async function updateClientRecoveredPasswordAction(_prevState, formData) {
+  if (!validPublicForm(formData)) return { ok: false, message: "Dados inválidos." };
   const password = String(formData.get("password") || "");
   const passwordConfirm = String(formData.get("password_confirm") || "");
 

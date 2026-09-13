@@ -1,6 +1,7 @@
-import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { normalizePublicCartItems } from "@/lib/store/config";
+import { consumePublicRateLimit, noStoreJson, publicRateLimitResponse } from "@/lib/security/public-antiabuse";
+import { isValidPublicSlug, readBoundedJson, safePublicOriginMetadata } from "@/lib/security/public-antiabuse-core.mjs";
 
 export const runtime = "nodejs";
 
@@ -39,10 +40,12 @@ export async function GET(request) {
   const url = new URL(request.url);
   const slug = clean(url.searchParams.get("slug"), 120);
   const token = clean(url.searchParams.get("token"), 80);
-  if (!slug || !UUID_PATTERN.test(token)) return NextResponse.json({ ok: false, error: "Carrinho inválido." }, { status: 400 });
+  if (!isValidPublicSlug(slug) || !UUID_PATTERN.test(token)) return noStoreJson({ ok: false, error: "Carrinho inválido." }, { status: 400 });
 
   const clinic = await getClinic(slug);
-  if (!clinic) return NextResponse.json({ ok: false, error: "Lojinha indisponível." }, { status: 404 });
+  if (!clinic) return noStoreJson({ ok: false, error: "Lojinha indisponível." }, { status: 404 });
+  const rateLimit = await consumePublicRateLimit({ scope: "cart_read", headers: request.headers, tenantId: clinic.id });
+  if (!rateLimit.allowed) return publicRateLimitResponse(rateLimit);
 
   const { data: cart, error } = await supabaseAdmin
     .from("carrinhos_abandonados_clinica")
@@ -52,7 +55,7 @@ export async function GET(request) {
     .maybeSingle();
   if (error) throw error;
   if (!cart || ["convertido", "expirado", "descartado"].includes(cart.status)) {
-    return NextResponse.json({ ok: false, error: "Carrinho não encontrado." }, { status: 404 });
+    return noStoreJson({ ok: false, error: "Carrinho não encontrado." }, { status: 404 });
   }
 
   const ids = (cart.itens || []).map((item) => String(item?.produto_id || item?.id || "")).filter((id) => UUID_PATTERN.test(id));
@@ -63,20 +66,29 @@ export async function GET(request) {
     await supabaseAdmin.from("carrinhos_abandonados_clinica").update({ status: "recuperado", ultima_interacao_em: new Date().toISOString() }).eq("id", cart.id);
   }
 
-  return NextResponse.json({ ok: true, sessionToken: cart.sessao_token, recoveryToken: cart.token_recuperacao, items, couponCode: cart.cupom_codigo || "" });
+  return noStoreJson({ ok: true, sessionToken: cart.sessao_token, recoveryToken: cart.token_recuperacao, items, couponCode: cart.cupom_codigo || "" });
 }
 
 export async function POST(request) {
-  const payload = await request.json().catch(() => ({}));
+  const parsed = await readBoundedJson(request, 32_768);
+  if (!parsed.ok) return noStoreJson({ ok: false, error: parsed.error }, { status: parsed.status });
+  const payload = parsed.value;
   const slug = clean(payload.slug, 120);
   const sessionToken = clean(payload.sessionToken, 80);
-  if (!slug || !UUID_PATTERN.test(sessionToken)) return NextResponse.json({ ok: false, error: "Sessão de carrinho inválida." }, { status: 400 });
+  if (!isValidPublicSlug(slug) || !UUID_PATTERN.test(sessionToken)) return noStoreJson({ ok: false, error: "Sessão de carrinho inválida." }, { status: 400 });
 
   const clinic = await getClinic(slug);
-  if (!clinic) return NextResponse.json({ ok: false, error: "Lojinha indisponível." }, { status: 404 });
+  if (!clinic) return noStoreJson({ ok: false, error: "Lojinha indisponível." }, { status: 404 });
+  const rateLimit = await consumePublicRateLimit({ scope: "cart_write", headers: request.headers, tenantId: clinic.id });
+  if (!rateLimit.allowed) return publicRateLimitResponse(rateLimit);
 
-  const rawItems = Array.isArray(payload.items) ? payload.items.slice(0, 50) : [];
-  const ids = rawItems.map((item) => String(item?.id || item?.produto_id || "")).filter((id) => UUID_PATTERN.test(id));
+  const rawItems = Array.isArray(payload.items) ? payload.items : [];
+  if (!Array.isArray(payload.items) || rawItems.length > 50 || rawItems.some((item) => {
+    const id = String(item?.id || item?.produto_id || "");
+    const quantity = Number(item?.quantidade ?? item?.quantity);
+    return !UUID_PATTERN.test(id) || !Number.isInteger(quantity) || quantity < 1 || quantity > 99;
+  })) return noStoreJson({ ok: false, error: "Itens do carrinho inválidos." }, { status: 400 });
+  const ids = rawItems.map((item) => String(item?.id || item?.produto_id || ""));
   const products = await getProducts(clinic.id, Array.from(new Set(ids)));
   const items = normalizePublicCartItems(rawItems, products);
   const subtotal = items.reduce((sum, item) => sum + item.preco * item.quantidade, 0);
@@ -95,7 +107,7 @@ export async function POST(request) {
     itens,
     subtotal: Number(subtotal.toFixed(2)),
     cupom_codigo: clean(payload.cupomCodigo, 60).toUpperCase() || null,
-    origem: typeof payload.origem === "object" && payload.origem ? payload.origem : {},
+    origem: safePublicOriginMetadata(payload.origem),
     ultima_interacao_em: now,
   };
 
@@ -105,5 +117,5 @@ export async function POST(request) {
     .select("sessao_token, token_recuperacao")
     .single();
   if (error) throw error;
-  return NextResponse.json({ ok: true, sessionToken: data.sessao_token, recoveryToken: data.token_recuperacao, items });
+  return noStoreJson({ ok: true, sessionToken: data.sessao_token, recoveryToken: data.token_recuperacao, items });
 }

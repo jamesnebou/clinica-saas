@@ -5,6 +5,7 @@
 import { ArrowLeft, CreditCard, MapPin, PackageCheck, ShieldCheck, ShoppingBag, Truck } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { createPublicStoreOrderAction } from "../store-actions";
+import { PublicFormGuard } from "@/components/public-site/public-form-guard";
 
 function money(value) {
   return Number(value || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -88,6 +89,7 @@ export function StoreCheckout({ slug, brandName, config, onlinePaymentAvailable,
             ) : (
               <form action={createPublicStoreOrderAction} className="mt-8 space-y-7">
                 <input type="hidden" name="slug" value={slug} />
+                <PublicFormGuard requestField="order_request_id" />
                 <input type="hidden" name="cart_token" value={sessionToken} />
                 <input type="hidden" name="items_json" value={JSON.stringify(items.map((item) => ({ produto_id: item.id, quantidade: item.quantidade })))} />
 

@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { consumePublicRateLimit, publicRateLimitResponse } from "@/lib/security/public-antiabuse";
+import { readBoundedJson, isUuid } from "@/lib/security/public-antiabuse-core.mjs";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { checkInfinitePayPayment } from "@/lib/infinitepay/client";
 import { notifyPublicBookingPaymentConfirmedById } from "@/lib/notifications/booking";
@@ -173,21 +175,25 @@ async function updateStoreOrder({ id, payload }) {
 }
 
 export async function POST(request) {
+  const rateLimit = await consumePublicRateLimit({ scope: "webhook_verify", headers: request.headers });
+  if (!rateLimit.allowed) return publicRateLimitResponse(rateLimit);
   try {
-    const payload = await request.json();
+    const parsed = await readBoundedJson(request, 32768);
+    if (!parsed.ok) return NextResponse.json({ ok: false }, { status: parsed.status, headers: { "Cache-Control": "no-store" } });
+    const payload = parsed.value;
     const reference = referenceParts(paymentReference(payload));
-    if (!reference.id) return NextResponse.json({ ok: true, matched: false });
+    if (!isUuid(reference.id)) return NextResponse.json({ ok: true });
 
-    const matched = reference.type === "agendamento"
+    await (reference.type === "agendamento"
       ? await updateBooking({ id: reference.id, payload })
       : reference.type === "loja"
         ? await updateStoreOrder({ id: reference.id, payload })
-        : false;
+        : false);
 
-    return NextResponse.json({ ok: true, matched });
-  } catch (error) {
+    return NextResponse.json({ ok: true }, { headers: { "Cache-Control": "no-store" } });
+  } catch {
     return NextResponse.json(
-      { ok: false, error: error?.message || "Falha ao validar o pagamento InfinitePay." },
+      { ok: false, error: "Falha ao validar o pagamento." },
       { status: 400 },
     );
   }

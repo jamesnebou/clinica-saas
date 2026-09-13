@@ -1,5 +1,6 @@
-import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import { consumePublicRateLimit, noStoreJson, publicRateLimitResponse } from "@/lib/security/public-antiabuse";
+import { isValidPublicSlug, readBoundedJson, safeAnalyticsText, safeAnalyticsPath } from "@/lib/security/public-antiabuse-core.mjs";
 
 const ALLOWED_EVENTS = new Set(["page_view", "cta_click", "booking_started", "product_view", "store_view"]);
 
@@ -8,14 +9,17 @@ function short(value, max = 300) {
 }
 
 export async function POST(request) {
-  let body;
-  try { body = await request.json(); } catch { return NextResponse.json({ error: "Payload inválido." }, { status: 400 }); }
+  const parsed = await readBoundedJson(request, 16_384);
+  if (!parsed.ok) return noStoreJson({ ok: false, error: parsed.error }, { status: parsed.status });
+  const body = parsed.value;
   const slug = short(body?.slug, 120);
   const eventName = short(body?.eventName, 60);
-  if (!slug || !ALLOWED_EVENTS.has(eventName)) return NextResponse.json({ error: "Evento inválido." }, { status: 400 });
+  if (!isValidPublicSlug(slug) || !ALLOWED_EVENTS.has(eventName)) return noStoreJson({ ok: false, error: "Evento inválido." }, { status: 400 });
 
   const { data: clinic } = await supabaseAdmin.from("clinicas").select("id").eq("slug", slug).in("status", ["trial", "ativa"]).maybeSingle();
-  if (!clinic) return NextResponse.json({ ok: true });
+  if (!clinic) return noStoreJson({ ok: true });
+  const rateLimit = await consumePublicRateLimit({ scope: "analytics", headers: request.headers, tenantId: clinic.id });
+  if (!rateLimit.allowed) return publicRateLimitResponse(rateLimit);
   const attribution = body?.attribution || {};
   const sessionId = short(body?.sessionId, 100);
   const eventId = crypto.randomUUID();
@@ -23,20 +27,20 @@ export async function POST(request) {
     clinica_id: clinic.id,
     event_name: eventName,
     session_id: sessionId || null,
-    source: short(attribution.source, 120) || null,
-    medium: short(attribution.medium, 120) || null,
-    campaign: short(attribution.campaign, 160) || null,
-    content: short(attribution.content, 160) || null,
-    term: short(attribution.term, 160) || null,
-    referrer: short(attribution.referrer, 500) || null,
-    landing_page: short(attribution.landing_page, 500) || null,
+    source: safeAnalyticsText(attribution.source),
+    medium: safeAnalyticsText(attribution.medium),
+    campaign: safeAnalyticsText(attribution.campaign, 160),
+    content: safeAnalyticsText(attribution.content, 160),
+    term: safeAnalyticsText(attribution.term, 160),
+    referrer: safeAnalyticsPath(attribution.referrer),
+    landing_page: safeAnalyticsPath(attribution.landing_page),
     metadata: {
-      path: short(body?.metadata?.path, 300) || null,
-      label: short(body?.metadata?.label, 100) || null,
-      target: short(body?.metadata?.target, 300) || null,
+      path: safeAnalyticsPath(body?.metadata?.path),
+      label: safeAnalyticsText(body?.metadata?.label, 100),
+      target: safeAnalyticsPath(body?.metadata?.target),
     },
-    idempotency_key: `${sessionId || eventId}:${eventName}:${short(body?.metadata?.path || body?.metadata?.target, 180)}`,
+    idempotency_key: `${sessionId || eventId}:${eventName}:${safeAnalyticsPath(body?.metadata?.path || body?.metadata?.target) || ""}`,
   });
-  if (error && error.code !== "23505") return NextResponse.json({ error: "Falha ao registrar evento." }, { status: 500 });
-  return NextResponse.json({ ok: true });
+  if (error && error.code !== "23505") return noStoreJson({ ok: false, error: "Falha ao registrar evento." }, { status: 500 });
+  return noStoreJson({ ok: true });
 }

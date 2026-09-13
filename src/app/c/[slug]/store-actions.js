@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { createAsaasCheckoutForOrder, isAsaasConfigured } from "@/lib/asaas/client";
 import { createInfinitePayCheckout } from "@/lib/infinitepay/client";
@@ -9,6 +10,8 @@ import { resolveClinicPaymentProvider } from "@/lib/payments/provider";
 import { decryptClinicSecrets } from "@/lib/security/clinic-secrets";
 import { getStoreConfig } from "@/lib/store/config";
 import { getTrustedAppOrigin } from "@/lib/security/app-origin";
+import { consumePublicRateLimit, hashPublicRateLimitValue } from "@/lib/security/public-antiabuse";
+import { isValidPublicSlug, looksLikeAutomatedForm, validPublicForm } from "@/lib/security/public-antiabuse-core.mjs";
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -35,6 +38,11 @@ function normalizePhone(value) {
 
 async function getOrigin() {
   return getTrustedAppOrigin();
+}
+
+function redirectExistingOrder(slug, order) {
+  if (order?.invoice_url && order.pagamento_status === "pendente" && !["cancelado", "estornado"].includes(order.status)) redirect(order.invoice_url);
+  redirect(`/c/${slug}/pedido/${order.token_publico}`);
 }
 
 async function getClinicIntegration(clinicId) {
@@ -93,10 +101,14 @@ function parseItems(formData, slug) {
   if (!Array.isArray(items) || !items.length || items.length > 50) {
     redirectCheckout(slug, "carrinho", "Seu carrinho está vazio ou inválido.");
   }
-  return items.map((item) => ({
+  const normalized = items.map((item) => ({
     produto_id: String(item?.produto_id || item?.id || ""),
-    quantidade: Math.max(0, Math.min(99, Math.floor(Number(item?.quantidade || 0)))),
-  })).filter((item) => UUID_PATTERN.test(item.produto_id) && item.quantidade > 0);
+    quantidade: Number(item?.quantidade),
+  }));
+  if (normalized.some((item) => !UUID_PATTERN.test(item.produto_id) || !Number.isInteger(item.quantidade) || item.quantidade <= 0 || item.quantidade > 99)) {
+    redirectCheckout(slug, "carrinho", "Seu carrinho contém itens inválidos.");
+  }
+  return normalized;
 }
 
 async function markCartConverted({ clinicId, sessionToken, orderId }) {
@@ -109,19 +121,27 @@ async function markCartConverted({ clinicId, sessionToken, orderId }) {
 }
 
 export async function createPublicStoreOrderAction(formData) {
-  const slug = text(formData, "slug", 120);
-  const nome = text(formData, "nome", 160);
+  if (!validPublicForm(formData) || !isValidPublicSlug(formData.get("slug"))) redirect("/");
+  const slug = text(formData, "slug", 80);
+  const nome = text(formData, "nome", 120);
   const telefone = normalizePhone(text(formData, "telefone", 40));
-  const email = text(formData, "email", 180).toLowerCase();
+  const email = text(formData, "email", 254).toLowerCase();
   const cpf = text(formData, "cpf", 30).replace(/\D/g, "");
   const entregaTipo = text(formData, "entrega_tipo", 20) || "retirada";
   const formaPagamento = text(formData, "forma_pagamento", 30) || "PIX";
   const consentimento = formData.get("consentimento_lgpd") === "on";
   const cartToken = text(formData, "cart_token", 80);
+  const submittedRequestId = text(formData, "order_request_id", 80);
+  const requestId = UUID_PATTERN.test(submittedRequestId)
+    ? submittedRequestId
+    : UUID_PATTERN.test(cartToken) ? cartToken : "";
+  if (looksLikeAutomatedForm(formData)) redirect(`/c/${slug}/loja`);
   const items = parseItems(formData, slug);
-
-  if (!slug || !nome || !telefone) redirectCheckout(slug, "dados", "Informe nome e WhatsApp para concluir o pedido.");
+  if (!isValidPublicSlug(slug) || !nome || nome.length < 2 || telefone.length < 10 || (email && !/^\S+@\S+\.\S+$/.test(email)) || !requestId) {
+    redirectCheckout(slug, "dados", "Informe nome e WhatsApp para concluir o pedido.");
+  }
   if (!consentimento) redirectCheckout(slug, "lgpd", "Aceite a política de privacidade para concluir a compra.");
+  if (!["retirada", "entrega"].includes(entregaTipo)) redirectCheckout(slug, "entrega", "Escolha uma forma de entrega disponível.");
 
   const { data: clinic, error: clinicError } = await supabaseAdmin
     .from("clinicas")
@@ -133,6 +153,27 @@ export async function createPublicStoreOrderAction(formData) {
   if (!clinic || clinic.metadata?.site_publico?.publicado === false || clinic.metadata?.site_publico?.lojinha_ativa === false) {
     redirectCheckout(slug, "loja", "A lojinha está indisponível no momento.");
   }
+
+  const orderRateLimit = await consumePublicRateLimit({
+    scope: "store_order_create",
+    headers: await headers(),
+    tenantId: clinic.id,
+    target: telefone,
+  });
+  if (!orderRateLimit.allowed) {
+    redirectCheckout(slug, "limite", "Muitas tentativas. Aguarde alguns instantes e tente novamente.");
+  }
+
+  const checkoutRequestId = hashPublicRateLimitValue("checkout-idempotency", JSON.stringify([requestId, telefone, email]));
+  const findExistingOrder = () => supabaseAdmin
+    .from("pedidos_clinica")
+    .select("id, token_publico, status, pagamento_status, invoice_url")
+    .eq("clinica_id", clinic.id)
+    .eq("origem->>checkout_request_id", checkoutRequestId)
+    .maybeSingle();
+  const { data: existingOrder, error: existingOrderError } = await findExistingOrder();
+  if (existingOrderError) throw existingOrderError;
+  if (existingOrder) redirectExistingOrder(slug, existingOrder);
 
   const config = getStoreConfig(clinic.metadata?.site_publico);
   if (entregaTipo === "retirada" && !config.retiradaAtiva) redirectCheckout(slug, "entrega", "A retirada não está disponível.");
@@ -173,6 +214,10 @@ export async function createPublicStoreOrderAction(formData) {
     .eq("publicado_site", true)
     .in("id", items.map((item) => item.produto_id));
   if (productsError) throw productsError;
+  if (new Set(items.map((item) => item.produto_id)).size !== items.length
+    || products?.length !== items.length) {
+    redirectCheckout(slug, "carrinho", "Um ou mais produtos estão indisponíveis.");
+  }
   const quantities = new Map(items.map((item) => [item.produto_id, item.quantidade]));
   const estimatedSubtotal = (products || []).reduce((sum, product) => sum + Number(product.preco || 0) * Number(quantities.get(product.id) || 0), 0);
   if (estimatedSubtotal < config.pedidoMinimo) {
@@ -203,9 +248,17 @@ export async function createPublicStoreOrderAction(formData) {
     p_cupom_codigo: nullableText(formData, "cupom_codigo", 60)?.toUpperCase() || null,
     p_forma_pagamento: formaPagamento,
     p_reserva_minutos: config.reservaMinutos,
-    p_origem: { canal: "site", cart_token: UUID_PATTERN.test(cartToken) ? cartToken : null },
+    p_origem: {
+      canal: "site",
+      cart_token: UUID_PATTERN.test(cartToken) ? cartToken : null,
+      checkout_request_id: checkoutRequestId,
+    },
   });
-  if (createError) redirectCheckout(slug, "pedido", createError.message || "Não foi possível criar o pedido.");
+  if (createError?.code === "23505") {
+    const { data: concurrentOrder } = await findExistingOrder();
+    if (concurrentOrder) redirectExistingOrder(slug, concurrentOrder);
+  }
+  if (createError) redirectCheckout(slug, "pedido", "Não foi possível criar o pedido. Confira o carrinho e tente novamente.");
   const order = createdRows?.[0];
   if (!order?.pedido_id) redirectCheckout(slug, "pedido", "Não foi possível criar o pedido.");
 
@@ -290,9 +343,9 @@ export async function createPublicStoreOrderAction(formData) {
     revalidatePath(`/c/${slug}`);
     revalidatePath("/dashboard/pedidos");
     paymentRedirectUrl = checkoutUrl;
-  } catch (error) {
+  } catch {
     await supabaseAdmin.rpc("cancelar_pedido_loja", { p_pedido_id: order.pedido_id, p_motivo: `Falha ao gerar checkout ${paymentProvider}.` });
-    redirectCheckout(slug, "pagamento", error.message || "Não foi possível gerar o pagamento. Tente novamente.");
+    redirectCheckout(slug, "pagamento", "Não foi possível gerar o pagamento. Consulte a clínica antes de tentar novamente.");
   }
 
   redirect(paymentRedirectUrl);

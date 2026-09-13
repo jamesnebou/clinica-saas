@@ -2,6 +2,9 @@
 
 import { CheckCircle2, Clock3, CreditCard, MapPin, PackageCheck, RefreshCw, ShoppingBag, Truck } from "lucide-react";
 import { notFound } from "next/navigation";
+import { headers } from "next/headers";
+import { consumePublicRateLimit } from "@/lib/security/public-antiabuse";
+import { isUuid, isValidPublicSlug } from "@/lib/security/public-antiabuse-core.mjs";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { ClearPurchasedCart } from "./order-complete-client";
 
@@ -28,11 +31,14 @@ function dateTime(value) {
 
 export async function generateMetadata({ params }) {
   const { slug } = await params;
-  return { title: `Pedido | ${slug}` };
+  return { title: `Pedido | ${slug}`, robots: { index: false, follow: false }, referrer: "no-referrer" };
 }
 
 export default async function PublicOrderPage({ params }) {
   const { slug, token } = await params;
+  if (!isValidPublicSlug(slug) || !isUuid(token)) notFound();
+  const rateLimit = await consumePublicRateLimit({ scope: "order_read", headers: await headers(), tenantId: `slug:${slug}` });
+  if (!rateLimit.allowed) notFound();
   const { data: clinic } = await supabaseAdmin.from("clinicas").select("id, nome, slug, telefone, endereco, cidade, estado, metadata").eq("slug", slug).maybeSingle();
   if (!clinic) notFound();
 

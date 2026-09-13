@@ -2,9 +2,12 @@ import { NextResponse } from "next/server";
 import { DEMO_EMAIL, DEMO_PASSWORD, ensureDemoAccountAndReset } from "@/lib/demo/demo-account";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { consumePublicRateLimit, publicRateLimitResponse } from "@/lib/security/public-antiabuse";
 
 export async function GET(request) {
   try {
+    const rateLimit = await consumePublicRateLimit({ scope: "demo_access", headers: request.headers });
+    if (!rateLimit.allowed) return publicRateLimitResponse(rateLimit);
     await ensureDemoAccountAndReset();
     const supabase = await createClient();
     const { error } = await supabase.auth.signInWithPassword({ email: DEMO_EMAIL, password: DEMO_PASSWORD });
@@ -17,8 +20,8 @@ export async function GET(request) {
     });
 
     return NextResponse.redirect(new URL("/dashboard?tour=1", request.url));
-  } catch (error) {
-    console.error("Erro ao preparar acesso automático da demo:", error);
+  } catch {
+    console.error("demo_access_failed");
     return NextResponse.redirect(new URL("/login-cliente?erro=demo", request.url));
   }
 }

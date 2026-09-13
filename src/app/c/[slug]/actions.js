@@ -2,23 +2,26 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { createAsaasCustomerForPatient, createAsaasPaymentForBooking, isAsaasConfigured } from "@/lib/asaas/client";
 import { createInfinitePayCheckout } from "@/lib/infinitepay/client";
 import { resolveClinicPaymentProvider } from "@/lib/payments/provider";
 import { notifyClinicPublicBooking } from "@/lib/notifications/booking";
-import { clinicTimeZone, dateFromClinicLocal, isWithinWorkingPeriods } from "@/lib/clinic/schedule";
+import { clinicTimeZone, dateFromClinicLocal, isWithinWorkingPeriods, getWorkingPeriods, weekdayFromDateKey, localTimeFromDate, dateKeyInTimeZone } from "@/lib/clinic/schedule";
 import { totalAppointmentMinutes } from "@/lib/domain/schedule-core.mjs";
 import { decryptClinicSecrets } from "@/lib/security/clinic-secrets";
 import { emitDomainEvent, upsertTransactionalConsent } from "@/lib/whatsapp/events";
 import { getTrustedAppOrigin } from "@/lib/security/app-origin";
+import { consumePublicRateLimit, hashPublicRateLimitValue } from "@/lib/security/public-antiabuse";
+import { isUuid, isValidPublicSlug, looksLikeAutomatedForm, validPublicForm } from "@/lib/security/public-antiabuse-core.mjs";
 
-function text(formData, key) {
-  return String(formData.get(key) || "").trim();
+function text(formData, key, max = 500) {
+  return String(formData.get(key) || "").trim().slice(0, max);
 }
 
-function nullableText(formData, key) {
-  const value = text(formData, key);
+function nullableText(formData, key, max = 500) {
+  const value = text(formData, key, max);
   return value || null;
 }
 
@@ -147,21 +150,29 @@ async function assertSlotAvailable({ clinicId, profissionalId, startISO, endISO,
 }
 
 export async function createPublicBookingAction(formData) {
-  const slug = text(formData, "slug");
+  if (!validPublicForm(formData) || !isValidPublicSlug(formData.get("slug"))) redirect("/");
+  const slug = text(formData, "slug", 80);
   const returnTo = text(formData, "return_to") === "agendamento" ? "agendamento" : "";
   const procedimentoIds = uniqueTexts(formData, "procedimento_ids");
-  const procedimentoId = procedimentoIds[0] || text(formData, "procedimento_id");
-  const profissionalId = nullableText(formData, "profissional_id") || nullableText(formData, "profissional_disponivel_id");
-  const nome = text(formData, "nome");
-  const telefone = nullableText(formData, "telefone");
-  const email = nullableText(formData, "email");
-  const cpf = nullableText(formData, "cpf");
-  const dataHora = text(formData, "data_hora");
+  const procedimentoId = procedimentoIds[0] || text(formData, "procedimento_id", 36);
+  const profissionalId = nullableText(formData, "profissional_id", 36) || nullableText(formData, "profissional_disponivel_id", 36);
+  const nome = text(formData, "nome", 120);
+  const telefone = nullableText(formData, "telefone", 40);
+  const email = nullableText(formData, "email", 254)?.toLowerCase() || null;
+  const cpf = nullableText(formData, "cpf", 30);
+  const dataHora = text(formData, "data_hora", 32);
   const consentimento = formData.get("consentimento_lgpd") === "on";
   const whatsappTransactionalOptIn = formData.get("whatsapp_transactional_opt_in") === "on";
   const attribution = attributionFromForm(formData);
 
-  if (!slug || !procedimentoId || !nome || !telefone || !email || !dataHora) {
+  if (looksLikeAutomatedForm(formData)) {
+    publicRedirect(slug, { ok: "agendamento", mensagem: "Solicitação recebida." }, returnTo);
+  }
+
+  if (!isValidPublicSlug(slug) || !isUuid(procedimentoId) || procedimentoIds.length > 50
+    || procedimentoIds.some((id) => !isUuid(id)) || (profissionalId && !isUuid(profissionalId))
+    || !nome || nome.length < 2 || !telefone || !email || !/^\S+@\S+\.\S+$/.test(email)
+    || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(dataHora)) {
     publicRedirect(slug || "", { erro: "dados", mensagem: "Preencha nome, WhatsApp e e-mail para concluir o agendamento." }, returnTo);
   }
 
@@ -178,6 +189,16 @@ export async function createPublicBookingAction(formData) {
 
   if (clinicError) throw clinicError;
   if (!clinic) publicRedirect(slug, { erro: "clínica", mensagem: "Clínica indisponível para agendamento online." }, returnTo);
+
+  const bookingRateLimit = await consumePublicRateLimit({
+    scope: "booking_create",
+    headers: await headers(),
+    tenantId: clinic.id,
+    target: String(telefone || "").replace(/\D/g, ""),
+  });
+  if (!bookingRateLimit.allowed) {
+    publicRedirect(slug, { erro: "limite", mensagem: "Muitas tentativas. Aguarde alguns instantes e tente novamente." }, returnTo);
+  }
 
   const { data: integration, error: integrationError } = await supabaseAdmin
     .from("clinica_integracoes")
@@ -216,17 +237,37 @@ export async function createPublicBookingAction(formData) {
 
   const timeZone = clinicTimeZone(clinic);
   const start = dateFromClinicLocal(dataHora, timeZone);
-  if (!start || start < new Date()) {
+  if (!start || start < new Date() || dateKeyInTimeZone(start, timeZone) !== dataHora.slice(0, 10)) {
     publicRedirect(slug, { erro: "agenda", mensagem: "Escolha uma data futura válida." }, returnTo);
   }
 
   const duracaoTotal = totalAppointmentMinutes(procedimentos, { defaultDuration: 60, includeIntervals: true });
   const end = new Date(start.getTime() + duracaoTotal * 60000);
   assertWorkingHours({ clinic, start, end, slug, timeZone, returnTo });
+  const startMinutes = localTimeFromDate(start, timeZone);
+  const periods = getWorkingPeriods(clinic.metadata?.horario_funcionamento || {}, weekdayFromDateKey(dateKeyInTimeZone(start, timeZone)));
+  if (!periods.some((period) => startMinutes >= period.start && (startMinutes - period.start) % 30 === 0)) {
+    publicRedirect(slug, { erro: "agenda", mensagem: "Escolha um horário disponível." }, returnTo);
+  }
 
   if (!profissionalId) {
     publicRedirect(slug, { erro: "agenda", mensagem: "Escolha um horário disponível para concluir o agendamento." }, returnTo);
   }
+
+  const requestedOperationKey = text(formData, "booking_request_id", 80);
+  const operationKey = `public:${clinic.id}:${hashPublicRateLimitValue("booking-idempotency",
+    JSON.stringify([isUuid(requestedOperationKey) ? requestedOperationKey : "legacy", email, profissionalId, start.toISOString(), [...selectedIds].sort()]))}`;
+  const returnExistingBooking = async (publicBookingId) => {
+    const { data: existing, error } = await supabaseAdmin.from("site_agendamentos_publicos")
+      .select("invoice_url, pagamento_status").eq("clinica_id", clinic.id).eq("id", publicBookingId).maybeSingle();
+    if (error) throw error;
+    if (existing?.invoice_url && existing.pagamento_status === "pendente") redirect(existing.invoice_url);
+    publicRedirect(slug, { ok: "agendamento", mensagem: "Solicitação já recebida. Consulte a clínica para acompanhar." }, returnTo);
+  };
+  const { data: previous, error: previousError } = await supabaseAdmin.from("agenda_booking_operations")
+    .select("public_booking_id").eq("clinica_id", clinic.id).eq("idempotency_key", operationKey).maybeSingle();
+  if (previousError) throw previousError;
+  if (previous?.public_booking_id) await returnExistingBooking(previous.public_booking_id);
 
   await assertSlotAvailable({
     clinicId: clinic.id,
@@ -245,7 +286,6 @@ export async function createPublicBookingAction(formData) {
     publicRedirect(slug, { erro: "pagamento", mensagem: "Checkout online indisponível no momento. A clínica precisa conectar Asaas ou InfinitePay para receber o sinal pelo site." }, returnTo);
   }
 
-  const operationKey = text(formData, "booking_request_id") || `public:${clinic.id}:${email}:${profissionalId}:${start.toISOString()}:${selectedIds.join(",")}`;
   const publicPayload = {
     nome, telefone, email, cpf, valor_sinal: valorSinal, pagamento_gateway: paymentProvider,
     payload: {
@@ -264,6 +304,8 @@ export async function createPublicBookingAction(formData) {
     publicRedirect(slug, { erro: "horario", mensagem: "Este horário acabou de ser ocupado. Escolha outra opção disponível." }, returnTo);
   }
   if (agendaError) throw agendaError;
+  // Only the RPC winner may issue a charge or downstream notifications.
+  if (bookingCore.idempotente === true) await returnExistingBooking(bookingCore.public_booking_id);
   const agendamento = { id: bookingCore.agendamento_id };
   const clienteId = bookingCore.cliente_id;
   const publicBookingId = bookingCore.public_booking_id;
@@ -315,9 +357,9 @@ export async function createPublicBookingAction(formData) {
         paymentExternalId = orderNsu;
         paymentPayload = checkout;
       }
-    } catch (error) {
+    } catch {
       await supabaseAdmin.from("site_agendamentos_publicos").update({ pagamento_status: "erro" }).eq("clinica_id", clinic.id).eq("id", publicBookingId);
-      publicRedirect(slug, { erro: "pagamento", mensagem: error.message || "Não foi possível gerar o checkout do sinal. Tente novamente." }, returnTo);
+      publicRedirect(slug, { erro: "pagamento", mensagem: "Não foi possível gerar o checkout do sinal. Consulte a clínica antes de tentar novamente." }, returnTo);
     }
   }
 
@@ -398,14 +440,20 @@ export async function createPublicBookingAction(formData) {
 }
 
 export async function createPublicLeadAction(formData) {
-  const slug = text(formData, "slug");
-  const nome = text(formData, "nome");
-  const telefone = nullableText(formData, "telefone");
-  const email = nullableText(formData, "email");
-  const mensagem = nullableText(formData, "mensagem");
+  if (!validPublicForm(formData) || !isValidPublicSlug(formData.get("slug"))) redirect("/");
+  const slug = text(formData, "slug", 80);
+  const nome = text(formData, "nome", 120);
+  const telefone = nullableText(formData, "telefone", 40);
+  const email = nullableText(formData, "email", 254)?.toLowerCase() || null;
+  const mensagem = nullableText(formData, "mensagem", 1200);
+  const leadRequestId = text(formData, "lead_request_id", 80);
   const attribution = attributionFromForm(formData);
 
-  if (!slug || !nome || !telefone) {
+  if (looksLikeAutomatedForm(formData)) {
+    publicLeadRedirect(slug, { lead: "ok" });
+  }
+
+  if (!isValidPublicSlug(slug) || !nome || nome.length < 2 || !telefone || (email && !/^\S+@\S+\.\S+$/.test(email))) {
     publicLeadRedirect(slug || "", { lead_erro: "dados", mensagem: "Informe nome completo e telefone para enviar sua solicitação." });
   }
 
@@ -419,13 +467,23 @@ export async function createPublicLeadAction(formData) {
   if (clinicError) throw clinicError;
   if (!clinic) publicLeadRedirect(slug, { lead_erro: "clinica", mensagem: "Clínica indisponível para receber solicitações agora." });
 
+  const leadRateLimit = await consumePublicRateLimit({
+    scope: "clinic_lead_create",
+    headers: await headers(),
+    tenantId: clinic.id,
+    target: String(telefone || "").replace(/\D/g, ""),
+  });
+  if (!leadRateLimit.allowed) {
+    publicLeadRedirect(slug, { lead_erro: "limite", mensagem: "Muitas tentativas. Aguarde alguns instantes e tente novamente." });
+  }
+
   const siteConfig = clinic.metadata?.site_publico || {};
   if (siteConfig.publicado === false) {
     publicLeadRedirect(slug, { lead_erro: "site", mensagem: "O site desta clínica ainda não está publicado." });
   }
 
   let contactQuery = supabaseAdmin.from("clientes").select("id").eq("clinica_id", clinic.id).limit(1);
-  contactQuery = email ? contactQuery.ilike("email", email) : contactQuery.eq("telefone", telefone);
+  contactQuery = email ? contactQuery.eq("email", email) : contactQuery.eq("telefone", telefone);
   const { data: existingContact, error: contactReadError } = await contactQuery.maybeSingle();
   if (contactReadError) throw contactReadError;
   let contactId = existingContact?.id || null;
@@ -445,6 +503,7 @@ export async function createPublicLeadAction(formData) {
     status: "lead",
     proxima_acao: "Responder solicitação enviada pelo site.",
     observacoes: mensagem || "Lead solicitou mais informações pelo site público.",
+    identificador_externo: isUuid(leadRequestId) ? `site:${leadRequestId}` : null,
   }, attribution, semanticKey: "new" });
 
   if (result.error) {

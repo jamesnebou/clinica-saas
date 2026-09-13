@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useActionState } from "react";
 import { useFormStatus } from "react-dom";
 import { signInAction } from "./actions";
+import { PublicFormGuard } from "@/components/public-site/public-form-guard";
 
 const initialState = { ok: true, message: "" };
 
@@ -26,6 +27,7 @@ export default function LoginForm({ mode = "cliente", next = "/dashboard", email
 
   return (
     <form action={formAction} className="mt-6 space-y-4">
+      <PublicFormGuard />
       <input type="hidden" name="mode" value={mode} />
       <input type="hidden" name="next" value={next} />
       <label className="block">
