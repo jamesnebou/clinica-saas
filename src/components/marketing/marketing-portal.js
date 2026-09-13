@@ -77,11 +77,11 @@ export function MarketingPortal({ segments, plans }) {
           <div className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {segments.map((segment, index) => {
               const Icon = segmentIcons[segment.slug] || Building2;
-              const href = segment.slug === "estetica" ? "/estetica" : `/cadastro?segment=${segment.slug}`;
+              const href = `/${segment.slug}`;
               return (
-                <TrackedLink key={segment.slug} href={href} eventName={segment.slug === "estetica" ? "segment_landing_click" : "signup_click"} eventData={{ location: "segment_grid", segment: segment.slug }} className="group min-h-60 rounded-lg border border-black/10 bg-white p-6 transition hover:-translate-y-1 hover:border-[#ed7009]/50 hover:shadow-xl active:scale-[0.99]">
+                <TrackedLink key={segment.slug} href={href} eventName="segment_landing_click" eventData={{ location: "segment_grid", segment: segment.slug }} className="group min-h-60 rounded-lg border border-black/10 bg-white p-6 transition hover:-translate-y-1 hover:border-[#ed7009]/50 hover:shadow-xl active:scale-[0.99]">
                   <div className={`flex h-11 w-11 items-center justify-center rounded-md ${index % 4 === 0 ? "bg-orange-100 text-[#b95000]" : index % 4 === 1 ? "bg-cyan-100 text-cyan-800" : index % 4 === 2 ? "bg-rose-100 text-rose-800" : "bg-emerald-100 text-emerald-800"}`}><Icon size={22} /></div>
-                  <h3 className="mt-6 text-xl font-black">{segment.name}</h3><p className="mt-3 text-sm leading-7 text-neutral-600">{segment.description}</p><span className="mt-5 inline-flex items-center gap-2 text-sm font-black text-[#c85800]">{segment.slug === "estetica" ? "Ver solução completa" : "Configurar para esta área"}<ArrowRight size={15} className="transition group-hover:translate-x-1" /></span>
+                  <h3 className="mt-6 text-xl font-black">{segment.name}</h3><p className="mt-3 text-sm leading-7 text-neutral-600">{segment.description}</p><span className="mt-5 inline-flex items-center gap-2 text-sm font-black text-[#c85800]">Ver solução completa<ArrowRight size={15} className="transition group-hover:translate-x-1" /></span>
                 </TrackedLink>
               );
             })}

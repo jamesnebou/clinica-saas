@@ -23,10 +23,23 @@ test("landing de estetica usa arquitetura reutilizavel e planos dinamicos", asyn
   assert.doesNotMatch(page, /preco_mensal:\s*\d/);
 });
 
-test("landing de estetica possui FAQ comercial completo", async () => {
-  const contents = await source("src/lib/marketing/segments.js");
-  const faqBlock = contents.split("faqs: [")[1].split("],\n  },")[0];
-  assert.ok((faqBlock.match(/^\s+\["/gm) || []).length >= 12);
+test("landings possuem FAQ comercial completo", async () => {
+  const moduleUrl = new URL(
+    "../src/lib/marketing/segments.js",
+    import.meta.url,
+  );
+
+  const { getSegmentLanding, marketingSegments } = await import(moduleUrl);
+
+  for (const segment of marketingSegments) {
+    const landing = getSegmentLanding(segment.slug);
+
+    assert.ok(landing, `landing ausente: ${segment.slug}`);
+    assert.ok(
+      landing.faqs.length >= 12,
+      `FAQ insuficiente: ${segment.slug}`,
+    );
+  }
 });
 
 test("formulario envia segmento explicito preservando tracking", async () => {

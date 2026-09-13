@@ -125,7 +125,7 @@ function PainSection({ config }) {
   );
 }
 
-function TransformationSection() {
+function TransformationSection({ config }) {
   const comparisons = [
     ["Antes", "Depois com a NexaWi"],
     ["Conversas espalhadas e sem dono", "Oportunidades com etapa, responsável e próxima ação"],
@@ -137,7 +137,7 @@ function TransformationSection() {
     <section className="bg-white py-20 sm:py-24">
       <div className="mx-auto grid max-w-7xl gap-12 px-5 sm:px-8 lg:grid-cols-[0.95fr_1.05fr] lg:items-center lg:px-10">
         <div className="relative aspect-[4/3] overflow-hidden rounded-lg bg-neutral-100">
-          <Image src="/marketing/estetica/consultation.jpg" alt="Profissional de estética apresentando um plano de atendimento a uma paciente" fill sizes="(max-width: 1024px) 100vw, 48vw" className="object-cover" />
+          <Image src={config.transformation?.image || config.hero.image} alt={config.transformation?.imageAlt || config.hero.imageAlt} fill sizes="(max-width: 1024px) 100vw, 48vw" className="object-cover" />
         </div>
         <div>
           <SectionHeading eyebrow="Mudança operacional" title="A experiência melhora para quem administra, atende e compra." description="O sistema não substitui o cuidado humano. Ele retira ruído operacional para que a equipe consiga acompanhar cada paciente com consistência." />
@@ -198,13 +198,13 @@ function WorkflowSection({ config }) {
   );
 }
 
-function ProductSection() {
+function ProductSection({ config }) {
   return (
     <section className="bg-white py-20 sm:py-24">
       <div className="mx-auto grid max-w-7xl gap-12 px-5 sm:px-8 lg:grid-cols-[0.82fr_1.18fr] lg:items-center lg:px-10">
         <div>
           <SectionHeading eyebrow="Produto real" title="A operação inteira visível sem perder tempo procurando informação." description="A demonstração utiliza o mesmo painel da plataforma, com dados fictícios restauráveis para você explorar agenda, CRM, prontuário, financeiro, BI e automações." />
-          <TrackedLink href="/demo" prefetch={false} eventName="demo_click" eventData={{ location: "product_showcase", segment: "estetica" }} className="mt-7 inline-flex h-12 items-center gap-2 rounded-md bg-[#1c1c1c] px-5 text-sm font-black text-white transition active:scale-[0.98]">
+          <TrackedLink href="/demo" prefetch={false} eventName="demo_click" eventData={{ location: "product_showcase", segment: config.slug }} className="mt-7 inline-flex h-12 items-center gap-2 rounded-md bg-[#1c1c1c] px-5 text-sm font-black text-white transition active:scale-[0.98]">
             Explorar a demonstração <ArrowRight size={17} />
           </TrackedLink>
         </div>
@@ -329,16 +329,16 @@ export function SegmentLandingPage({ config, plans }) {
       <Header segment={config.slug} />
       <Hero config={config} />
       <PainSection config={config} />
-      <TransformationSection />
+      <TransformationSection config={config} />
       <ModulesSection config={config} />
       <WorkflowSection config={config} />
-      <ProductSection />
+      <ProductSection config={config} />
       <RolesSection config={config} />
       <AutomationSection />
       <PlansSection plans={plans} />
       <SafetySection />
       <FaqSection config={config} />
-      <LeadCaptureForm segment={config.slug} eyebrow="Próximo passo" title="Veja a NexaWi aplicada à rotina da sua clínica de estética." description="Informe o tamanho da sua equipe. A NexaWi apresenta o fluxo e o plano mais coerentes com a operação atual." />
+      <LeadCaptureForm segment={config.slug} eyebrow="Próximo passo" title={`Veja a NexaWi aplicada à rotina de ${config.name.toLocaleLowerCase("pt-BR")}.`} description="Informe o tamanho da sua equipe. A NexaWi apresenta o fluxo e o plano mais coerentes com a operação atual." />
       <Footer />
     </main>
   );
