@@ -239,3 +239,19 @@ Rollback: reverter somente o changeset de codigo desta tarefa em um novo commit 
 
 ## Validacao final
 Lint PASS (exit 0); git diff --check PASS; npm test 461/461 PASS; build isolado PASS; pgTAP 69/69 PASS; fresh local 56/56 migrations. Smoke HTTP local concluido e servidor temporario encerrado. Working tree intencionalmente sujo, sem commit/push. Nenhum ambiente remoto alterado.
+
+## Adendo operacional OPS-HARDEN-01 - 2026-09-13
+
+[Relatorio completo](OPS-HARDEN-01-2026-09-13.md): benchmark local reproduzivel de1800 chamadas RPC,
+seis cenarios (hot/distributed; concorrencias1/8/24), errors0/denied0. Nao e garantia de capacidade Vercel/3000tenants.
+Limpeza probabilistica atual permanece; procedimento de cleanup deterministico e monitoramento documentado,
+sem migration ou permissao nova. Calibracao remota/scheduler ainda OPEN.
+
+Operador informou homologacao staging de migration, loginDemo, siteDemo e booking sintetico; esta tarefa nao repetiu isso remotamente.
+Harness manual de staging implementado com origem restrita, payloads invalidos, 413/no-store e probe429 opcional.
+Demo reset/login exige opt-in. Nenhum gateway e acionado pelo harness.
+
+GoTrue direto continua fora do limiter Next; auditoria concluida, configuracao hospedada UNVERIFIED.
+Pre-parsing de Server Actions sem Content-Length continua OPEN; limite60mb preservado para uploads legitimos.
+Suite final484/484, pgTAP69/69, fresh56/56, lint/build/diff-check PASS.
+Nenhuma alteracao em src/, banco remoto ou migrations; sem commit/push/deploy.

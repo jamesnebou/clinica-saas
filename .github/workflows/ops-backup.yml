@@ -1,0 +1,78 @@
+name: OPS External Backup (disabled until provisioned)
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "37 3,15 * * *"
+permissions:
+  contents: read
+concurrency:
+  group: ops-external-backup
+  cancel-in-progress: false
+jobs:
+  backup:
+    # This opt-in must be a repository variable, available before environment selection.
+    if: github.ref == 'refs/heads/main' && vars.OPS_BACKUP_ENABLED == 'true'
+    environment: ops-backup
+    # Dedicated ephemeral, encrypted runner; never a developer laptop or shared host.
+    runs-on: [self-hosted, linux, nexawi-backup-ephemeral]
+    timeout-minutes: 120
+    env:
+      OPS_BACKUP_ENABLED: ${{ vars.OPS_BACKUP_ENABLED }}
+      OPS_BACKUP_SOURCE_REF: ${{ vars.OPS_BACKUP_SOURCE_REF }}
+      OPS_BACKUP_CONFIRM: ${{ vars.OPS_BACKUP_CONFIRM }}
+      OPS_BACKUP_SUPABASE_URL: ${{ vars.OPS_BACKUP_SUPABASE_URL }}
+      OPS_BACKUP_QUIESCENCE_ACK: ${{ vars.OPS_BACKUP_QUIESCENCE_ACK }}
+      OPS_BACKUP_SECURE_SCRATCH_ACK: ${{ vars.OPS_BACKUP_SECURE_SCRATCH_ACK }}
+      OPS_BACKUP_SCRATCH: ${{ vars.OPS_BACKUP_SCRATCH }}
+      OPS_BACKUP_DESTINATION_HOST: ${{ vars.OPS_BACKUP_DESTINATION_HOST }}
+      OPS_BACKUP_SERVICE_ROLE_KEY: ${{ secrets.OPS_BACKUP_SERVICE_ROLE_KEY }}
+      PGHOST: ${{ vars.OPS_BACKUP_PGHOST }}
+      PGPORT: "5432"
+      PGDATABASE: postgres
+      PGSSLMODE: verify-full
+      PGSSLROOTCERT: ${{ vars.OPS_BACKUP_PGSSLROOTCERT }}
+      PGUSER: ${{ secrets.OPS_BACKUP_PGUSER }}
+      PGPASSWORD: ${{ secrets.OPS_BACKUP_PGPASSWORD }}
+      RESTIC_REPOSITORY: ${{ secrets.OPS_BACKUP_REPOSITORY }}
+      RESTIC_PASSWORD: ${{ secrets.OPS_BACKUP_PASSWORD }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.OPS_BACKUP_S3_ACCESS_KEY }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.OPS_BACKUP_S3_SECRET_KEY }}
+      AWS_DEFAULT_REGION: ${{ vars.OPS_BACKUP_S3_REGION }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci --ignore-scripts
+      - name: Require failure-alert channel before accessing source
+        env:
+          OPS_ALERT_WEBHOOK: ${{ secrets.OPS_ALERT_WEBHOOK }}
+        run: |
+          node --input-type=module <<'NODE'
+          try {
+            if (new URL(process.env.OPS_ALERT_WEBHOOK).protocol !== "https:") process.exit(1);
+          } catch { console.error("ops_alert_configuration_required"); process.exitCode = 1; }
+          NODE
+      - name: Encrypted external export (read-only source)
+        run: node scripts/ops/backup-export.mjs
+      - name: Failure alert (no source data)
+        if: failure()
+        env:
+          OPS_ALERT_WEBHOOK: ${{ secrets.OPS_ALERT_WEBHOOK }}
+        run: |
+          node --input-type=module <<'NODE'
+          try {
+            const raw = process.env.OPS_ALERT_WEBHOOK;
+            if (!raw || new URL(raw).protocol !== "https:") process.exit(1);
+            const response = await fetch(raw, {
+              method: "POST", redirect: "error", signal: AbortSignal.timeout(15000),
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ event: "nexawi_ops_backup_failed", run: process.env.GITHUB_RUN_ID })
+            });
+            if (!response.ok) process.exitCode = 1;
+          } catch { console.error("ops_alert_delivery_failed"); process.exitCode = 1; }
+          NODE

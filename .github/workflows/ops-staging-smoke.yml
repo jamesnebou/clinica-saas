@@ -1,0 +1,41 @@
+name: OPS Staging Smoke (manual only)
+on:
+  workflow_dispatch:
+    inputs:
+      demo_login:
+        description: Reset and log in to Demo only
+        type: boolean
+        default: false
+      rate_probe:
+        description: Consume staging runner IP budget to check 429
+        type: boolean
+        default: false
+permissions:
+  contents: read
+concurrency:
+  group: ops-staging-smoke
+  cancel-in-progress: false
+jobs:
+  smoke:
+    # Repository-level opt-in; target settings belong to the protected environment.
+    if: github.ref == 'refs/heads/staging' && vars.OPS_STAGING_SMOKE_ENABLED == 'true'
+    environment: ops-staging-smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      STAGING_BASE_URL: ${{ vars.STAGING_BASE_URL }}
+      OPS_STAGING_CONFIRM: ${{ vars.OPS_STAGING_CONFIRM }}
+      STAGING_DEMO_SLUG: ${{ vars.STAGING_DEMO_SLUG }}
+      OPS_DEMO_CONFIRM: ${{ vars.OPS_DEMO_CONFIRM }}
+      STAGING_DEMO_PROCEDURE_ID: ${{ vars.STAGING_DEMO_PROCEDURE_ID }}
+      STAGING_SMOKE_DATE: ${{ vars.STAGING_SMOKE_DATE }}
+      STAGING_SMOKE_DEMO_LOGIN: ${{ inputs.demo_login }}
+      STAGING_SMOKE_RATE_PROBE: ${{ inputs.rate_probe }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: node scripts/ops/staging-smoke.mjs

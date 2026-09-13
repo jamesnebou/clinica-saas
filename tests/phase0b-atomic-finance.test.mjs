@@ -31,9 +31,12 @@ test("gateways liquidam o canônico antes de atualizar metadados do booking", as
   ]);
   const asaasBooking = asaas.slice(asaas.indexOf("async function updatePublicBookingPayment"), asaas.indexOf("async function updateStoreOrderPayment"));
   const infiniteBooking = infinitePay.slice(infinitePay.indexOf("async function updateBooking"), infinitePay.indexOf("async function updateStoreOrder"));
-  assert.ok(asaasBooking.indexOf("syncCanonicalAppointmentPayment") < asaasBooking.indexOf('.from("site_agendamentos_publicos")\n    .update'));
-  assert.ok(infiniteBooking.indexOf("syncCanonicalAppointmentPayment") < infiniteBooking.indexOf('.from("site_agendamentos_publicos")\n    .update'));
+  for (const booking of [asaasBooking, infiniteBooking]) {
+    const canonicalIndex = booking.indexOf("syncCanonicalAppointmentPayment");
+    const bookingUpdateIndex = booking.search(/\.from\("site_agendamentos_publicos"\)\s*\.update/);
+    assert.ok(canonicalIndex >= 0 && bookingUpdateIndex >= 0, "Both payment stages must exist");
+    assert.ok(canonicalIndex < bookingUpdateIndex, "Canonical payment must precede booking metadata");
+  }
   assert.doesNotMatch(asaasBooking, /from\("agendamentos"\)[\s\S]*?\.update/);
   assert.doesNotMatch(infiniteBooking, /from\("agendamentos"\)[\s\S]*?\.update/);
 });
-
