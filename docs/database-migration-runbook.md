@@ -95,12 +95,16 @@ Confirmar versao implantada, historico de migrations, HTTP dos workers, login, t
 
 ## Restore seguro
 
+O procedimento completo e atual de Database + Auth + Storage está em `docs/disaster-recovery-runbook.md`; a homologação de 2026-09-11/12 está em `docs/F0C-CLOSE-03-DISASTER-RECOVERY-2026-09-11.md`. Um dump PostgreSQL não recupera sozinho os objetos físicos do Storage nem garante portabilidade integral de Auth.
+
 1. Criar projeto/staging ou banco local vazio; nunca apontar para producao.
 2. Restaurar roles/schema/dados na ordem indicada pelo Supabase.
 3. Validar contagens agregadas e integridade referencial.
 4. Executar pgTAP, F0A, F0B e reconciliacoes.
 5. Apontar uma instancia isolada da aplicacao para o restore e executar smoke tests.
 6. Descartar o ambiente somente depois de registrar o resultado.
+
+Os scripts em `scripts/dr` bloqueiam explicitamente os refs de Production e Staging, exigem alvo nominal e confirmação vinculada ao ref, preservam paths dos buckets, validam SHA-256 e recusam overwrite. Não remover esses guards para executar export produtivo; criar uma ferramenta read-only separada se necessário.
 
 No restore integral local validado na F0C-R, o custom dump precisou ser aplicado
 com `supabase_admin`, `--no-owner` e preservacao dos privilegios. O usuario
