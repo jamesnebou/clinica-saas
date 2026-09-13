@@ -164,7 +164,7 @@ export default async function NotificacoesPage() {
                       <form action={markNotificationViewedAction} className="mt-2">
                         <input type="hidden" name="id" value={item.id} />
                         <button type="submit" className="inline-flex h-9 items-center rounded-lg bg-neutral-950 px-3 text-xs font-bold text-white">
-                          Visualizado
+                          Marcar como visualizada
                         </button>
                       </form>
                     ) : null}

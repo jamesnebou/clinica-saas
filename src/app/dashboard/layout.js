@@ -97,24 +97,16 @@ async function getNotificationBadgeCount(activeClinic) {
   const since = new Date();
   since.setDate(since.getDate() - 7);
 
-  const query = supabaseAdmin
+  const { count, error } = await supabaseAdmin
     .from("site_agendamentos_publicos")
     .select("id", { count: "exact", head: true })
     .eq("clinica_id", activeClinic.id)
-    .in("pagamento_status", ["pendente", "erro"])
-    .gte("created_at", since.toISOString());
-
-  const { count, error } = await query.is("visualizado_em", null);
+    .gte("created_at", since.toISOString())
+    .is("visualizado_em", null);
 
   if (error) {
-    const { count: fallbackCount } = await supabaseAdmin
-      .from("site_agendamentos_publicos")
-      .select("id", { count: "exact", head: true })
-      .eq("clinica_id", activeClinic.id)
-      .in("pagamento_status", ["pendente", "erro"])
-      .gte("created_at", since.toISOString());
-
-    return fallbackCount || 0;
+    console.error("notification_badge_count_failed");
+    return 0;
   }
 
   return count || 0;
