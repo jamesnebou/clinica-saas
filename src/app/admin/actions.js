@@ -69,6 +69,18 @@ function tutorialSteps(value) {
     .slice(0, 12);
 }
 
+const MARKETING_PLAN_PATHS = [
+  "/",
+  "/estetica",
+  "/odontologia",
+  "/fisioterapia",
+  "/medicina",
+  "/psicologia",
+  "/nutricao",
+  "/pilates",
+  "/multidisciplinar",
+];
+
 async function findAuthUserByEmail(email) {
   let page = 1;
   const perPage = 100;
@@ -364,7 +376,7 @@ export async function upsertSystemPlanAction(formData) {
   revalidatePath("/admin");
   revalidatePath("/dashboard-admin");
   revalidatePath("/dashboard-admin/planos");
-  revalidatePath("/");
+  for (const path of MARKETING_PLAN_PATHS) revalidatePath(path);
 }
 
 export async function upsertClinicTutorialAction(formData) {

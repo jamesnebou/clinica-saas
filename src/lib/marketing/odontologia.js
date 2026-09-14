@@ -1,0 +1,62 @@
+export const odontologiaContent = {
+  variant: "premium-v2",
+  slug: "odontologia",
+  name: "Clínicas Odontológicas",
+  metadata: {
+    title: "Sistema para Clínica Odontológica | NexaWi Clínicas",
+    description: "Gestão para clínicas odontológicas com agenda por dentista, pacientes, CRM, prontuário e financeiro conectados. Conheça a NexaWi.",
+  },
+  hero: {
+    eyebrow: "Sistema de gestão para clínicas odontológicas",
+    title: "Da primeira consulta ao fechamento do tratamento, tudo sob controle.",
+    statement: "",
+    description: "Centralize pacientes, dentistas, agenda, orçamentos, tratamentos e recebimentos em uma única operação.",
+    image: "/marketing/odontologia/hero-dental.png",
+    imageAlt: "Equipe odontológica analisando imagens dentárias em uma clínica moderna",
+    primaryCta: { label: "Quero ver na minha clínica", href: "#contato" },
+    secondaryCta: { label: "Ver demonstração", href: "/demo" },
+    points: ["Agenda por dentista e especialidade", "Orçamentos e oportunidades acompanhados", "Financeiro e produção conectados"],
+  },
+  transformation: {
+    image: null,
+    imageAlt: "",
+    title: "Menos ruído operacional. Mais fluidez para atender, fechar tratamentos e acompanhar.",
+    description: "A NexaWi não substitui o cuidado humano. Ela remove retrabalho, organiza informações e conecta agenda, atendimento, relacionamento e financeiro em um único fluxo.",
+    comparisons: [
+      ["Conversas espalhadas e sem responsável definido", "Oportunidades com etapa, responsável e próxima ação"],
+      ["Agenda sem relação com recebimentos", "Agendamento, sinal e status financeiro conectados"],
+      ["Histórico difícil de localizar", "Prontuário, evolução e interações reunidos por paciente"],
+      ["Decisões baseadas em percepção", "Indicadores de agenda, receita e operação por período"],
+    ],
+  },
+  pains: [
+    { title: "Agenda por profissional difícil de coordenar", description: "Mudanças, encaixes e horários dependem de alinhamento manual entre recepção e equipe.", impact: "Mais ruído operacional e mais chance de erro." },
+    { title: "Orçamentos sem acompanhamento", description: "Avaliações, retornos e oportunidades se perdem quando não existe uma próxima ação bem definida.", impact: "Menos conversão em tratamento." },
+    { title: "Recebimentos espalhados", description: "Sinais, parcelas e pagamentos ficam desconectados do atendimento e da rotina financeira.", impact: "Menos previsibilidade de caixa." },
+    { title: "Histórico do paciente fragmentado", description: "Informações ficam distribuídas entre conversas, arquivos e sistemas diferentes.", impact: "Menos continuidade e menos controle operacional." },
+  ],
+  workflow: [
+    { label: "Captar", description: "O site e o CRM registram a origem e o interesse do paciente." },
+    { label: "Agendar", description: "A recepção organiza disponibilidade por profissional e serviço." },
+    { label: "Atender", description: "O histórico e os registros clínicos acompanham o atendimento." },
+    { label: "Receber", description: "Sinal, parcelas e recebíveis ficam ligados à operação." },
+    { label: "Retomar", description: "CRM e automações ajudam a manter retornos e próximas ações visíveis." },
+  ],
+  roles: [
+    { title: "Recepção", description: "Tudo o que a recepção precisa para manter a agenda em movimento.", items: ["Agenda por profissional", "Cadastro e histórico de contato", "Pendências e confirmações visíveis"] },
+    { title: "Dentistas", description: "Contexto clínico e agenda organizados para acompanhar cada atendimento.", items: ["Agenda individual", "Registros clínicos protegidos", "Produção e comissões relacionadas ao atendimento"] },
+    { title: "Gestão", description: "Visão de operação, receita e equipe para decidir com mais clareza.", items: ["Funil de oportunidades", "Receita e recebíveis", "Visão de equipe e permissões"] },
+  ],
+  contact: {
+    title: "Veja a NexaWi aplicada à rotina da sua clínica odontológica.",
+    description: "Conte como sua equipe trabalha. Vamos apresentar a operação e o plano que fazem sentido para a sua clínica.",
+    clinicPlaceholder: "Ex.: Clínica Sorriso Prime",
+  },
+  faqs: [
+    ["O plano Premium inclui DRE?", "Sim. A DRE gerencial está incluída no Premium. Starter e Growth não incluem esse recurso."],
+    ["O domínio personalizado está disponível em qual plano?", "O domínio personalizado está incluído a partir do Growth e também no Premium. O Starter inclui o site e o agendamento online no endereço da plataforma."],
+    ["Posso mudar de plano depois?", "Sim. A NexaWi acompanha a evolução da operação para orientar a estrutura comercial adequada. A mudança não apaga dados; qualquer ajuste segue a disponibilidade comercial e o processo de assinatura vigente."],
+    ["O que acontece quando minha clínica atinge o limite do plano?", "Os dados já cadastrados continuam disponíveis. A clínica recebe orientação para ajustar a capacidade ou evoluir de plano antes de criar novos registros que ultrapassem o limite aplicável."],
+    ["Quais recursos mudam entre Starter, Growth e Premium?", "Starter organiza a operação, o prontuário e o financeiro essencial. Growth adiciona CRM, domínio personalizado, financeiro avançado, automações padrão, BI e equipe. Premium acrescenta DRE gerencial, Lojinha e Pedidos, automações ampliadas e limites superiores."],
+  ],
+};

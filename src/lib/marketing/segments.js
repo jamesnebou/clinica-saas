@@ -1,8 +1,10 @@
+import { odontologiaContent } from "./odontologia.js";
+
 const sharedModules = [
   { icon: "calendar", title: "Agenda inteligente", description: "Disponibilidade por profissional, múltiplos procedimentos, reagendamento, cancelamento, sinal e status visual em uma única rotina." },
   { icon: "users", title: "CRM 2.0", description: "Pipeline, origem, responsável, próxima ação, ganho, perda e histórico comercial para cada oportunidade." },
   { icon: "clipboard", title: "Prontuário e evolução", description: "Registros clínicos, consentimentos, anexos e evolução com acesso controlado por função e clínica." },
-  { icon: "wallet", title: "Financeiro 2.0", description: "Contas a pagar e receber, caixa, DRE, conciliação, pacotes, parcelamento e comissões conectados à operação." },
+  { icon: "wallet", title: "Financeiro 2.0", description: "Recebíveis, caixa, DRE, conciliação, parcelamentos e comissões conectados à operação da clínica." },
   { icon: "globe", title: "Site e agendamento online", description: "Site público, serviços, agenda disponível e cobrança de sinal conforme a configuração da clínica." },
   { icon: "workflow", title: "Automações", description: "Regras, esperas, tarefas e comunicações auditáveis para reduzir trabalho repetitivo da equipe." },
   { icon: "chart", title: "BI operacional", description: "Indicadores para acompanhar agenda, produção, receita, recorrência e evolução da operação por período." },
@@ -37,6 +39,8 @@ function landing({
   roles,
   imageAlt,
   transformationAlt,
+  heroImage = "/marketing/multisegment-hero.jpg",
+  transformationImage = "/marketing/multisegment-hero.jpg",
   extraFaqs = [],
 }) {
   return {
@@ -47,14 +51,14 @@ function landing({
       eyebrow: `Gestão para ${name.toLocaleLowerCase("pt-BR")}`,
       title: heroTitle,
       description: heroDescription,
-      image: "/marketing/multisegment-hero.jpg",
+      image: heroImage,
       imageAlt,
       primaryCta: { label: "Quero organizar minha clínica", href: "#contato" },
       secondaryCta: { label: "Ver demonstração", href: "/demo" },
       points: heroPoints,
     },
     transformation: {
-      image: "/marketing/multisegment-hero.jpg",
+      image: transformationImage,
       imageAlt: transformationAlt,
     },
     pains,
@@ -79,6 +83,8 @@ export const marketingSegments = [
 export const esteticaLanding = landing({
   slug: "estetica",
   name: "Clínicas de Estética",
+  heroImage: "/marketing/estetica/hero.jpg",
+  transformationImage: "/marketing/estetica/consultation.jpg",
   title: "Sistema para Clínica de Estética | NexaWi Clínicas",
   description: "Agenda, CRM, prontuário, financeiro, site e automações para clínicas de estética que querem organizar a operação e crescer com controle.",
   heroTitle: "Sua clínica cresce. A operação precisa acompanhar.",
@@ -106,7 +112,7 @@ export const esteticaLanding = landing({
   ],
 });
 
-export const odontologiaLanding = landing({
+const odontologiaCurrentLanding = landing({
   slug: "odontologia",
   name: "Clínicas Odontológicas",
   title: "Sistema para Clínica Odontológica | NexaWi Clínicas",
@@ -138,6 +144,12 @@ export const odontologiaLanding = landing({
     ["A NexaWi funciona para clínicas com vários dentistas?", "Sim. A estrutura é multiusuário e permite organizar profissionais, agenda, permissões e produção dentro da mesma clínica."],
   ],
 });
+
+export const odontologiaLanding = {
+  ...odontologiaCurrentLanding,
+  ...odontologiaContent,
+  faqs: [...odontologiaCurrentLanding.faqs, ...(odontologiaContent.faqs || [])],
+};
 
 export const fisioterapiaLanding = landing({
   slug: "fisioterapia",
@@ -334,5 +346,5 @@ const landingBySlug = {
 };
 
 export function getSegmentLanding(slug) {
-  return landingBySlug[slug] || null;
+  return Object.hasOwn(landingBySlug, slug) ? landingBySlug[slug] : null;
 }

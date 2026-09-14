@@ -3,6 +3,7 @@ import { getSegmentLanding } from "@/lib/marketing/segments";
 import { toMarketingPlans } from "@/lib/marketing/plans";
 import { getSystemPlans } from "@/lib/saas/plans";
 
+export const dynamic = "force-dynamic";
 const config = getSegmentLanding("odontologia");
 
 export const metadata = {

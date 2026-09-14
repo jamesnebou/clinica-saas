@@ -120,7 +120,7 @@ test("redirecionamentos externos e barras invertidas são bloqueados", () => {
 test("CTAs de começar apontam para cadastro", () => {
   assert.match(homepage, /MarketingPortal/);
   assert.match(marketingPortal, /TrackedLink href="\/cadastro" eventName="signup_click"/);
-  assert.match(planCta, /\/cadastro\?plan=/);
+  assert.match(planCta, /href=\{marketingSignupHref\(plan, segment\)\}/);
 });
 
 test("CTAs demonstrativos continuam apontando para demo", () => {

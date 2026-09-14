@@ -1,4 +1,5 @@
 import Image from "next/image";
+import { PremiumSegmentLandingPage } from "./premium/premium-segment-landing-page";
 import Link from "next/link";
 import {
   ArrowRight,
@@ -323,6 +324,7 @@ function Footer() {
 }
 
 export function SegmentLandingPage({ config, plans }) {
+  if (config.variant === "premium-v2") return <PremiumSegmentLandingPage config={config} plans={plans} />;
   return (
     <main className="min-h-screen overflow-x-hidden bg-white text-[#151515]">
       <MarketingTracking segment={config.slug} pageType="segment_landing" contentName={`NexaWi Clínicas para ${config.name}`} />
