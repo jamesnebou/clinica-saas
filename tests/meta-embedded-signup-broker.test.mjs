@@ -112,7 +112,7 @@ test("launcher ativo usa exatamente os parametros historicos do fluxo funcional"
   assert.match(dashboard, /embeddedSignupOptions\(start\.data\.configId, start\.data\.onboardingMode\)/);
   assert.deepEqual(embeddedSignupOptions("test", "cloud_only"), {
     config_id: "test", response_type: "code", override_default_response_type: true,
-    extras: { setup: {}, featureType: "", sessionInfoVersion: "3" },
+    extras: { setup: {}, featureType: "", sessionInfoVersion: "3", version: "v4" },
   });
   assert.doesNotMatch(dashboard, /auth_type|buildEmbeddedSignupV4LoginOptions/);
 });

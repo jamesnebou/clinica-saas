@@ -14,6 +14,7 @@ export function embeddedSignupOptions(configId, mode) {
       setup: {},
       featureType: onboardingMode(mode) === "coexistence" ? "whatsapp_business_app_onboarding" : "",
       sessionInfoVersion: "3",
+      version: "v4",
     },
   };
 }

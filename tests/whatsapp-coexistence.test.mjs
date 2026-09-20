@@ -20,7 +20,7 @@ const args = (mode = "cloud_only") => ({
 test("launcher preserva Cloud e habilita Business App apenas na escolha Coexistence", () => {
   assert.deepEqual(embeddedSignupOptions("config-test", "coexistence"), {
     config_id: "config-test", response_type: "code", override_default_response_type: true,
-    extras: { setup: {}, featureType: "whatsapp_business_app_onboarding", sessionInfoVersion: "3" },
+    extras: { setup: {}, featureType: "whatsapp_business_app_onboarding", sessionInfoVersion: "3", version: "v4" },
   });
   assert.equal(embeddedSignupOptions("test", "cloud_only").extras.featureType, "");
   assert.throws(() => embeddedSignupOptions("test", "spoofed"));
