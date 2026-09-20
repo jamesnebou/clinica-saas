@@ -98,7 +98,7 @@ test("POST top-level rejeita origem ou contexto cross-site sem exigir headers au
 
 test("dashboard restaura o Embedded Signup direto comprovado antes do broker", async () => {
   const dashboard = await source("../src/app/dashboard/whatsapp/embedded-signup-button.js");
-  assert.match(dashboard, /fetch\("\/api\/whatsapp\/embedded-signup\/start", \{ method: "POST" \}\)/);
+  assert.match(dashboard, /fetch\("\/api\/whatsapp\/embedded-signup\/start", \{\s*method: "POST"/);
   assert.match(dashboard, /window\.FB\.init/);
   assert.match(dashboard, /window\.FB\.login/);
   assert.match(dashboard, /https:\/\/connect\.facebook\.net\/pt_BR\/sdk\.js/);
@@ -108,10 +108,12 @@ test("dashboard restaura o Embedded Signup direto comprovado antes do broker", a
 
 test("launcher ativo usa exatamente os parametros historicos do fluxo funcional", async () => {
   const dashboard = await source("../src/app/dashboard/whatsapp/embedded-signup-button.js");
-  assert.match(dashboard, /config_id: start\.data\.configId/);
-  assert.match(dashboard, /response_type: "code"/);
-  assert.match(dashboard, /override_default_response_type: true/);
-  assert.match(dashboard, /extras: \{\s*setup: \{\},\s*featureType: "",\s*sessionInfoVersion: "3",?\s*\}/s);
+  const { embeddedSignupOptions } = await import("../src/lib/whatsapp/embedded-signup-core.mjs");
+  assert.match(dashboard, /embeddedSignupOptions\(start\.data\.configId, start\.data\.onboardingMode\)/);
+  assert.deepEqual(embeddedSignupOptions("test", "cloud_only"), {
+    config_id: "test", response_type: "code", override_default_response_type: true,
+    extras: { setup: {}, featureType: "", sessionInfoVersion: "3" },
+  });
   assert.doesNotMatch(dashboard, /auth_type|buildEmbeddedSignupV4LoginOptions/);
 });
 

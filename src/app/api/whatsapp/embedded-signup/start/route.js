@@ -12,12 +12,16 @@ export async function POST(request) {
     const context = await requireClinicSection("whatsapp"); const membership = getCurrentMembership(context.memberships, context.activeClinic.id);
     if (!["owner","admin"].includes(membership?.papel)) return NextResponse.json({ error: "Somente owner ou admin pode conectar o WhatsApp." }, { status: 403 });
     if (!isMetaConfigured()) return NextResponse.json({ error: "WhatsApp Meta ainda não configurado na NexaWi." }, { status: 503 });
+    const text = await request.text();
+    if (text.length > 1024) return NextResponse.json({ error: "Requisicao invalida." }, { status: 400 });
+    const body = text ? JSON.parse(text) : {};
     return NextResponse.json(await createEmbeddedSignupSession({
       clinicId: context.activeClinic.id,
       userId: context.user.id,
       role: membership.papel,
       requestOrigin: getRequestOrigin(request),
       navigationMode: META_BROKER_NAVIGATION_POPUP,
+      onboardingMode: body.onboardingMode,
     }));
   } catch (error) { return NextResponse.json({ error: error?.message || "Não foi possível iniciar a conexão." }, { status: 400 }); }
 }

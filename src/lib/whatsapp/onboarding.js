@@ -8,10 +8,12 @@ import { provisionMetaOnboarding } from "./meta/onboarding-core.mjs";
 import { templatePurposeFromName } from "./meta/templates";
 import { getMetaConnectOrigin, resolveClinicReturnOrigin } from "./broker";
 import { normalizeBrokerNavigationMode } from "./broker-core.mjs";
+import { onboardingMode as validateOnboardingMode, COEXISTENCE_FINISH } from "./embedded-signup-core.mjs";
 
 const META_TEMPLATE_STATUSES = new Set(["APPROVED","PENDING","REJECTED","PAUSED","DISABLED","IN_APPEAL","PENDING_DELETION","DELETED","LIMIT_EXCEEDED"]);
 
-export async function createEmbeddedSignupSession({ clinicId, userId, role, requestOrigin, navigationMode }) {
+export async function createEmbeddedSignupSession({ clinicId, userId, role, requestOrigin, navigationMode, onboardingMode }) {
+  const requestedMode = validateOnboardingMode(onboardingMode);
   const returnOrigin = await resolveClinicReturnOrigin({ clinicId, requestOrigin });
   const normalizedNavigationMode = normalizeBrokerNavigationMode(navigationMode);
   const state = secureOpaqueToken(); const expiresAt = new Date(Date.now() + 15 * 60_000).toISOString();
@@ -20,11 +22,12 @@ export async function createEmbeddedSignupSession({ clinicId, userId, role, requ
     user_id: userId,
     state_hash: hashOpaqueToken(state),
     expires_at: expiresAt,
-    metadata: { stage: "started", flow_mode: "legacy", return_origin: returnOrigin, broker_origin: null, navigation_mode: normalizedNavigationMode, initiated_role: role },
+    metadata: { stage: "started", flow_mode: "legacy", onboarding_mode: requestedMode, return_origin: returnOrigin, broker_origin: null, navigation_mode: normalizedNavigationMode, initiated_role: role },
   }).select("id").single();
   if (error) throw error;
   return {
     mode: "legacy",
+    onboardingMode: requestedMode,
     sessionId: data.id,
     state,
     appId: process.env.META_APP_ID,
@@ -92,12 +95,12 @@ function normalizeStoredReturnOrigin(value) {
   return origin;
 }
 
-export async function completeEmbeddedSignupLegacy({ state, code, wabaId, phoneNumberId, clinicId, userId }) {
+export async function completeEmbeddedSignupLegacy({ state, code, wabaId, phoneNumberId, finishEvent, clinicId, userId }) {
   const session = await sessionByState(state);
   if (session.metadata?.flow_mode === "broker") {
     throw new Error("Esta sessão deve ser concluída pelo broker central.");
   }
-  return completeEmbeddedSignup({ state, code, wabaId, phoneNumberId, clinicId, userId });
+  return completeEmbeddedSignup({ state, code, wabaId, phoneNumberId, finishEvent, clinicId, userId });
 }
 
 export async function completeEmbeddedSignupFromBroker({ state, code, wabaId, phoneNumberId }) {
@@ -201,18 +204,23 @@ export async function syncConnectionTemplates(connection, provider = new MetaClo
   return { total: rows.filter((row) => templatePurposeFromName(row.name)).length, remoteTotal: remote.length };
 }
 
-export async function completeEmbeddedSignup({ state, code, wabaId, phoneNumberId, clinicId, userId, client = new MetaGraphClient() }) {
+export async function completeEmbeddedSignup({ state, code, wabaId, phoneNumberId, finishEvent, clinicId, userId, client = new MetaGraphClient() }) {
   const session = await consumeSession({ state, clinicId, userId });
   if (session.replay) return { connectionId: session.metadata.connection_id, sync: session.metadata.sync || null, replay: true };
   let touchedConnectionId = null;
   let previousConnection = null;
   let demotedConnectionId = null;
   try {
+    const requestedMode = validateOnboardingMode(session.metadata?.onboarding_mode);
+    if (session.metadata?.onboarding_mode && finishEvent !== (requestedMode === "coexistence" ? COEXISTENCE_FINISH : "FINISH")) {
+      throw new Error("Conclusao interativa incompativel com a sessao.");
+    }
     const provisioned = await provisionMetaOnboarding({
       client,
       code,
       wabaId,
       phoneNumberId,
+      requestedMode,
       appId: process.env.META_APP_ID,
       businessId: process.env.META_BUSINESS_ID,
       systemUserId: process.env.META_SYSTEM_USER_ID,
@@ -221,11 +229,11 @@ export async function completeEmbeddedSignup({ state, code, wabaId, phoneNumberI
       onStage: (stage, metadata) => updateSessionStage(session, stage, metadata),
       validateTenantOwnership: (assets) => validateTenantOwnership(clinicId, assets),
     });
-    const { waba, phone } = provisioned;
-    const connectionPayload = { clinica_id: clinicId, provider: "meta_cloud", is_primary: true, meta_business_id: process.env.META_BUSINESS_ID, waba_id: String(wabaId), phone_number_id: String(phoneNumberId), display_phone_number: phone.display_phone_number || null, verified_name: phone.verified_name || waba.name || null, connection_status: "connecting", onboarding_status: "templates_syncing", billing_mode: "client_direct", connection_mode: "cloud_only", quality_rating: phone.quality_rating || null, messaging_limit: phone?.throughput?.level || null, connected_at: null, disconnected_at: null, last_error: null, metadata: { code_verification_status: phone.code_verification_status || null, platform_type: phone.platform_type || null, system_user_verified: true, phone_registration_managed: true } };
+    const { waba, phone, connectionMode } = provisioned;
+    const connectionPayload = { clinica_id: clinicId, provider: "meta_cloud", is_primary: true, meta_business_id: process.env.META_BUSINESS_ID, waba_id: String(waba.id), phone_number_id: String(phone.id), display_phone_number: phone.display_phone_number || null, verified_name: phone.verified_name || waba.name || null, connection_status: "connecting", onboarding_status: "templates_syncing", billing_mode: "client_direct", connection_mode: connectionMode, quality_rating: phone.quality_rating || null, messaging_limit: phone?.throughput?.level || null, connected_at: null, disconnected_at: null, last_error: null, metadata: { code_verification_status: phone.code_verification_status || null, platform_type: phone.platform_type || null, system_user_verified: true, phone_registration_managed: connectionMode === "cloud_only", mode_verified_by: "graph.is_on_biz_app", is_on_biz_app: connectionMode === "coexistence", history_import: "not_requested" } };
     const [{ data: currentPrimary, error: primaryError }, { data: matchingConnection, error: matchingError }] = await Promise.all([
       supabaseAdmin.from("whatsapp_connections").select("*").eq("clinica_id", clinicId).eq("is_primary", true).maybeSingle(),
-      supabaseAdmin.from("whatsapp_connections").select("*").eq("clinica_id", clinicId).eq("phone_number_id", String(phoneNumberId)).maybeSingle(),
+      supabaseAdmin.from("whatsapp_connections").select("*").eq("clinica_id", clinicId).eq("phone_number_id", String(phone.id)).maybeSingle(),
     ]);
     if (primaryError) throw primaryError;
     if (matchingError) throw matchingError;
@@ -236,6 +244,9 @@ export async function completeEmbeddedSignup({ state, code, wabaId, phoneNumberI
     }
     const targetConnectionId = matchingConnection?.id || currentPrimary?.id;
     previousConnection = targetConnectionId === matchingConnection?.id ? matchingConnection : currentPrimary;
+    if (previousConnection?.phone_number_id === String(phone.id)) {
+      connectionPayload.metadata = { ...previousConnection.metadata, ...connectionPayload.metadata };
+    }
     const connectionQuery = targetConnectionId
       ? supabaseAdmin.from("whatsapp_connections").update(connectionPayload).eq("id", targetConnectionId)
       : supabaseAdmin.from("whatsapp_connections").insert(connectionPayload);
@@ -248,7 +259,7 @@ export async function completeEmbeddedSignup({ state, code, wabaId, phoneNumberI
     throwIfError(await supabaseAdmin.from("whatsapp_connections").update({ onboarding_status: "ready", connection_status: "connected", connected_at: readyAt, last_health_check_at: readyAt, last_error: null }).eq("id", connection.id).eq("clinica_id", clinicId));
     session.metadata = { ...(session.metadata || {}), stage: "ready", connection_id: connection.id, sync };
     throwIfError(await supabaseAdmin.from("whatsapp_onboarding_sessions").update({ status: "completed", metadata: session.metadata }).eq("id", session.id).eq("status", "processing"));
-    await supabaseAdmin.from("auditoria_clinica").insert({ clinica_id: clinicId, actor_id: userId, acao: "whatsapp.connection.created", entidade_tipo: "whatsapp_connection", entidade_id: connection.id, metadata: { provider: "meta_cloud", billing_mode: "client_direct", system_user_assignment_created: provisioned.assignmentCreated } });
+    await supabaseAdmin.from("auditoria_clinica").insert({ clinica_id: clinicId, actor_id: userId, acao: "whatsapp.connection.created", entidade_tipo: "whatsapp_connection", entidade_id: connection.id, metadata: { provider: "meta_cloud", connection_mode: connectionMode, billing_mode: "client_direct", system_user_assignment_created: provisioned.assignmentCreated } });
     return { connectionId: connection.id, sync };
   } catch (error) {
     const message = sanitizeMetaError(error);
@@ -256,6 +267,11 @@ export async function completeEmbeddedSignup({ state, code, wabaId, phoneNumberI
     await supabaseAdmin.from("whatsapp_onboarding_sessions").update({ status: "failed", last_error: message, metadata: { ...(session.metadata || {}), failed_stage: failedStage, stage: "failed" } }).eq("id", session.id).eq("status", "processing");
     if (touchedConnectionId && previousConnection) {
       await supabaseAdmin.from("whatsapp_connections").update({
+        waba_id: previousConnection.waba_id,
+        phone_number_id: previousConnection.phone_number_id,
+        display_phone_number: previousConnection.display_phone_number,
+        verified_name: previousConnection.verified_name,
+        connection_mode: previousConnection.connection_mode,
         is_primary: previousConnection.is_primary,
         connection_status: previousConnection.connection_status,
         onboarding_status: previousConnection.onboarding_status,

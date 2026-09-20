@@ -45,7 +45,12 @@ throw new MetaCloudError(
     return this.request("debug_token", { query: { input_token: token }, accessToken: appToken });
   }
   getWaba(id, token) { return this.request(id, { query: { fields: "id,name,currency,timezone_id,message_template_namespace" }, accessToken: token }); }
-  listPhoneNumbers(id, token) { return this.request(`${id}/phone_numbers`, { query: { fields: "id,display_phone_number,verified_name,quality_rating,code_verification_status,platform_type,throughput" }, accessToken: token }); }
+  listPhoneNumbers(id, token, after) { return this.request(`${id}/phone_numbers`, { query: { fields: "id,display_phone_number,verified_name,quality_rating,code_verification_status,platform_type,throughput", limit: 100, after }, accessToken: token }); }
+  getPhoneMode(id, token) { return this.request(id, { query: { fields: "id,is_on_biz_app,platform_type" }, accessToken: token }); }
+  syncBusinessAppData(id, syncType) {
+    if (!["smb_app_state_sync", "history"].includes(syncType)) throw new Error("Tipo de sincronizacao invalido.");
+    return this.request(`${id}/smb_app_data`, { method: "POST", body: { messaging_product: "whatsapp", sync_type: syncType } });
+  }
   subscribeApp(id, token) { return this.request(`${id}/subscribed_apps`, { method: "POST", accessToken: token }); }
   unsubscribeApp(id) { return this.request(`${id}/subscribed_apps`, { method: "DELETE" }); }
   listSubscribedApps(id, token) { return this.request(`${id}/subscribed_apps`, { accessToken: token }); }

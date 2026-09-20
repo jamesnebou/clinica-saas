@@ -1,4 +1,5 @@
 import { createHmac } from "node:crypto";
+import { onboardingMode } from "../embedded-signup-core.mjs";
 
 export const WHATSAPP_MANAGEMENT_SCOPES = Object.freeze([
   "whatsapp_business_management",
@@ -97,6 +98,13 @@ export function registrationPin(phoneNumberId, secret) {
   return String(digest.readUInt32BE(0) % 1_000_000).padStart(6, "0");
 }
 
+export function verifiedConnectionMode(status, phoneId) {
+  if (id(status?.id) !== id(phoneId)) throw new Error("A Meta retornou outro numero ao verificar o modo.");
+  if (status.is_on_biz_app === true && status.platform_type === "CLOUD_API") return "coexistence";
+  if (status.is_on_biz_app === false) return "cloud_only";
+  throw new Error("Nao foi possivel confirmar o modo do numero pela Meta.");
+}
+
 export async function provisionMetaOnboarding({
   client,
   code,
@@ -107,11 +115,14 @@ export async function provisionMetaOnboarding({
   systemUserId,
   permanentToken,
   registrationSecret,
+  requestedMode = "cloud_only",
   onStage = async () => {},
   validateTenantOwnership = async () => {},
 }) {
   const selectedWabaId = assertMetaId(wabaId, "WABA");
-  const selectedPhoneId = assertMetaId(phoneNumberId, "Número");
+  const mode = onboardingMode(requestedMode);
+  let selectedPhoneId = phoneNumberId ? assertMetaId(phoneNumberId, "Número") : null;
+  if (!selectedPhoneId && mode === "cloud_only") throw new Error("Numero ausente no retorno da Meta.");
   const configuredAppId = assertMetaId(appId, "App ID");
   const configuredBusinessId = assertMetaId(businessId, "Business ID");
   const configuredSystemUserId = assertMetaId(systemUserId, "System User ID");
@@ -132,9 +143,21 @@ export async function provisionMetaOnboarding({
 
   const [temporaryWaba, temporaryPhones] = await Promise.all([
     client.getWaba(selectedWabaId, temporaryToken),
-    client.listPhoneNumbers(selectedWabaId, temporaryToken),
+    collectMetaPages((after) => client.listPhoneNumbers(selectedWabaId, temporaryToken, after)),
   ]);
+  if (!selectedPhoneId) {
+    if (id(temporaryWaba?.id) !== selectedWabaId) throw new Error("WABA nao autorizada.");
+    const candidates = [];
+    for (const phone of temporaryPhones.data) {
+      const status = await client.getPhoneMode(assertMetaId(phone.id, "Número"), temporaryToken);
+      if (verifiedConnectionMode(status, phone.id) === "coexistence") candidates.push(phone.id);
+    }
+    if (candidates.length !== 1) throw new Error("A Meta nao identificou um unico numero Coexistence. Nao foi selecionado nenhum ativo.");
+    selectedPhoneId = assertMetaId(candidates[0], "Número");
+  }
   validateGrantedAssets(temporaryWaba, temporaryPhones, selectedWabaId, selectedPhoneId);
+  const connectionMode = verifiedConnectionMode(await client.getPhoneMode(selectedPhoneId, temporaryToken), selectedPhoneId);
+  if (connectionMode !== mode) throw new Error("O modo confirmado pela Meta difere do fluxo solicitado.");
   await validateTenantOwnership({ wabaId: selectedWabaId, phoneNumberId: selectedPhoneId });
   await onStage("assets_validated", { waba_id: selectedWabaId, phone_number_id: selectedPhoneId });
 
@@ -192,21 +215,29 @@ export async function provisionMetaOnboarding({
   }
   await onStage("webhook_subscribed");
 
-  const pin = registrationPin(selectedPhoneId, registrationSecret);
-  await client.registerPhoneNumber(selectedPhoneId, pin, permanentToken);
-  await onStage("phone_registered");
+  if (connectionMode === "cloud_only") {
+    const pin = registrationPin(selectedPhoneId, registrationSecret);
+    await client.registerPhoneNumber(selectedPhoneId, pin, permanentToken);
+    await onStage("phone_registered");
+  } else {
+    await onStage("coexistence_verified");
+  }
 
   const [permanentWaba, permanentPhones, templatePage] = await Promise.all([
     client.getWaba(selectedWabaId, permanentToken),
-    client.listPhoneNumbers(selectedWabaId, permanentToken),
+    collectMetaPages((after) => client.listPhoneNumbers(selectedWabaId, permanentToken, after)),
     client.listTemplates(selectedWabaId, null, permanentToken),
   ]);
   const phone = validateGrantedAssets(permanentWaba, permanentPhones, selectedWabaId, selectedPhoneId);
+  if (verifiedConnectionMode(await client.getPhoneMode(selectedPhoneId, permanentToken), selectedPhoneId) !== connectionMode) {
+    throw new Error("O modo do numero mudou durante a validacao permanente.");
+  }
   await onStage("syncing");
 
   return {
     waba: permanentWaba,
     phone,
+    connectionMode,
     assignmentCreated,
     templateAccessValidated: Array.isArray(templatePage?.data),
   };

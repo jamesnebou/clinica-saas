@@ -10,8 +10,8 @@ export async function POST(request) {
     const context = await requireClinicSection("whatsapp"); const membership = getCurrentMembership(context.memberships, context.activeClinic.id);
     if (!["owner","admin"].includes(membership?.papel)) return NextResponse.json({ error: "Acesso negado." }, { status: 403 });
     const body = await request.json();
-    for (const key of ["state","code","wabaId","phoneNumberId"]) if (!String(body?.[key] || "").trim()) return NextResponse.json({ error: "Retorno incompleto da Meta." }, { status: 400 });
-    const result = await completeEmbeddedSignupLegacy({ ...body, clinicId: context.activeClinic.id, userId: context.user.id });
+    for (const key of ["state","code","wabaId"]) if (!String(body?.[key] || "").trim()) return NextResponse.json({ error: "Retorno incompleto da Meta." }, { status: 400 });
+    const result = await completeEmbeddedSignupLegacy({ state: body.state, code: body.code, wabaId: body.wabaId, phoneNumberId: body.phoneNumberId, finishEvent: body.finishEvent, clinicId: context.activeClinic.id, userId: context.user.id });
     return NextResponse.json({ ok: true, ...result });
   } catch (error) { return NextResponse.json({ error: sanitizeMetaError(error) || "Não foi possível concluir a conexão." }, { status: 400 }); }
 }

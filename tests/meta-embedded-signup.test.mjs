@@ -52,6 +52,7 @@ function metaMock(options = {}) {
       const phoneId = options.wrongPhone ? "99999" : PHONE_ID;
       return { data: [{ id: phoneId, display_phone_number: "+55 77 99999-9999", verified_name: "Clinica Teste" }] };
     },
+    async getPhoneMode(id) { return { id, is_on_biz_app: false, platform_type: "CLOUD_API" }; },
     async listSystemUsers(_businessId, _token, after) {
       calls.push(["system-users", after || null]);
       if (options.systemUserOnSecondPage && !after) {
