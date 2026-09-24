@@ -19,6 +19,22 @@
 
 ## Diagnostico
 
+### Modelos WhatsApp e Coexistence
+
+- O painel consulta somente a conexao primaria e o WABA atual. Modelos de conexoes antigas permanecem no banco para historico, sem contar como prontos.
+- A sincronizacao usa a listagem completa da Meta. Modelos ausentes ficam marcados como DELETED, sem apagar registros.
+- Ao processar um job com modelo pendente/pausado/em recurso ou ausente, o worker sincroniza a conexao uma vez por lote e reavalia o modelo.
+- Enquanto houver analise, o job volta para retry por pelo menos uma hora sem consumir tentativa de entrega. Uma falha na consulta tambem preserva tentativas, mas aparece como retryScheduled e HTTP 422.
+- O log notification_worker_completed registra contadores; succeeded inclui processamento de outbox e NAO comprova entrega. Confirmar delivered/read em whatsapp_messages.
+
+### Frequencia real do scheduler
+
+O plano Vercel Hobby nao permite um cron de cinco minutos. Manter o financeiro diario em vercel.json. A expressao do GitHub solicita cinco minutos, mas nao garante esse intervalo; foram observados intervalos de horas em producao.
+
+Para recuperar uma fila, usar Run workflow em main no Operational Workers. Nao repetir continuamente sem verificar o resultado. Para SLA de lembretes, configurar um agendador externo confiavel com o mesmo Bearer CRON_SECRET ou, apos autorizacao de mudanca de plano, Vercel Pro. Nao publicar secrets em URLs nem ativar um segundo scheduler sem revisar o existente.
+
+### Verificacao de execucao
+
 1. Verificar a ultima execucao no GitHub Actions/Vercel.
 2. Confirmar HTTP 200 sem registrar o secret.
 3. Executar as consultas de `docs/operations-diagnostics.sql`.

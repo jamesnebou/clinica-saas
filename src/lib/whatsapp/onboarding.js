@@ -5,12 +5,10 @@ import { MetaGraphClient } from "./meta/client";
 import { MetaCloudProvider } from "./meta/provider";
 import { sanitizeMetaError } from "./meta/errors";
 import { provisionMetaOnboarding } from "./meta/onboarding-core.mjs";
-import { templatePurposeFromName } from "./meta/templates";
+import { syncTemplateStore } from "./template-store.mjs";
 import { getMetaConnectOrigin, resolveClinicReturnOrigin } from "./broker";
 import { normalizeBrokerNavigationMode } from "./broker-core.mjs";
 import { onboardingMode as validateOnboardingMode, COEXISTENCE_FINISH } from "./embedded-signup-core.mjs";
-
-const META_TEMPLATE_STATUSES = new Set(["APPROVED","PENDING","REJECTED","PAUSED","DISABLED","IN_APPEAL","PENDING_DELETION","DELETED","LIMIT_EXCEEDED"]);
 
 export async function createEmbeddedSignupSession({ clinicId, userId, role, requestOrigin, navigationMode, onboardingMode }) {
   const requestedMode = validateOnboardingMode(onboardingMode);
@@ -195,13 +193,7 @@ function throwIfError(result) {
 }
 
 export async function syncConnectionTemplates(connection, provider = new MetaCloudProvider()) {
-  const remote = await provider.syncTemplates(connection); const syncedAt = new Date().toISOString();
-  const rows = remote.map((item) => ({ clinica_id: connection.clinica_id, connection_id: connection.id, waba_id: connection.waba_id, meta_template_id: item.id || null, name: item.name, language: item.language || "pt_BR", category: item.category || null, status: META_TEMPLATE_STATUSES.has(item.status) ? item.status : "PENDING", components: item.components || [], purpose: templatePurposeFromName(item.name) || "booking_created", rejection_reason: item.rejected_reason || null, last_synced_at: syncedAt }));
-  for (const row of rows) {
-    if (!templatePurposeFromName(row.name)) continue;
-    const { error } = await supabaseAdmin.from("whatsapp_templates").upsert(row, { onConflict: "connection_id,name,language" }); if (error) throw error;
-  }
-  return { total: rows.filter((row) => templatePurposeFromName(row.name)).length, remoteTotal: remote.length };
+  return syncTemplateStore(supabaseAdmin, connection, provider);
 }
 
 export async function completeEmbeddedSignup({ state, code, wabaId, phoneNumberId, finishEvent, clinicId, userId, client = new MetaGraphClient() }) {

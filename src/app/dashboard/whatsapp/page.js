@@ -16,6 +16,7 @@ import {
 
 import { WhatsAppTemplateActions } from "./template-actions";
 import { TEMPLATE_CATALOG } from "@/lib/whatsapp/meta/templates";
+import { readConnectionTemplates } from "@/lib/whatsapp/template-store.mjs";
 import { WhatsAppTemplateCard } from "./whatsapp-template-card";
 
 export const metadata = { title: "WhatsApp | NexaWi Clínicas" };
@@ -31,14 +32,14 @@ export default async function WhatsAppPage({ searchParams }) {
   const params = await searchParams; const active = TABS.some(([key]) => key === params?.tab) ? params.tab : "conexao";
   const context = await requireClinicSection("whatsapp"); const clinic = context.activeClinic; const membership = getCurrentMembership(context.memberships, clinic.id); const manager = ["owner","admin"].includes(membership?.papel);
   const supabase = await createClient();
-  const [connectionResult, settingsResult, templatesResult, messagesResult, jobsResult, webhookResult] = await Promise.all([
+  const [connectionResult, settingsResult, messagesResult, jobsResult, webhookResult] = await Promise.all([
     supabase.from("whatsapp_connections").select("*").eq("clinica_id",clinic.id).eq("is_primary",true).maybeSingle(),
     supabase.from("whatsapp_automation_settings").select("*").eq("clinica_id",clinic.id).maybeSingle(),
-    supabase.from("whatsapp_templates").select("*").eq("clinica_id",clinic.id).order("purpose"),
     supabase.from("whatsapp_messages").select("id,cliente_id,agendamento_id,direction,message_type,template_name,status,trigger,error_code,error_message,created_at,clientes(nome)").eq("clinica_id",clinic.id).or(active === "historico" ? "trigger.eq.business_app_history" : "trigger.is.null,trigger.neq.business_app_history").order("created_at",{ascending:false}).limit(50),
     supabase.from("notification_jobs").select("id,status",{count:"exact"}).eq("clinica_id",clinic.id).in("status",["pending","retry","failed"]),
     supabase.from("whatsapp_webhook_events").select("received_at").eq("clinica_id",clinic.id).order("received_at",{ascending:false}).limit(1).maybeSingle(),
   ]);
+  const templatesResult = await readConnectionTemplates(supabase, connectionResult.error ? null : connectionResult.data);
   const schemaMissing = [connectionResult,settingsResult,templatesResult,messagesResult].some((result) => ["42P01","PGRST205"].includes(result.error?.code));
   const connection = connectionResult.data; const settings = settingsResult.data || {}; const templates = templatesResult.data || []; const messages = messagesResult.data || [];
   let importRun = null;
@@ -93,6 +94,7 @@ const preparationPercent =
     {schemaMissing ? <div className="mt-6"><Notice type="warning" title="Migration pendente">Aplique a migration <strong>20260826100000_whatsapp_meta_official.sql</strong> para ativar este módulo.</Notice></div> : null}
     {!isMetaConfigured() ? <div className="mt-6"><Notice type="warning" title="Configuração central pendente">WhatsApp Meta ainda não configurado. O restante do sistema continua funcionando normalmente.</Notice></div> : null}
     <TabNav active={active}/>
+    {templatesResult.error || connectionResult.error ? <div className="mt-6"><Notice type="warning" title="Modelos indisponíveis">Não foi possível consultar os modelos da conexão atual. Tente atualizar a página.</Notice></div> : null}
 
     {active === "conexao" ? <section className="premium-panel mt-6 rounded-lg p-5 sm:p-6"><div className="flex flex-wrap items-start justify-between gap-4"><div><h2 className="text-xl font-black">Conexão principal</h2><p className="mt-1 text-sm text-neutral-500">A clínica autoriza os próprios ativos dentro do fluxo oficial da Meta.</p></div>{manager && !connection ? <EmbeddedSignupButton/> : null}</div>
       {connection ? <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{[["Status",connection.onboarding_status === "ready" ? "Pronto" : connection.onboarding_status],["Número",connection.display_phone_number || "Aguardando"],["Nome verificado",connection.verified_name || "Aguardando"],["Qualidade",connection.quality_rating || "Sem leitura"],["Provider","Meta Cloud API"],["Cobrança",connection.billing_mode === "client_direct" ? "Direta da clínica" : "Linha NexaWi"],["Modo",connection.connection_mode === "cloud_only" ? "Cloud API" : "Coexistence"],["Último health check",date(connection.last_health_check_at)]].map(([label,value]) => <div key={label} className="rounded-lg border border-neutral-200 bg-white p-4"><p className="text-xs font-bold uppercase tracking-[.12em] text-neutral-500">{label}</p><p className="mt-2 break-words font-black">{value}</p></div>)}</div> : <div className="mt-6 rounded-lg border border-dashed border-neutral-300 bg-neutral-50 p-8 text-center"><MessageCircleMore className="mx-auto text-[#25D366]" size={36}/><h3 className="mt-3 font-black">Nenhum WhatsApp conectado</h3><p className="mx-auto mt-2 max-w-xl text-sm text-neutral-500">Use o Embedded Signup. Tokens e IDs técnicos não precisam ser digitados pela clínica.</p></div>}

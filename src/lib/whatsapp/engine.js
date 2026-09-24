@@ -6,6 +6,7 @@ import { AUTOMATION_FLAG_BY_PURPOSE, PURPOSE_BY_EVENT, deterministicInteractionT
 import { MetaCloudProvider } from "./meta/provider";
 import { sanitizeMetaError } from "./meta/errors";
 import { classifyTemplateLifecycle, deferredTemplateJobUpdate, notificationCancellationReason } from "./template-lifecycle.mjs";
+import { createTemplateRefresher, readConnectionTemplates } from "./template-store.mjs";
 
 const PURPOSE_LABELS = Object.freeze({
   booking_created: "Novo agendamento", booking_payment_pending: "Pagamento pendente",
@@ -127,6 +128,7 @@ async function sendContext(job) {
       .select("*")
       .eq("clinica_id", job.clinica_id)
       .eq("connection_id", connectionResult.data.id)
+      .eq("waba_id", connectionResult.data.waba_id)
       .eq("purpose", job.template_purpose)
       .order("updated_at", { ascending: false })
       .limit(1)
@@ -186,7 +188,7 @@ async function trackedPaymentLink(job, booking, publicBooking) {
   return `${origin}/api/whatsapp/payment/${encodeURIComponent(token)}`;
 }
 
-export async function processNotificationJob(job, { provider = new MetaCloudProvider() } = {}) {
+export async function processNotificationJob(job, { provider = new MetaCloudProvider(), refreshTemplates = createTemplateRefresher(supabaseAdmin, provider) } = {}) {
   try {
     const context = await sendContext(job);
     const cancellationReason = notificationCancellationReason({
@@ -201,7 +203,23 @@ export async function processNotificationJob(job, { provider = new MetaCloudProv
     }
     if (!context.connection) throw Object.assign(new Error("Conexão WhatsApp indisponível."), { permanent: true });
 
-    const templateLifecycle = classifyTemplateLifecycle(context.template);
+    let templateLifecycle = classifyTemplateLifecycle(context.template);
+    if (!context.template || templateLifecycle.action === "defer") {
+      try {
+        await refreshTemplates(context.connection);
+        const { data, error } = await readConnectionTemplates(supabaseAdmin, context.connection);
+        if (error) throw error;
+        context.template = data.find((item) => item.purpose === job.template_purpose) || null;
+        templateLifecycle = classifyTemplateLifecycle(context.template);
+      } catch (error) {
+        // A failed status lookup must not exhaust delivery attempts while Meta reviews the template.
+        const { error: deferError } = await supabaseAdmin.from("notification_jobs")
+          .update({ ...deferredTemplateJobUpdate(job), last_error: "Falha ao sincronizar modelos com a Meta. Nova consulta agendada." }).eq("id", job.id);
+        if (deferError) throw deferError;
+        console.error("whatsapp_template_sync_failed", { connectionId: context.connection.id, code: error?.code || "unknown" });
+        return { retryScheduled: true };
+      }
+    }
     if (templateLifecycle.action === "defer") {
       const update = { ...deferredTemplateJobUpdate(job), last_error: templateLifecycle.message };
       const { error: deferError } = await supabaseAdmin.from("notification_jobs").update(update).eq("id", job.id);
@@ -277,13 +295,16 @@ export async function runNotificationWorker({ workerId = `worker:${randomUUID()}
   }
   const { data: jobs, error: jobsError } = await supabaseAdmin.rpc("claim_notification_jobs", { p_worker: workerId, p_limit: batchSize });
   if (jobsError) throw jobsError;
+  const provider = new MetaCloudProvider({ templateSyncSignal: AbortSignal.timeout(15_000) });
+  const refreshTemplates = createTemplateRefresher(supabaseAdmin, provider);
   for (const job of jobs || []) {
     summary.processed += 1;
     try {
-      const result = await processNotificationJob(job);
+      const result = await processNotificationJob(job, { provider, refreshTemplates });
       summary.jobs += 1;
       if (result?.cancelled) summary.skipped += 1;
       else if (result?.deferred) summary.deferred += 1;
+      else if (result?.retryScheduled) summary.retryScheduled += 1;
       else summary.succeeded += 1;
     } catch (error) {
       if (error?.workerDisposition === "retry") summary.retryScheduled += 1;

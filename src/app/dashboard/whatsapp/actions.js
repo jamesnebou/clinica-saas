@@ -127,14 +127,15 @@ export async function submitWhatsAppTemplatesAction() {
 
     const { data: existing, error: existingError } = await supabaseAdmin
       .from("whatsapp_templates")
-      .select("name,language")
+      .select("name,language,status")
       .eq("clinica_id", context.activeClinic.id)
-      .eq("connection_id", connection.id);
+      .eq("connection_id", connection.id)
+      .eq("waba_id", connection.waba_id);
 
     if (existingError) throw existingError;
 
     const existingKeys = new Set(
-      (existing || []).map(
+      (existing || []).filter((item) => item.status !== "DELETED").map(
         (item) => `${item.name}:${item.language}`
       )
     );

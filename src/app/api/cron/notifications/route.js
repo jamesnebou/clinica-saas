@@ -11,6 +11,7 @@ export async function GET(request) {
   try {
     const result = await runNotificationWorker({ workerId: `vercel:${crypto.randomUUID()}`, batchSize: 25 });
     const response = workerHttpResult(result);
+    console.info("notification_worker_completed", response.body);
     return NextResponse.json(response.body, { status: response.status, headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     console.error("notification_worker_failed", { code: error?.code || "unknown" });

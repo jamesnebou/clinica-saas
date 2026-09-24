@@ -31,6 +31,7 @@ export function memoryDatabase(seed = {}) {
       tables[table] ||= [];
       let action = "select", payload, options = {}, returning = false;
       const filters = [];
+      let ordering = null;
       const query = {
         select() { returning = true; return query; },
         insert(row) { action = "insert"; payload = row; return query; },
@@ -46,6 +47,7 @@ export function memoryDatabase(seed = {}) {
           return query;
         },
         limit() { return query; },
+        order(key, { ascending = true } = {}) { ordering = { key, ascending }; return query; },
         maybeSingle() { return execute(true); },
         single() { return execute(true); },
         then(resolve, reject) { return execute(false).then(resolve, reject); },
@@ -54,6 +56,7 @@ export function memoryDatabase(seed = {}) {
         calls.push({ table, action, payload: structuredClone(payload) });
         const rows = tables[table];
         let matches = rows.filter((row) => filters.every((filter) => filter(row)));
+        if (ordering) matches.sort((a, b) => String(a[ordering.key] || "").localeCompare(String(b[ordering.key] || "")) * (ordering.ascending ? 1 : -1));
         if (action === "insert" || action === "upsert") {
           if (table === "whatsapp_messages" && failMessage) { failMessage = false; return { data: null, error: { code: "08006" } }; }
           const unique = { whatsapp_messages: "meta_message_id", whatsapp_coexistence_imports: "connection_id,phone_number_id", whatsapp_imported_contacts: "connection_id,phone_normalized" };

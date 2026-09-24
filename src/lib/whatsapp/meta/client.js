@@ -16,10 +16,10 @@ export class MetaGraphClient {
     for (const [key, value] of Object.entries(query)) if (value !== undefined && value !== null && value !== "") url.searchParams.set(key, String(value));
     return url;
   }
-  async request(path, { method = "GET", query, body, accessToken, requireAuth = true } = {}) {
+  async request(path, { method = "GET", query, body, accessToken, requireAuth = true, signal } = {}) {
     const token = accessToken || this.accessToken;
     if (requireAuth && !token) throw new Error("Token server-side da Meta não configurado.");
-    const response = await this.fetchImpl(this.url(path, query), { method, headers: { ...(requireAuth ? { Authorization: `Bearer ${token}` } : {}), ...(body ? { "Content-Type": "application/json" } : {}) }, body: body ? JSON.stringify(body) : undefined, cache: "no-store" });
+    const response = await this.fetchImpl(this.url(path, query), { method, headers: { ...(requireAuth ? { Authorization: `Bearer ${token}` } : {}), ...(body ? { "Content-Type": "application/json" } : {}) }, body: body ? JSON.stringify(body) : undefined, cache: "no-store", ...(signal ? { signal } : {}) });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok || payload?.error) {
       const meta = payload?.error || {}; const transient = response.status === 429 || response.status >= 500 || meta.is_transient === true || [1,2,4,17,32,613].includes(Number(meta.code));
@@ -54,7 +54,7 @@ throw new MetaCloudError(
   subscribeApp(id, token) { return this.request(`${id}/subscribed_apps`, { method: "POST", accessToken: token }); }
   unsubscribeApp(id) { return this.request(`${id}/subscribed_apps`, { method: "DELETE" }); }
   listSubscribedApps(id, token) { return this.request(`${id}/subscribed_apps`, { accessToken: token }); }
-  listTemplates(id, after, token) { return this.request(`${id}/message_templates`, { query: { fields: "id,name,language,category,status,components,rejected_reason", limit: 100, after }, accessToken: token }); }
+  listTemplates(id, after, token, signal) { return this.request(`${id}/message_templates`, { query: { fields: "id,name,language,category,status,components,rejected_reason", limit: 100, after }, accessToken: token, signal }); }
   createTemplate(id, payload) { return this.request(`${id}/message_templates`, { method: "POST", body: payload }); }
   getPhoneNumber(id, token) { return this.request(id, { query: { fields: "id,display_phone_number,verified_name,quality_rating,code_verification_status,platform_type,throughput" }, accessToken: token }); }
   listSystemUsers(businessId, token, after) { return this.request(`${businessId}/system_users`, { query: { fields: "id,name,role", limit: 100, after }, accessToken: token }); }
