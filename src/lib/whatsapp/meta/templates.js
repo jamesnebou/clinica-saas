@@ -10,6 +10,20 @@ export const TEMPLATE_CATALOG = Object.freeze({
   booking_rescheduled: { name: "nexawi_booking_rescheduled", category: "UTILITY" },
 });
 
+export const AUTOMATIC_MESSAGE_FOOTER = "Mensagem automática da clínica!";
+
+const TEMPLATE_EMOJI = Object.freeze({
+  booking_created: "👋",
+  booking_payment_pending: "👋",
+  payment_expiring: "⏰",
+  payment_confirmed: "✅",
+  payment_expired: "🕒",
+  appointment_reminder_24h: "📅",
+  appointment_reminder_3h: "⏰",
+  booking_cancelled: "ℹ️",
+  booking_rescheduled: "📅",
+});
+
 const TEMPLATE_COPY = Object.freeze({
   booking_created: "Olá, {{1}}. A {{2}} recebeu sua solicitação para {{3}} às {{4}}. Acompanhe as próximas atualizações por este WhatsApp.",
 booking_payment_pending: "Olá, {{1}}. Recebemos sua solicitação de agendamento na {{2}} para o dia {{3}}, às {{4}}. Para concluir a reserva do horário, é necessário realizar o pagamento do sinal no valor de {{5}}. O pagamento pode ser efetuado até {{6}}. Após a confirmação, sua reserva ficará garantida. Para realizar o pagamento, utilize o link a seguir: {{7}}. Se precisar de ajuda com o pagamento, entre em contato com a clínica.",
@@ -38,7 +52,10 @@ export function buildTemplateSubmission(purpose) {
   const catalog = TEMPLATE_CATALOG[purpose];
   const body = TEMPLATE_COPY[purpose];
   if (!catalog || !body) throw new Error("Finalidade de template desconhecida.");
-  const components = [{ type: "BODY", text: body, example: { body_text: BODY_EXAMPLES[purpose] } }];
+  const components = [
+    { type: "BODY", text: `${TEMPLATE_EMOJI[purpose]} ${body}`, example: { body_text: BODY_EXAMPLES[purpose] } },
+    { type: "FOOTER", text: AUTOMATIC_MESSAGE_FOOTER },
+  ];
   if (["appointment_reminder_24h", "appointment_reminder_3h"].includes(purpose)) {
     components.push({ type: "BUTTONS", buttons: [{ type: "QUICK_REPLY", text: "Confirmar presença" }] });
   }
@@ -53,3 +70,24 @@ export function buildTemplateMessage({ to, template, variables = [], buttonUrlSu
   return { messaging_product: "whatsapp", recipient_type: "individual", to, type: "template", template: { name: template.name, language: { code: template.language || "pt_BR" }, components } };
 }
 export function templatePurposeFromName(name) { return Object.entries(TEMPLATE_CATALOG).find(([, v]) => v.name === name)?.[0] || null; }
+
+function comparableComponents(components = []) {
+  return components.map((item) => ({
+    type: item.type, text: item.text, format: item.format,
+    buttons: item.buttons?.map(({ type, text, url, phone_number }) => ({ type, text, url, phone_number })),
+  })).sort((a, b) => String(a.type).localeCompare(String(b.type)));
+}
+
+export function templateContentMatches(template, submission) {
+  return JSON.stringify(comparableComponents(template.components)) === JSON.stringify(comparableComponents(submission.components));
+}
+
+export function templatePreview(template) {
+  const components = Array.isArray(template.components) ? template.components : [];
+  const body = components.find((item) => item.type === "BODY")?.text;
+  const examples = BODY_EXAMPLES[template.purpose]?.[0] || [];
+  return {
+    body: body ? body.replace(/\{\{(\d+)\}\}/g, (match, number) => examples[Number(number) - 1] ?? match) : "Conteúdo indisponível. Atualize o status do modelo.",
+    footer: components.find((item) => item.type === "FOOTER")?.text || null,
+  };
+}

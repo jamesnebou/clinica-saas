@@ -26,6 +26,13 @@ test("disponibilidade mensal retorna somente datas com horários", async () => {
   assert.match(source, /slotsForDate/);
 });
 
+test("busca de procedimentos so recebe foco quando solicitada pelo cliente", async () => {
+  const source = await readFile(bookingFormPath, "utf8");
+  assert.doesNotMatch(source, /<input[^\r\n]*autoFocus/);
+  assert.match(source, /<button[^\r\n]*autoFocus[^\r\n]*aria-label="Fechar seleção"/);
+  assert.match(source, /<input value=\{procedureSearch\} onChange=/);
+});
+
 test("agenda interna recupera todos os procedimentos do agendamento público", async () => {
   const source = await readFile(agendaPath, "utf8");
   assert.match(source, /site_agendamentos_publicos/);

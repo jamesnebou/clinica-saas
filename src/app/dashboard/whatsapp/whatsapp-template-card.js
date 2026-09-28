@@ -10,78 +10,61 @@ import {
   MessageCircleMore,
   TimerReset,
 } from "lucide-react";
+import { templatePreview } from "@/lib/whatsapp/meta/templates";
 
 const MESSAGE_GUIDE = {
   booking_created: {
     title: "Novo agendamento",
     when: "Enviada assim que um novo agendamento é registrado.",
     icon: CalendarPlus2,
-    preview:
-      "Olá, Mariana. A Clínica Exemplo recebeu sua solicitação para 28/08/2026 às 14:00. Acompanhe as próximas atualizações por este WhatsApp.",
   },
 
   booking_payment_pending: {
     title: "Pagamento pendente",
     when: "Enviada após o agendamento quando existe um sinal aguardando pagamento.",
     icon: CreditCard,
-    preview:
-      "Olá, Mariana. Recebemos sua solicitação de agendamento na Clínica Exemplo para o dia 28/08/2026, às 14:00. Para concluir a reserva do horário, é necessário realizar o pagamento do sinal no valor de R$ 50,00.",
   },
 
   payment_expiring: {
     title: "Pagamento perto do vencimento",
     when: "Enviada antes do prazo do sinal terminar.",
     icon: TimerReset,
-    preview:
-      "Olá, Mariana. Este é um lembrete sobre sua reserva na Clínica Exemplo. O pagamento do sinal ainda está pendente e o prazo está próximo do fim.",
   },
 
   payment_confirmed: {
     title: "Pagamento confirmado",
     when: "Enviada assim que o pagamento do sinal é confirmado.",
     icon: CheckCircle2,
-    preview:
-      "Olá, Mariana. Pagamento confirmado pela Clínica Exemplo. Seu atendimento de 28/08/2026 às 14:00 está garantido.",
   },
 
   payment_expired: {
     title: "Pagamento expirado",
     when: "Enviada quando o prazo para pagamento da reserva termina.",
     icon: Clock3,
-    preview:
-      "Olá, Mariana. O prazo de pagamento da sua reserva na Clínica Exemplo expirou. Fale com a clínica para consultar uma nova disponibilidade.",
   },
 
   appointment_reminder_24h: {
     title: "Lembrete 24h",
     when: "Enviada aproximadamente 24 horas antes do atendimento.",
     icon: BellRing,
-    preview:
-      "Olá, Mariana. A Clínica Exemplo lembra que seu atendimento está marcado para 28/08/2026 às 14:00. Confirme sua presença pelo botão.",
   },
 
   appointment_reminder_3h: {
     title: "Lembrete 3h",
     when: "Enviada próximo ao horário do atendimento.",
     icon: BellRing,
-    preview:
-      "Olá, Mariana. Seu atendimento na Clínica Exemplo será hoje, 28/08/2026, às 14:00. Confirme sua presença pelo botão.",
   },
 
   booking_cancelled: {
     title: "Cancelamento",
     when: "Enviada quando um atendimento é cancelado.",
     icon: Ban,
-    preview:
-      "Olá, Mariana. Seu atendimento na Clínica Exemplo, antes previsto para 28/08/2026 às 14:00, foi cancelado. Fale com a clínica se precisar de ajuda.",
   },
 
   booking_rescheduled: {
     title: "Remarcação",
     when: "Enviada quando o atendimento recebe uma nova data ou horário.",
     icon: CalendarClock,
-    preview:
-      "Olá, Mariana. Seu atendimento na Clínica Exemplo foi remarcado para 29/08/2026 às 15:30. Se precisar de alguma alteração ou ajuda, entre em contato com a clínica.",
   },
 };
 
@@ -137,6 +120,7 @@ function validRejectionReason(item) {
 }
 
 export function WhatsAppTemplateCard({ item }) {
+  const preview = templatePreview(item);
   const guide =
     MESSAGE_GUIDE[item.purpose] ||
     MESSAGE_GUIDE.booking_created;
@@ -188,7 +172,8 @@ export function WhatsAppTemplateCard({ item }) {
         </div>
 
         <div className="wa-message-bubble">
-          <p>{guide.preview}</p>
+          <p className="whitespace-pre-wrap break-words">{preview.body}</p>
+          {preview.footer ? <p className="mt-2 text-xs opacity-70">{preview.footer}</p> : null}
 
           <div className="wa-message-bubble__meta">
             <span>14:32</span>

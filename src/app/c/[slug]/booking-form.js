@@ -341,7 +341,7 @@ export function PublicBookingForm({ slug, procedimentos, profissionais, query, t
                 <h3 id="procedure-dialog-title" className="text-lg font-bold">Escolher {servicePlural.toLocaleLowerCase("pt-BR")}</h3>
                 <p className="mt-1 text-xs text-white/75">Selecione um ou mais itens.</p>
               </div>
-              <button type="button" onClick={() => setProceduresOpen(false)} title="Fechar" aria-label="Fechar seleção" className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-white/10 bg-white/10 text-white transition hover:bg-white/15">
+              <button type="button" autoFocus onClick={() => setProceduresOpen(false)} title="Fechar" aria-label="Fechar seleção" className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-white/10 bg-white/10 text-white transition hover:bg-white/15">
                 <X size={18} aria-hidden="true" />
               </button>
             </div>
@@ -349,7 +349,7 @@ export function PublicBookingForm({ slug, procedimentos, profissionais, query, t
             <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6">
               <label className="relative block">
                 <Search size={17} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-white/70" aria-hidden="true" />
-                <input value={procedureSearch} onChange={(event) => setProcedureSearch(event.target.value)} placeholder={`Buscar ${serviceSingular.toLocaleLowerCase("pt-BR")}`} autoFocus className="h-11 w-full rounded-xl border border-white/20 bg-white/10 pl-10 pr-4 text-sm text-white outline-none placeholder:text-white/65 focus:border-[var(--dialog-accent)]" />
+                <input value={procedureSearch} onChange={(event) => setProcedureSearch(event.target.value)} aria-label={`Buscar ${serviceSingular.toLocaleLowerCase("pt-BR")}`} placeholder={`Buscar ${serviceSingular.toLocaleLowerCase("pt-BR")}`} className="h-11 w-full rounded-xl border border-white/20 bg-white/10 pl-10 pr-4 text-sm text-white outline-none placeholder:text-white/65 focus:border-[var(--dialog-accent)]" />
               </label>
               <div className="mt-3 space-y-2">
                 {filteredProcedures.map((item) => {

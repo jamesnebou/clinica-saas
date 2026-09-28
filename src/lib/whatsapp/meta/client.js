@@ -56,6 +56,7 @@ throw new MetaCloudError(
   listSubscribedApps(id, token) { return this.request(`${id}/subscribed_apps`, { accessToken: token }); }
   listTemplates(id, after, token, signal) { return this.request(`${id}/message_templates`, { query: { fields: "id,name,language,category,status,components,rejected_reason", limit: 100, after }, accessToken: token, signal }); }
   createTemplate(id, payload) { return this.request(`${id}/message_templates`, { method: "POST", body: payload }); }
+  updateTemplate(id, components) { return this.request(id, { method: "POST", body: { components } }); }
   getPhoneNumber(id, token) { return this.request(id, { query: { fields: "id,display_phone_number,verified_name,quality_rating,code_verification_status,platform_type,throughput" }, accessToken: token }); }
   listSystemUsers(businessId, token, after) { return this.request(`${businessId}/system_users`, { query: { fields: "id,name,role", limit: 100, after }, accessToken: token }); }
   listAssignedUsers(wabaId, businessId, token) { return this.request(`${wabaId}/assigned_users`, { query: { business: businessId, fields: "id,name,tasks" }, accessToken: token }); }

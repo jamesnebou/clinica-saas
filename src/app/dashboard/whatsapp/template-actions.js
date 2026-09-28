@@ -31,6 +31,7 @@ export function WhatsAppTemplateActions() {
 
   function execute(action, type) {
     if (isPending) return;
+    if (type === "submit" && !window.confirm("Preparar e atualizar os modelos desta clínica? Alterações podem passar por nova análise da Meta e pausar os envios até a aprovação.")) return;
 
     setFeedback({
       type: "loading",
@@ -49,14 +50,7 @@ export function WhatsAppTemplateActions() {
             "Operação concluída com sucesso.";
 
           if (type === "submit") {
-            const submitted = Number(
-              result?.submitted || 0
-            );
-
-            message =
-              submitted > 0
-                ? `${submitted} mensagem(ns) preparada(s) e enviada(s) para aprovação.`
-                : "Todas as mensagens já estão preparadas.";
+            message = result.message || "Preparação concluída.";
           }
 
           if (type === "sync") {

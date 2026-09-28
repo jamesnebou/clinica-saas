@@ -6,7 +6,7 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 import { MetaCloudProvider } from "@/lib/whatsapp/meta/provider";
 import { syncConnectionTemplates } from "@/lib/whatsapp/onboarding";
 import { sanitizeMetaError } from "@/lib/whatsapp/meta/errors";
-import { TEMPLATE_CATALOG, buildTemplateSubmission } from "@/lib/whatsapp/meta/templates";
+import { prepareConnectionTemplates } from "@/lib/whatsapp/template-preparation.mjs";
 
 function checked(formData, key) { return formData.get(key) === "on"; }
 function integer(formData, key, min, max) { const value = Number(formData.get(key)); if (!Number.isInteger(value) || value < min || value > max) throw new Error(`Valor inválido em ${key}.`); return value; }
@@ -127,35 +127,16 @@ export async function submitWhatsAppTemplatesAction() {
 
     const { data: existing, error: existingError } = await supabaseAdmin
       .from("whatsapp_templates")
-      .select("name,language,status")
+      .select("id,clinica_id,connection_id,waba_id,meta_template_id,name,language,status,components")
       .eq("clinica_id", context.activeClinic.id)
       .eq("connection_id", connection.id)
       .eq("waba_id", connection.waba_id);
 
     if (existingError) throw existingError;
 
-    const existingKeys = new Set(
-      (existing || []).filter((item) => item.status !== "DELETED").map(
-        (item) => `${item.name}:${item.language}`
-      )
-    );
-
-    let submitted = 0;
-
-    for (const purpose of Object.keys(TEMPLATE_CATALOG)) {
-      const payload = buildTemplateSubmission(purpose);
-      const key = `${payload.name}:${payload.language}`;
-
-      if (existingKeys.has(key)) continue;
-
-      await provider.client.createTemplate(
-        connection.waba_id,
-        payload
-      );
-
-      submitted += 1;
-      existingKeys.add(key);
-    }
+    const { submitted, updated, blocked } = await prepareConnectionTemplates({
+      db: supabaseAdmin, connection, provider, existing: existing || [],
+    });
 
     // Traz imediatamente da Meta tudo que foi criado.
     const syncResult = await syncConnectionTemplates(
@@ -176,6 +157,8 @@ export async function submitWhatsAppTemplatesAction() {
         connection.id,
         {
           submitted,
+          updated,
+          blocked,
           synced: Number(syncResult?.total || 0),
         }
       );
@@ -188,23 +171,19 @@ export async function submitWhatsAppTemplatesAction() {
 
     revalidatePath("/dashboard/whatsapp");
 
-    if (submitted === 0) {
-      return {
-        ok: true,
-        action: "submit",
-        submitted: 0,
-        synced: Number(syncResult?.total || 0),
-        message:
-          "Nenhum template novo precisava ser enviado.",
-      };
-    }
-
     return {
       ok: true,
       action: "submit",
       submitted,
+      updated,
+      blocked,
       synced: Number(syncResult?.total || 0),
-      message: `${submitted} template(s) enviado(s) para análise da Meta.`,
+      message: [
+        submitted + updated > 0
+          ? `${submitted} modelo(s) criado(s) e ${updated} atualizado(s). O uso depende da aprovação da Meta.`
+          : blocked ? "Nenhum modelo pôde ser atualizado agora." : "Todos os modelos já estão atualizados.",
+        blocked ? `${blocked} modelo(s) ainda não permite(m) edição. Atualize o status e tente novamente após a análise da Meta.` : "",
+      ].filter(Boolean).join(" "),
     };
   } catch (error) {
     const sanitized = sanitizeMetaError(error);
