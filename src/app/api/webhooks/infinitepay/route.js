@@ -77,15 +77,17 @@ async function verifyPayment({ payload, clinicId, expectedCents }) {
   };
 }
 
-async function updateBooking({ id, payload }) {
+async function updateBooking({ id, payload, trace }) {
+  trace.stage = "booking_lookup";
   const { data: booking, error } = await supabaseAdmin
     .from("site_agendamentos_publicos")
     .select("id, clinica_id, cliente_id, profissional_id, procedimento_id, agendamento_id, crm_oportunidade_id, valor_total, valor_sinal, pagamento_status, payload")
     .eq("agendamento_id", id)
     .maybeSingle();
   if (error) throw error;
-  if (!booking) return false;
+  if (!booking) throw Object.assign(new Error("Booking not found"), { code: "BOOKING_NOT_FOUND" });
 
+  trace.stage = "payment_verification";
   const verified = await verifyPayment({
     payload,
     clinicId: booking.clinica_id,
@@ -101,10 +103,15 @@ async function updateBooking({ id, payload }) {
     infinitepay_verificacao: verified.verification,
   };
 
+  // The gateway is the provider, not a payment method accepted by the finance schema.
+  const captureMethod = String(verified.verification?.capture_method || "").trim().toLowerCase();
+  const paymentMethod = captureMethod === "pix" ? "pix" : ["credit_card", "debit_card"].includes(captureMethod) ? "cartao" : "outro";
+  trace.stage = "booking_finance";
   await syncCanonicalAppointmentPayment({ clinicId: booking.clinica_id, appointmentId: booking.agendamento_id,
     value: Number(booking.valor_total || booking.valor_sinal || 0), paidValue: Number(booking.valor_sinal || 0),
     clientId: booking.cliente_id, professionalId: booking.profissional_id, procedureId: booking.procedimento_id, description: "Sinal de agendamento",
-    provider: "infinitepay", providerReference: verified.transactionNsu || verified.orderNsu, paidAt, paymentMethod: "infinitepay", metadata: { webhook: true } });
+    provider: "infinitepay", providerReference: verified.transactionNsu || verified.orderNsu, paidAt, paymentMethod, metadata: { webhook: true } });
+  trace.stage = "booking_metadata";
   const { error: bookingError } = await supabaseAdmin
     .from("site_agendamentos_publicos")
     .update({
@@ -115,7 +122,7 @@ async function updateBooking({ id, payload }) {
       pagamento_receipt_url: verified.receiptUrl || null,
       payload: storedPayload,
     })
-    .eq("id", booking.id);
+    .eq("id", booking.id).eq("clinica_id", booking.clinica_id);
   if (bookingError) throw bookingError;
   await notifyPublicBookingPaymentConfirmedById(booking.id).catch((notificationError) => {
     console.error("Erro ao enviar confirmação de pagamento da InfinitePay:", notificationError);
@@ -135,15 +142,17 @@ async function updateBooking({ id, payload }) {
   return true;
 }
 
-async function updateStoreOrder({ id, payload }) {
+async function updateStoreOrder({ id, payload, trace }) {
+  trace.stage = "order_lookup";
   const { data: order, error } = await supabaseAdmin
     .from("pedidos_clinica")
     .select("id, clinica_id, cliente_id, total, pagamento_status, payload_pagamento")
     .eq("id", id)
     .maybeSingle();
   if (error) throw error;
-  if (!order) return false;
+  if (!order) throw Object.assign(new Error("Order not found"), { code: "ORDER_NOT_FOUND" });
 
+  trace.stage = "payment_verification";
   const verified = await verifyPayment({
     payload,
     clinicId: order.clinica_id,
@@ -158,6 +167,7 @@ async function updateStoreOrder({ id, payload }) {
     infinitepay_verificacao: verified.verification,
   };
 
+  trace.stage = "order_metadata";
   const { error: updateError } = await supabaseAdmin.from("pedidos_clinica").update({
     pagamento_gateway: "infinitepay",
     pagamento_external_id: verified.orderNsu,
@@ -168,6 +178,7 @@ async function updateStoreOrder({ id, payload }) {
   if (updateError) throw updateError;
 
   const captureMethod = String(verified.verification?.capture_method || payload?.capture_method || "").toUpperCase();
+  trace.stage = "order_finance";
   await syncCanonicalOrderPayment({ clinicId: order.clinica_id, orderId: order.id, value: Number(order.total || 0),
     paidValue: Number(order.total || 0), clientId: order.cliente_id, description: `Pedido ${order.id}`, provider: "infinitepay",
     providerReference: verified.transactionNsu || verified.orderNsu, paidAt, paymentMethod: captureMethod.includes("PIX") ? "pix" : "cartao_credito", metadata: { webhook: true, payload: storedPayload } });
@@ -175,26 +186,31 @@ async function updateStoreOrder({ id, payload }) {
 }
 
 export async function POST(request) {
-  const rateLimit = await consumePublicRateLimit({ scope: "webhook_verify", headers: request.headers });
-  if (!rateLimit.allowed) return publicRateLimitResponse(rateLimit);
+  const trace = { stage: "rate_limit", resourceType: null, resourceId: null };
   try {
+    const rateLimit = await consumePublicRateLimit({ scope: "webhook_verify", headers: request.headers });
+    if (!rateLimit.allowed) return publicRateLimitResponse(rateLimit);
+    trace.stage = "payload_read";
     const parsed = await readBoundedJson(request, 32768);
     if (!parsed.ok) return NextResponse.json({ ok: false }, { status: parsed.status, headers: { "Cache-Control": "no-store" } });
     const payload = parsed.value;
     const reference = referenceParts(paymentReference(payload));
     if (!isUuid(reference.id)) return NextResponse.json({ ok: true });
+    if (!["agendamento", "loja"].includes(reference.type)) return NextResponse.json({ ok: true });
+    trace.resourceType = reference.type;
+    trace.resourceId = reference.id;
 
-    await (reference.type === "agendamento"
-      ? await updateBooking({ id: reference.id, payload })
-      : reference.type === "loja"
-        ? await updateStoreOrder({ id: reference.id, payload })
-        : false);
+    if (reference.type === "agendamento") await updateBooking({ id: reference.id, payload, trace });
+    else await updateStoreOrder({ id: reference.id, payload, trace });
 
     return NextResponse.json({ ok: true }, { headers: { "Cache-Control": "no-store" } });
-  } catch {
+  } catch (error) {
+    // Database error details can contain customer data; log only safe diagnostic fields.
+    const code = /^[A-Z0-9_]{1,40}$/.test(String(error?.code || "")) ? error.code : "UNKNOWN";
+    console.error("infinitepay_webhook_failed", { ...trace, code });
     return NextResponse.json(
       { ok: false, error: "Falha ao validar o pagamento." },
-      { status: 400 },
+      { status: 400, headers: { "Cache-Control": "no-store" } },
     );
   }
 }
