@@ -88,10 +88,21 @@ export async function processOutboxEvent(event) {
     ]);
     const settings = settingsResult.data;
     const connection = connectionResult.data;
+    if (settingsResult.error) throw settingsResult.error;
+    if (connectionResult.error) throw connectionResult.error;
     const recipient = normalizeWhatsAppPhone(booking.clientes?.telefone);
     if (!settings?.enabled || !connection || connection.onboarding_status !== "ready" || connection.connection_status !== "connected" || !recipient) {
       await supabaseAdmin.from("domain_outbox_events").update({ status: "processed", processed_at: new Date().toISOString(), locked_at: null, locked_by: null }).eq("id", event.id);
       return { skipped: true };
+    }
+    const { data: preference, error: preferenceError } = await supabaseAdmin.from("communication_preferences")
+      .select("whatsapp_transactional_opt_in,opt_out_at").eq("clinica_id", event.clinica_id).eq("phone_normalized", recipient).maybeSingle();
+    if (preferenceError) throw preferenceError;
+    if (!preference?.whatsapp_transactional_opt_in || preference?.opt_out_at) {
+      const { error } = await supabaseAdmin.from("domain_outbox_events").update({ status: "processed", processed_at: new Date().toISOString(), locked_at: null, locked_by: null, last_error: null }).eq("id", event.id).eq("clinica_id", event.clinica_id);
+      if (error) throw error;
+      await analytics(event.clinica_id, "whatsapp_skipped", { event_id: event.id, reason: "CONSENT_REQUIRED" });
+      return { skipped: true, reason: "CONSENT_REQUIRED" };
     }
     const jobs = scheduledJobs({ event, booking, publicBooking, settings, recipient });
     if (jobs.length) {
@@ -201,6 +212,13 @@ export async function processNotificationJob(job, { provider = new MetaCloudProv
       if (cancelError) throw cancelError;
       return { cancelled: true };
     }
+    // Consent may be withdrawn after scheduling; this is an expected suppression, not a delivery failure.
+    if (!context.preference?.whatsapp_transactional_opt_in || context.preference?.opt_out_at) {
+      const { error } = await supabaseAdmin.from("notification_jobs").update({ status: "cancelled", cancelled_at: new Date().toISOString(), locked_at: null, locked_by: null, last_error: "Envio bloqueado: consentimento transacional ausente ou revogado." }).eq("id", job.id).eq("clinica_id", job.clinica_id);
+      if (error) throw error;
+      await analytics(job.clinica_id, "whatsapp_skipped", { job_id: job.id, purpose: job.template_purpose, reason: "CONSENT_REQUIRED" });
+      return { cancelled: true, reason: "CONSENT_REQUIRED" };
+    }
     if (!context.connection) throw Object.assign(new Error("Conexão WhatsApp indisponível."), { permanent: true });
 
     let templateLifecycle = classifyTemplateLifecycle(context.template);
@@ -230,7 +248,6 @@ export async function processNotificationJob(job, { provider = new MetaCloudProv
     if (templateLifecycle.action === "dead") {
       throw Object.assign(new Error(templateLifecycle.message), { permanent: true });
     }
-    if (!context.preference?.whatsapp_transactional_opt_in || context.preference?.opt_out_at) throw Object.assign(new Error("Destinatário sem consentimento transacional ativo."), { permanent: true });
     const quickReplyPayload = await confirmationInteraction(job, context.booking);
     const paymentLink = await trackedPaymentLink(job, context.booking, context.publicBooking);
     const { data: stored, error: storeError } = await supabaseAdmin.from("whatsapp_messages").upsert({

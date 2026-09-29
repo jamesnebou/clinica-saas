@@ -8,7 +8,7 @@ import { evaluateLoopGuard } from "./loop-guard.mjs";
 import { resolveAutomationLimits } from "./limits.mjs";
 import { auditAutomation, recordAutomationMetric } from "./observability.js";
 import { calculateWaitResumeAt } from "./time.mjs";
-import { deterministicActionKey } from "./core.mjs";
+import { deterministicActionKey, isDemonstrationRun } from "./core.mjs";
 import { automationRetryDecision } from "./retry-policy.mjs";
 
 function safeError(error) { return { code: error?.code || "AUTOMATION_FAILED", message: String(error?.message || error || "Falha desconhecida").slice(0, 800) }; }
@@ -30,9 +30,22 @@ async function finishRun(run, status, failure = null) {
 async function queueRetry(run, error, limits) {
   const failure = safeError(error);
   const decision = automationRetryDecision({ attempts: run.attempts, maxAttempts: limits.maxAttempts, error });
-  if (!decision.retry) return finishRun(run, "failed", failure);
+  if (!decision.retry) {
+    await finishRun(run, "failed", failure);
+    return "failed";
+  }
   const { error: updateError } = await supabaseAdmin.from("automation_runs").update({ status: "queued", next_attempt_at: decision.nextAttemptAt, locked_at: null, locked_by: null, failure_code: failure.code, failure_message: failure.message, updated_at: new Date().toISOString() }).eq("id", run.id).eq("clinica_id", run.clinica_id);
   if (updateError) throw updateError;
+  return "queued";
+}
+
+async function skipDemonstrationRun(run) {
+  // Seeded examples are UI history, never executable production work.
+  const { error } = await supabaseAdmin.from("automation_waits").update({ status: "cancelled", completed_at: new Date().toISOString(), locked_at: null, locked_by: null })
+    .eq("run_id", run.id).eq("clinica_id", run.clinica_id).in("status", ["pending", "processing"]);
+  if (error) throw error;
+  await finishRun(run, "skipped", { code: "DEMO_FIXTURE", message: "Exemplo fictício da demonstração; não executado pelo worker." });
+  return { ...run, status: "skipped" };
 }
 
 export async function continueAutomationRun(runOrId) {
@@ -40,12 +53,17 @@ export async function continueAutomationRun(runOrId) {
   const { data: run, error: runError } = await supabaseAdmin.from("automation_runs").select("*").eq("id", runId).single();
   if (runError) throw runError;
   if (["completed", "failed", "cancelled", "skipped"].includes(run.status)) return run;
+  if (isDemonstrationRun(run)) return skipDemonstrationRun(run);
   const { data: version, error: versionError } = await supabaseAdmin.from("automation_versions").select("definition").eq("clinica_id", run.clinica_id).eq("id", run.automation_version_id).single();
   if (versionError) throw versionError;
   const limits = resolveAutomationLimits(run.context_snapshot?.clinic_metadata || {});
   let plan = Array.isArray(run.execution_plan) ? run.execution_plan : version.definition.steps || [];
   let cursor = Number(run.current_step_index || 0);
   try {
+    const event = run.context_snapshot?.event;
+    if (!event?.subject?.type || !event.clinica_id || event.clinica_id !== run.clinica_id) {
+      throw Object.assign(new Error("Contexto do evento da automação ausente ou inválido."), { code: "INVALID_EVENT_CONTEXT", permanent: true });
+    }
     while (cursor < plan.length) {
       const step = plan[cursor];
       const currentRun = { ...run, current_step_index: cursor };
@@ -90,8 +108,8 @@ export async function continueAutomationRun(runOrId) {
   } catch (error) {
     const step = plan[cursor];
     if (step) await logStep({ ...run, current_step_index: cursor }, step, "failed", {}, safeError(error)).catch(() => {});
-    await queueRetry(run, error, limits);
-    return { ...run, status: error?.permanent ? "failed" : "queued" };
+    const status = await queueRetry(run, error, limits);
+    return { ...run, status };
   }
 }
 
@@ -153,6 +171,7 @@ export async function processAutomationOutboxEvent(row) {
 export async function resumeAutomationWait(wait) {
   const { data: run, error } = await supabaseAdmin.from("automation_runs").select("*").eq("id", wait.run_id).eq("clinica_id", wait.clinica_id).single();
   if (error) throw error;
+  if (isDemonstrationRun(run)) return skipDemonstrationRun(run);
   if (run.status === "cancelled") {
     await supabaseAdmin.from("automation_waits").update({ status: "cancelled", completed_at: new Date().toISOString(), locked_at: null, locked_by: null }).eq("id", wait.id);
     return run;

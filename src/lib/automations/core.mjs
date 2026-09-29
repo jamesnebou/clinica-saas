@@ -3,6 +3,12 @@ export const AUTOMATION_STATUSES = Object.freeze(["draft", "active", "paused", "
 export const RUN_STATUSES = Object.freeze(["queued", "running", "waiting", "completed", "failed", "cancelled", "skipped"]);
 export const STEP_STATUSES = Object.freeze(["pending", "running", "waiting", "completed", "failed", "cancelled", "skipped", "blocked", "unavailable"]);
 
+export function isDemonstrationRun(run) {
+  return run?.entity_type === "demo" && run?.source_event_id == null
+    && run?.context_snapshot?.clinic_metadata?.demo === true
+    && String(run?.correlation_id || "").startsWith("demo:");
+}
+
 export function createEmptyConditionGroup() {
   return { kind: "group", operator: "AND", conditions: [] };
 }

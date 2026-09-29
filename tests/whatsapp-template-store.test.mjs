@@ -16,7 +16,7 @@ registerHooks({
     }
   },
 });
-const { processNotificationJob } = await import("../src/lib/whatsapp/engine.js");
+const { processNotificationJob, processOutboxEvent } = await import("../src/lib/whatsapp/engine.js");
 const { MetaCloudProvider } = await import("../src/lib/whatsapp/meta/provider.js");
 const { MetaGraphClient } = await import("../src/lib/whatsapp/meta/client.js");
 const connection = { id: "current", clinica_id: "clinic", waba_id: "current-waba", connection_status: "connected", onboarding_status: "ready", is_primary: true };
@@ -161,12 +161,54 @@ test("still-pending and failed-sync jobs preserve attempts without sending", asy
   }
 });
 
-test("cancelled reminders never sync or send; consent still required after approval", async () => {
+test("cancelled reminders and missing consent never sync or send", async () => {
   const cancelled = jobDatabase({ purpose: "appointment_reminder_24h", bookingStatus: "cancelado" });
   assert.equal((await processNotificationJob(cancelled.job, { provider: { async syncTemplates() { assert.fail("Must not sync"); } } })).cancelled, true);
-  const { job } = jobDatabase({ consent: false });
-  await assert.rejects(processNotificationJob(job, { provider: {
-    syncTemplates: async () => remote("APPROVED"),
+  const { db, job } = jobDatabase({ consent: false });
+  const result = await processNotificationJob(job, { provider: {
+    async syncTemplates() { assert.fail("Must not sync without consent"); },
     async sendTemplate() { assert.fail("Must not send without consent"); },
-  } }), /consentimento/);
+  } });
+  assert.equal(result.cancelled, true);
+  assert.equal(result.reason, "CONSENT_REQUIRED");
+  assert.equal(db.tables.notification_jobs[0].status, "cancelled");
+  assert.equal(db.tables.eventos_analiticos[0].event_name, "whatsapp_skipped");
+});
+
+test("revoked and absent consent suppress scheduled messages without creating outbound records", async () => {
+  for (const absent of [false, true]) {
+    const { db, job } = jobDatabase();
+    if (absent) db.tables.communication_preferences = [];
+    else db.tables.communication_preferences[0].opt_out_at = new Date().toISOString();
+    assert.equal((await processNotificationJob(job, { provider: {} })).cancelled, true);
+    assert.equal(db.tables.notification_jobs[0].status, "cancelled");
+    assert.equal(db.tables.whatsapp_messages, undefined);
+  }
+});
+
+test("consent lookup errors remain technical failures rather than consent suppressions", async () => {
+  const { db, job } = jobDatabase();
+  job.attempt_count = 1;
+  const from = db.from.bind(db);
+  db.from = (table) => {
+    const query = from(table);
+    if (table === "communication_preferences") query.maybeSingle = async () => ({ error: { code: "08006", message: "Database unavailable" } });
+    return query;
+  };
+  await assert.rejects(processNotificationJob(job, { provider: {} }), { workerDisposition: "retry" });
+  assert.equal(db.tables.notification_jobs[0].status, "retry");
+});
+
+test("outbox enqueues only opted-in recipients and records expected suppressions", async () => {
+  for (const consent of [false, true]) {
+    const { db } = jobDatabase({ consent });
+    db.tables.notification_jobs = [];
+    db.tables.agendamentos[0].clientes.telefone = "5511999990000";
+    db.tables.whatsapp_automation_settings = [{ clinica_id: "clinic", enabled: true }];
+    const event = { id: "event", clinica_id: "clinic", aggregate_id: "booking", event_name: "booking.created" };
+    const result = await processOutboxEvent(event);
+    assert.equal(Boolean(result.skipped), !consent);
+    assert.equal(db.tables.notification_jobs.length, consent ? 1 : 0);
+    assert.equal(db.tables.domain_outbox_events[0].status, "processed");
+  }
 });
