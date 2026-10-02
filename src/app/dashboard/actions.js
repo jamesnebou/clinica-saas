@@ -26,6 +26,7 @@ import { getTrustedAppOrigin } from "@/lib/security/app-origin";
 import { normalizeInfinitePayHandle } from "@/lib/infinitepay/client";
 import { emitDomainEvent } from "@/lib/whatsapp/events";
 import { SEGMENT_OPTIONS } from "@/lib/segments/registry";
+import { mergeSimpleGoogleLinks } from "@/lib/google/simple-review-links.mjs";
 import {
   cancelCanonicalAppointmentPayment,
   setCanonicalAppointmentPayment,
@@ -1521,6 +1522,16 @@ export async function updateClinicSettingsAction(formData) {
   const { clinicaId, activeClinic, memberships } = await getScopedSupabase();
   requireClinicManager(memberships, clinicaId, "/dashboard/configuracoes");
 
+  let simpleReviewLinks;
+  try {
+    simpleReviewLinks = mergeSimpleGoogleLinks({}, {
+      writeUrl: formData.get("site_google_review_write_url"),
+      viewUrl: formData.get("site_google_reviews_view_url"),
+    });
+  } catch (error) {
+    redirectWithMessage("/dashboard/configuracoes", "google_links", error.message);
+  }
+
   let metadata = activeClinic.metadata || {};
   const validSegments = new Set(SEGMENT_OPTIONS.map((item) => item.slug));
   const primarySegment = validSegments.has(text(formData, "segmento_principal"))
@@ -1564,17 +1575,18 @@ export async function updateClinicSettingsAction(formData) {
 
   if (currentIntegrationError) throw currentIntegrationError;
 
-  const depoimentos = [1, 2, 3, 4].map((index) => ({
-    nome: nullableText(formData, `depoimento_${index}_nome`),
-    procedimento: nullableText(formData, `depoimento_${index}_procedimento`),
-    texto: nullableText(formData, `depoimento_${index}_texto`),
-  })).filter((item) => item.nome || item.procedimento || item.texto);
-
   // Read again before saving so an independent Google link change is not overwritten by this form.
   const { data: currentClinic, error: clinicReadError } = await supabaseAdmin
     .from("clinicas").select("metadata").eq("id", clinicaId).maybeSingle();
   if (clinicReadError) throw clinicReadError;
   metadata = currentClinic?.metadata || metadata;
+
+  const manualFieldsPresent = [1, 2, 3, 4].some((index) => ["nome", "procedimento", "texto"].some((field) => formData.has(`depoimento_${index}_${field}`)));
+  const depoimentos = manualFieldsPresent ? [1, 2, 3, 4].map((index) => ({
+    nome: nullableText(formData, `depoimento_${index}_nome`),
+    procedimento: nullableText(formData, `depoimento_${index}_procedimento`),
+    texto: nullableText(formData, `depoimento_${index}_texto`),
+  })).filter((item) => item.nome || item.procedimento || item.texto) : (metadata.site_publico?.depoimentos || []);
 
   const nextMetadata = {
     ...metadata,
@@ -1592,6 +1604,7 @@ export async function updateClinicSettingsAction(formData) {
     whatsapp_mensagem_padrao: nullableText(formData, "whatsapp_mensagem_padrao"),
     site_publico: {
       ...(metadata.site_publico || {}),
+      ...simpleReviewLinks,
       publicado: formData.get("site_publicado") === "on",
       eyebrow: nullableText(formData, "site_eyebrow"),
       titulo_hero: nullableText(formData, "site_titulo_hero"),

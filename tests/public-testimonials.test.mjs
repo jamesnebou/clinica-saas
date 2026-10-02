@@ -28,8 +28,8 @@ test("clínica sem depoimentos não recebe nomes, textos ou estrelas inventados"
 
   const page = await readFile(pagePath, "utf8");
   const menu = await readFile(menuPath, "utf8");
-  assert.match(page, /\{testimonials\.length \|\| googleConnected \? <TestimonialsSection/);
-  assert.match(page, /depoimentosAtivos=\{testimonials\.length > 0 \|\| googleConnected\}/);
+  assert.match(page, /\{showTestimonials \? <SimpleTestimonialsSection/);
+  assert.match(page, /depoimentosAtivos=\{showTestimonials\}/);
   assert.match(menu, /\{depoimentosAtivos \? <a href="#depoimentos"/);
   assert.doesNotMatch(page, /fallbackTestimonials|"Paciente"|item\.texto \|\||item\.rating \|\| 5/);
 });
@@ -104,7 +104,7 @@ test("cadastro manual mantém campos e persistência por clínica", async () => 
   assert.match(settings, /depoimento_\$\{index\}_nome/);
   assert.match(settings, /depoimento_\$\{index\}_procedimento/);
   assert.match(settings, /depoimento_\$\{index\}_texto/);
-  assert.match(actions, /const depoimentos = \[1, 2, 3, 4\]\.map/);
+  assert.match(actions, /const depoimentos = manualFieldsPresent \? \[1, 2, 3, 4\]\.map/);
   assert.match(actions, /site_publico: \{[\s\S]*?depoimentos,/);
   assert.match(actions, /\.eq\("id", clinicaId\)/);
 });

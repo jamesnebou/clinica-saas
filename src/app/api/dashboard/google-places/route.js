@@ -5,6 +5,7 @@ import { updateClinicPlaceLink } from "@/lib/google/clinic-place-link.mjs";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { consumePublicRateLimit, noStoreJson, publicRateLimitResponse } from "@/lib/security/public-antiabuse";
 import { readBoundedJson } from "@/lib/security/public-antiabuse-core.mjs";
+import { googlePlacesAutomationEnabled } from "@/lib/google/automation-mode.mjs";
 
 export const dynamic = "force-dynamic";
 
@@ -24,6 +25,7 @@ function sameOrigin(request) {
 }
 
 export async function GET(request) {
+  if (!googlePlacesAutomationEnabled()) return noStoreJson({ error: "Integração automática desativada." }, { status: 404 });
   const clinicId = await authorizedClinic();
   if (!clinicId) return noStoreJson({ error: "Acesso não autorizado." }, { status: 403 });
   const url = new URL(request.url);
@@ -42,6 +44,7 @@ export async function GET(request) {
 }
 
 export async function POST(request) {
+  if (!googlePlacesAutomationEnabled()) return noStoreJson({ error: "Integração automática desativada." }, { status: 404 });
   const clinicId = await authorizedClinic();
   if (!clinicId) return noStoreJson({ error: "Acesso não autorizado." }, { status: 403 });
   if (!sameOrigin(request) || !request.headers.get("content-type")?.startsWith("application/json")) {
@@ -66,6 +69,7 @@ export async function POST(request) {
 }
 
 export async function DELETE(request) {
+  if (!googlePlacesAutomationEnabled()) return noStoreJson({ error: "Integração automática desativada." }, { status: 404 });
   const clinicId = await authorizedClinic();
   if (!clinicId) return noStoreJson({ error: "Acesso não autorizado." }, { status: 403 });
   if (!sameOrigin(request)) return noStoreJson({ error: "Requisição inválida." }, { status: 403 });

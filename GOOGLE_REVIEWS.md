@@ -1,5 +1,13 @@
 # Avaliações do Google no site público
 
+## Modo v1.0 sem billing
+
+A experiência ativa não chama Places API. Em Configurações > Depoimentos, a clínica informa dois links HTTPS públicos: `google_review_write_url` (pedir avaliação) e `google_reviews_view_url` (ver avaliações). Ambos ficam em `clinicas.metadata.site_publico`. O site exibe apenas os botões correspondentes aos links válidos, além dos depoimentos manuais. Nenhuma avaliação, nota ou contagem é buscada ou inventada.
+
+Os campos `google_place_id` e a implementação automática abaixo são preservados para uso futuro. As rotas de Places retornam 404 antes de qualquer consulta ao Google, a menos que `GOOGLE_PLACES_AUTOMATION_ENABLED=true` seja definido explicitamente no servidor. A interface atual não chama essas rotas mesmo com a flag ativa.
+
+## Integração automática reservada para o futuro
+
 ## Configuração da NexaWi
 
 Configure `GOOGLE_MAPS_API_KEY` somente no ambiente do servidor. Habilite Places API (New), restrinja a chave à API necessária e configure cotas/alertas de orçamento no Google Cloud. A clínica não cria credenciais nem informa uma chave. A busca autenticada usa Text Search (New); a confirmação e as avaliações usam Place Details (New).

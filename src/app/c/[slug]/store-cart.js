@@ -266,7 +266,7 @@ export function PublicStorefront({ slug, products, recoveryToken = "", mode = "s
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="fixed right-20 top-4 z-[2147482900] flex h-12 min-w-12 items-center justify-center gap-3 rounded-full border border-white/15 bg-[#111]/95 px-0 text-sm font-black text-white shadow-[0_18px_55px_rgba(0,0,0,0.38)] backdrop-blur-xl transition hover:-translate-y-0.5 sm:right-24 sm:h-14 sm:px-5 lg:right-8"
+        className="fixed right-20 top-[max(0.4rem,calc(env(safe-area-inset-top)+0.2rem))] z-[2147482900] flex h-[3.75rem] min-w-[3.75rem] items-center justify-center gap-3 rounded-full border border-white/15 bg-[#111]/95 px-0 text-sm font-black text-white shadow-[0_18px_55px_rgba(0,0,0,0.38)] backdrop-blur-xl transition hover:-translate-y-0.5 sm:right-24 sm:px-5 lg:right-8 lg:top-4 lg:h-14"
         aria-label={`Abrir carrinho com ${totalQuantity} itens`}
       >
         <ShoppingBag size={20} />

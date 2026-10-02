@@ -10,8 +10,7 @@ import { BioEditor } from "./bio-editor";
 import { SiteFaqEditor } from "./site-faq-editor";
 import { SEGMENT_OPTIONS } from "@/lib/segments/registry";
 import { getPrimaryClinicSegment } from "@/lib/segments/service";
-import { getGooglePlaceDetails } from "@/lib/google/places";
-import { GoogleReviewsConnector } from "./google-reviews-connector";
+import { simpleGoogleLinks } from "@/lib/google/simple-review-links.mjs";
 
 export const metadata = { title: "Configurações | Clínica SaaS" };
 export const dynamic = "force-dynamic";
@@ -135,9 +134,7 @@ export default async function ConfiguracoesPage({ searchParams }) {
   const meta = activeClinic.metadata || {};
   const primarySegment = await getPrimaryClinicSegment(activeClinic.id, supabaseAdmin);
   const site = meta.site_publico || {};
-  const connectedPlace = site.google_reviews_ativo && site.google_place_id
-    ? await getGooglePlaceDetails(site.google_place_id).catch(() => null)
-    : null;
+  const googleLinks = simpleGoogleLinks(site);
   const schedule = normalizeSchedule(meta.horario_funcionamento || {});
   const inactiveDates = [...(schedule.datas_inativas || []), ...Array.from({ length: 5 }, () => ({ data: "", motivo: "" }))].slice(0, 12);
   const { data: domains = [] } = await supabaseAdmin
@@ -346,7 +343,25 @@ export default async function ConfiguracoesPage({ searchParams }) {
           <section className="rounded-lg border border-neutral-200 bg-white p-5 shadow-sm">
             <div className="flex items-center gap-2"><Mail size={20} className="text-[var(--clinic-primary)]" /><h2 className="text-lg font-semibold">Depoimentos do site</h2></div>
             <p className="mt-2 text-sm text-neutral-600">Os depoimentos cadastrados pela clínica continuam disponíveis mesmo sem avaliações do Google.</p>
-            <GoogleReviewsConnector connected={Boolean(site.google_reviews_ativo && site.google_place_id)} details={connectedPlace} canManage={["owner", "admin"].includes(membership?.papel)} />
+            <div className="mt-5 border-t border-neutral-200 pt-5">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-sm font-bold text-neutral-950">Avaliações do Google</h3>
+                  <p className="mt-1 text-sm text-neutral-600">Adicione os links públicos da sua clínica no Google para facilitar avaliações e permitir que seus pacientes consultem sua reputação.</p>
+                </div>
+                {googleLinks.writeUrl || googleLinks.viewUrl ? <span className="text-sm font-semibold text-emerald-700">Links do Google configurados</span> : null}
+              </div>
+              <div className="mt-4 grid gap-4 lg:grid-cols-2">
+                <div>
+                  <Field label="Link para avaliar sua clínica" name="site_google_review_write_url" type="url" defaultValue={site.google_review_write_url || ""} placeholder="https://..." />
+                  <p className="mt-1 text-xs text-neutral-500">Use o link &quot;Pedir avaliações&quot; do seu Perfil da Empresa no Google.</p>
+                </div>
+                <div>
+                  <Field label="Link das avaliações da clínica" name="site_google_reviews_view_url" type="url" defaultValue={site.google_reviews_view_url || ""} placeholder="https://maps.google.com/..." />
+                  <p className="mt-1 text-xs text-neutral-500">Use o link público da sua empresa no Google Maps.</p>
+                </div>
+              </div>
+            </div>
             <div className="mt-5 grid gap-5">
               {[1, 2, 3, 4].map((index) => {
                 const depoimento = site.depoimentos?.[index - 1] || {};

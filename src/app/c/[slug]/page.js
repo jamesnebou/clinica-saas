@@ -6,7 +6,7 @@ import { PublicBookingForm } from "./booking-form";
 import { PublicLeadForm } from "./lead-form";
 import { PublicAnalyticsTracker } from "@/components/public-site/attribution-fields";
 import { PublicMobileMenu } from "./mobile-menu";
-import { TestimonialsSection } from "./testimonials-section";
+import { SimpleTestimonialsSection } from "./simple-testimonials-section";
 import { PublicScrollEffects } from "./scroll-effects";
 import { PublicServicesSection } from "./services-section";
 import { PublicStorefront } from "./store-cart";
@@ -16,6 +16,7 @@ import { clinicTimeZone } from "@/lib/clinic/schedule";
 import { getSegmentDefinition } from "@/lib/segments/registry";
 import { getPrimaryClinicSegment } from "@/lib/segments/service";
 import { selectPublicTestimonials } from "@/lib/public-testimonials.mjs";
+import { simpleGoogleLinks } from "@/lib/google/simple-review-links.mjs";
 
 export const dynamic = "force-dynamic";
 
@@ -292,9 +293,10 @@ export default async function PublicClinicPage({ params, searchParams }) {
   const address = [clinic.endereco, clinic.cidade, clinic.estado].filter(Boolean).join(" - ");
   const year = new Date().getFullYear();
 
-  const googleConnected = Boolean(site.google_reviews_ativo && site.google_place_id);
+  const { writeUrl, viewUrl } = simpleGoogleLinks(site);
   const googleReviews = { reviews: [] };
   const testimonials = selectPublicTestimonials(site, googleReviews);
+  const showTestimonials = testimonials.length > 0 || Boolean(writeUrl || viewUrl);
   const faqItems = Array.isArray(site.faq_items)
     ? site.faq_items.filter((item) => String(item?.pergunta || "").trim() && String(item?.resposta || "").trim()).slice(0, 20)
     : [];
@@ -329,7 +331,7 @@ export default async function PublicClinicPage({ params, searchParams }) {
             <a href="#sobre">Sobre</a>
             <a href="#servicos">Serviços</a>
             {lojinhaAtiva ? <a href="#loja">Lojinha</a> : null}
-            {testimonials.length || googleConnected ? <a href="#depoimentos">Depoimentos</a> : null}
+            {showTestimonials ? <a href="#depoimentos">Depoimentos</a> : null}
             <a href="#localizacao">Localização</a>
             <a href="popup">Quero saber mais</a>
           </nav>
@@ -424,7 +426,7 @@ export default async function PublicClinicPage({ params, searchParams }) {
 
       {lojinhaAtiva && publicProducts.length ? <PublicStorefront slug={clinic.slug} products={publicProducts.map((produto) => ({ ...produto, estoque_disponivel: availableProductStock(produto) }))} recoveryToken={query?.carrinho || ""} /> : null}
 
-      {testimonials.length || googleConnected ? <TestimonialsSection slug={clinic.slug} connected={googleConnected} manual={testimonials} clientLabel={terminology.clientes.toLocaleLowerCase("pt-BR")} /> : null}
+      {showTestimonials ? <SimpleTestimonialsSection testimonials={testimonials} writeUrl={writeUrl} viewUrl={viewUrl} clientLabel={terminology.clientes.toLocaleLowerCase("pt-BR")} /> : null}
 
       {site.video_ativo ? (
         <section className="site-video-section px-5 py-24 sm:px-8">
@@ -518,7 +520,7 @@ export default async function PublicClinicPage({ params, searchParams }) {
               <a href="#sobre">Sobre</a>
               <a href="#servicos">Serviços</a>
               {lojinhaAtiva ? <a href="#loja">Lojinha</a> : null}
-              {testimonials.length || googleConnected ? <a href="#depoimentos">Depoimentos</a> : null}
+              {showTestimonials ? <a href="#depoimentos">Depoimentos</a> : null}
               {site.faq_ativo !== false && faqItems.length ? <a href="#faq">Dúvidas frequentes</a> : null}
               <a href="#agendar">Agendamento</a>
               <a href="#localizacao">Localização</a>
@@ -552,7 +554,7 @@ export default async function PublicClinicPage({ params, searchParams }) {
 
       <PublicLeadForm slug={clinic.slug} query={query} />
       <PublicAnalyticsTracker slug={clinic.slug} />
-      <PublicMobileMenu lojinhaAtiva={lojinhaAtiva} depoimentosAtivos={testimonials.length > 0 || googleConnected} />
+      <PublicMobileMenu lojinhaAtiva={lojinhaAtiva} depoimentosAtivos={showTestimonials} />
     </main>
   );
 }

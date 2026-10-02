@@ -2,10 +2,12 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 import { getGooglePlaceReviews } from "@/lib/google/places";
 import { consumePublicRateLimit, noStoreJson, publicRateLimitResponse } from "@/lib/security/public-antiabuse";
 import { isValidPublicSlug } from "@/lib/security/public-antiabuse-core.mjs";
+import { googlePlacesAutomationEnabled } from "@/lib/google/automation-mode.mjs";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request) {
+  if (!googlePlacesAutomationEnabled()) return noStoreJson({ error: "Integração automática desativada." }, { status: 404 });
   const url = new URL(request.url);
   const slug = String(url.searchParams.get("slug") || "").trim();
   if (!isValidPublicSlug(slug) || url.searchParams.has("clinica_id") || url.searchParams.has("tenant_id")) {
