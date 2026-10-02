@@ -10,6 +10,8 @@ import { BioEditor } from "./bio-editor";
 import { SiteFaqEditor } from "./site-faq-editor";
 import { SEGMENT_OPTIONS } from "@/lib/segments/registry";
 import { getPrimaryClinicSegment } from "@/lib/segments/service";
+import { getGooglePlaceDetails } from "@/lib/google/places";
+import { GoogleReviewsConnector } from "./google-reviews-connector";
 
 export const metadata = { title: "Configurações | Clínica SaaS" };
 export const dynamic = "force-dynamic";
@@ -133,6 +135,9 @@ export default async function ConfiguracoesPage({ searchParams }) {
   const meta = activeClinic.metadata || {};
   const primarySegment = await getPrimaryClinicSegment(activeClinic.id, supabaseAdmin);
   const site = meta.site_publico || {};
+  const connectedPlace = site.google_reviews_ativo && site.google_place_id
+    ? await getGooglePlaceDetails(site.google_place_id).catch(() => null)
+    : null;
   const schedule = normalizeSchedule(meta.horario_funcionamento || {});
   const inactiveDates = [...(schedule.datas_inativas || []), ...Array.from({ length: 5 }, () => ({ data: "", motivo: "" }))].slice(0, 12);
   const { data: domains = [] } = await supabaseAdmin
@@ -314,7 +319,6 @@ export default async function ConfiguracoesPage({ searchParams }) {
               </label>
               <Field label="Instagram URL" name="site_instagram_url" defaultValue={site.instagram_url || ""} placeholder="https://instagram.com/..." />
               <Field label="Google Maps URL" name="site_google_maps_url" defaultValue={site.google_maps_url || ""} placeholder="https://maps.google.com/..." />
-              <Field label="Avaliações Google URL" name="site_google_reviews_url" defaultValue={site.google_reviews_url || ""} placeholder="https://g.page/r/..." />
               <div className="lg:col-span-2">
                 <BioEditor label="Bio/apresentação da profissional" name="site_bio_profissional" defaultValue={site.bio_profissional || ""} placeholder="Conte a história, especialidade, abordagem e autoridade da profissional." />
               </div>
@@ -341,19 +345,8 @@ export default async function ConfiguracoesPage({ searchParams }) {
 
           <section className="rounded-lg border border-neutral-200 bg-white p-5 shadow-sm">
             <div className="flex items-center gap-2"><Mail size={20} className="text-[var(--clinic-primary)]" /><h2 className="text-lg font-semibold">Depoimentos do site</h2></div>
-            <p className="mt-2 text-sm text-neutral-600">Use avaliações reais do Google por Place ID ou mantenha depoimentos manuais como fallback.</p>
-            <div className="mt-5 rounded-lg border border-[color-mix(in_srgb,var(--clinic-primary)_22%,#e5e5e5)] bg-[color-mix(in_srgb,var(--clinic-accent)_8%,white)] p-4">
-              <label className="inline-flex items-center gap-2 text-sm font-bold text-neutral-800">
-                <input type="checkbox" name="site_google_reviews_ativo" defaultChecked={Boolean(site.google_reviews_ativo)} />
-                Buscar avaliações reais via Google Places API
-              </label>
-              <div className="mt-4 grid gap-4 lg:grid-cols-2">
-                <Field label="Google Place ID da clínica" name="site_google_place_id" defaultValue={site.google_place_id || ""} placeholder="ChIJ..." />
-                <div className="rounded-lg border border-white/70 bg-white/70 px-4 py-3 text-xs leading-5 text-neutral-600">
-                  Configure <strong>GOOGLE_MAPS_API_KEY</strong> no ambiente do SaaS. A busca é feita no servidor com cache de 6 horas para reduzir chamadas.
-                </div>
-              </div>
-            </div>
+            <p className="mt-2 text-sm text-neutral-600">Os depoimentos cadastrados pela clínica continuam disponíveis mesmo sem avaliações do Google.</p>
+            <GoogleReviewsConnector connected={Boolean(site.google_reviews_ativo && site.google_place_id)} details={connectedPlace} canManage={["owner", "admin"].includes(membership?.papel)} />
             <div className="mt-5 grid gap-5">
               {[1, 2, 3, 4].map((index) => {
                 const depoimento = site.depoimentos?.[index - 1] || {};

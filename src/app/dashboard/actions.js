@@ -9,6 +9,7 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 import { uploadClientPhoto, uploadClinicLogo, uploadClinicSiteImage, uploadProcedureImage, uploadProductImage } from "@/lib/supabase/storage";
 import { assertClinicLimit, assertClinicOperational } from "@/lib/saas/plans";
 import { ensureVercelProjectDomain, getVercelProjectDomain, normalizeCustomDomain, removeVercelProjectDomain } from "@/lib/vercel/domains";
+import { removeOwnedClinicDomain } from "@/lib/vercel/clinic-domain-removal.mjs";
 import { notifyPublicBookingPaymentConfirmedById, sendEmailIntegrationTest, sendWhatsAppIntegrationTest } from "@/lib/notifications/booking";
 import {
   buildScheduleFromForm,
@@ -1497,15 +1498,21 @@ export async function removeClinicDomainAction(formData) {
   requireClinicManager(memberships, clinicaId, "/dashboard/configuracoes");
   const domain = normalizeCustomDomain(requireValue(text(formData, "dominio"), "Domínio não informado."));
 
-  await removeVercelProjectDomain(domain);
-
-  const { error } = await supabaseAdmin
-    .from("clinica_dominios")
-    .delete()
-    .eq("clinica_id", clinicaId)
-    .eq("dominio", domain);
-
-  if (error) throw error;
+  let result;
+  try {
+    result = await removeOwnedClinicDomain({ clinicId: clinicaId, domain, database: supabaseAdmin, removeRemote: removeVercelProjectDomain });
+  } catch {
+    redirectWithMessage("/dashboard/configuracoes", "dominio", "Não foi possível verificar ou remover o domínio. Tente novamente.");
+  }
+  if (result.status === "not_found") {
+    redirectWithMessage("/dashboard/configuracoes", "dominio", "Domínio não encontrado nesta clínica.");
+  }
+  if (result.status === "remote_failed") {
+    redirectWithMessage("/dashboard/configuracoes", "dominio", "Não foi possível remover o domínio na Vercel. O vínculo da clínica foi preservado.");
+  }
+  if (result.status !== "removed") {
+    redirectWithMessage("/dashboard/configuracoes", "dominio", "Não foi possível concluir a remoção do domínio. Tente novamente.");
+  }
   revalidatePath("/dashboard/configuracoes");
   redirect("/dashboard/configuracoes?ok=configuracoes");
 }
@@ -1514,7 +1521,7 @@ export async function updateClinicSettingsAction(formData) {
   const { clinicaId, activeClinic, memberships } = await getScopedSupabase();
   requireClinicManager(memberships, clinicaId, "/dashboard/configuracoes");
 
-  const metadata = activeClinic.metadata || {};
+  let metadata = activeClinic.metadata || {};
   const validSegments = new Set(SEGMENT_OPTIONS.map((item) => item.slug));
   const primarySegment = validSegments.has(text(formData, "segmento_principal"))
     ? text(formData, "segmento_principal")
@@ -1563,6 +1570,12 @@ export async function updateClinicSettingsAction(formData) {
     texto: nullableText(formData, `depoimento_${index}_texto`),
   })).filter((item) => item.nome || item.procedimento || item.texto);
 
+  // Read again before saving so an independent Google link change is not overwritten by this form.
+  const { data: currentClinic, error: clinicReadError } = await supabaseAdmin
+    .from("clinicas").select("metadata").eq("id", clinicaId).maybeSingle();
+  if (clinicReadError) throw clinicReadError;
+  metadata = currentClinic?.metadata || metadata;
+
   const nextMetadata = {
     ...metadata,
     primary_segment: primarySegment,
@@ -1604,9 +1617,6 @@ export async function updateClinicSettingsAction(formData) {
       favicon_storage_path: siteUploads.site_favicon_file?.path || metadata.site_publico?.favicon_storage_path || null,
       instagram_url: nullableText(formData, "site_instagram_url"),
       google_maps_url: nullableText(formData, "site_google_maps_url"),
-      google_reviews_url: nullableText(formData, "site_google_reviews_url"),
-      google_reviews_ativo: formData.get("site_google_reviews_ativo") === "on",
-      google_place_id: nullableText(formData, "site_google_place_id"),
       depoimentos,
       faq_ativo: formData.get("site_faq_ativo") === "on",
       faq_titulo: nullableText(formData, "site_faq_titulo"),

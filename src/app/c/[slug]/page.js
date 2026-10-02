@@ -1,12 +1,12 @@
 ﻿import { Fragment } from "react";
-import { CheckCircle2, ChevronDown, Clock, CreditCard, MapPin, MessageCircle, Quote, ShieldCheck, Sparkles, Star } from "lucide-react";
+import { CheckCircle2, ChevronDown, Clock, CreditCard, MapPin, MessageCircle, ShieldCheck, Sparkles } from "lucide-react";
 import { notFound } from "next/navigation";
-import { getGooglePlaceReviews } from "@/lib/google/places";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { PublicBookingForm } from "./booking-form";
 import { PublicLeadForm } from "./lead-form";
 import { PublicAnalyticsTracker } from "@/components/public-site/attribution-fields";
 import { PublicMobileMenu } from "./mobile-menu";
+import { TestimonialsSection } from "./testimonials-section";
 import { PublicScrollEffects } from "./scroll-effects";
 import { PublicServicesSection } from "./services-section";
 import { PublicStorefront } from "./store-cart";
@@ -15,6 +15,7 @@ import { publicImageSrcSet, publicImageUrl } from "@/lib/public-image";
 import { clinicTimeZone } from "@/lib/clinic/schedule";
 import { getSegmentDefinition } from "@/lib/segments/registry";
 import { getPrimaryClinicSegment } from "@/lib/segments/service";
+import { selectPublicTestimonials } from "@/lib/public-testimonials.mjs";
 
 export const dynamic = "force-dynamic";
 
@@ -291,23 +292,12 @@ export default async function PublicClinicPage({ params, searchParams }) {
   const address = [clinic.endereco, clinic.cidade, clinic.estado].filter(Boolean).join(" - ");
   const year = new Date().getFullYear();
 
-  const fallbackTestimonials = [
-    { nome: "Mariana S.", procedimento: terminology.procedimento, texto: "Atendimento cuidadoso, ambiente acolhedor e orientações claras desde a primeira avaliação." },
-    { nome: "Fernanda L.", procedimento: terminology.procedimento, texto: "A equipe explicou cada etapa com clareza e respeitou minhas necessidades durante todo o atendimento." },
-    { nome: "Juliana M.", procedimento: terminology.procedimento, texto: "A clínica transmite confiança, organização e atenção aos detalhes antes e depois do atendimento." },
-    { nome: "Ana P.", procedimento: terminology.procedimento, texto: "Experiência excelente, pontualidade e acompanhamento profissional. Recomendo o cuidado da equipe." },
-  ];
-  const manualTestimonials = Array.isArray(site.depoimentos) && site.depoimentos.length
-    ? site.depoimentos.filter((item) => item?.nome || item?.procedimento || item?.texto)
-    : fallbackTestimonials;
-  const googleReviews = site.google_reviews_ativo
-    ? await getGooglePlaceReviews({ placeId: site.google_place_id, limit: 4 })
-    : { reviews: [], rating: null, userRatingCount: null, googleMapsUri: null };
-  const testimonials = googleReviews.reviews.length ? googleReviews.reviews : manualTestimonials;
+  const googleConnected = Boolean(site.google_reviews_ativo && site.google_place_id);
+  const googleReviews = { reviews: [] };
+  const testimonials = selectPublicTestimonials(site, googleReviews);
   const faqItems = Array.isArray(site.faq_items)
     ? site.faq_items.filter((item) => String(item?.pergunta || "").trim() && String(item?.resposta || "").trim()).slice(0, 20)
     : [];
-  const googleReviewsUrl = site.google_reviews_url || googleReviews.googleMapsUri;
   const videoCtaUrl = String(site.video_cta_url || "").trim();
   const campaignCtaUrl = String(site.campanha_cta_url || "").trim();
   const campaignCtaHref = campaignCtaUrl || "popup";
@@ -339,7 +329,7 @@ export default async function PublicClinicPage({ params, searchParams }) {
             <a href="#sobre">Sobre</a>
             <a href="#servicos">Serviços</a>
             {lojinhaAtiva ? <a href="#loja">Lojinha</a> : null}
-            <a href="#depoimentos">Depoimentos</a>
+            {testimonials.length || googleConnected ? <a href="#depoimentos">Depoimentos</a> : null}
             <a href="#localizacao">Localização</a>
             <a href="popup">Quero saber mais</a>
           </nav>
@@ -434,39 +424,7 @@ export default async function PublicClinicPage({ params, searchParams }) {
 
       {lojinhaAtiva && publicProducts.length ? <PublicStorefront slug={clinic.slug} products={publicProducts.map((produto) => ({ ...produto, estoque_disponivel: availableProductStock(produto) }))} recoveryToken={query?.carrinho || ""} /> : null}
 
-      <section id="depoimentos" className="public-section-soft mx-auto max-w-7xl px-5 py-24 sm:px-8">
-        <SectionHeading eyebrow="Depoimentos" title={`O que ${terminology.clientes.toLocaleLowerCase("pt-BR")} dizem`} description={`A satisfação de ${terminology.clientes.toLocaleLowerCase("pt-BR")} é o nosso maior reconhecimento.`} center />
-        {googleReviewsUrl || googleReviews.rating ? (
-          <div className="mt-6 flex flex-wrap justify-center gap-3 text-center">
-            {googleReviews.rating ? (
-              <span className="inline-flex items-center gap-2 rounded-full border border-neutral-200 bg-white/70 px-5 py-3 text-sm font-bold text-neutral-800 shadow-sm backdrop-blur">
-                <Star size={17} className="fill-amber-400 text-amber-400" /> {Number(googleReviews.rating).toFixed(1)} no Google
-                {googleReviews.userRatingCount ? <span className="font-semibold text-neutral-500">({googleReviews.userRatingCount} avaliações)</span> : null}
-              </span>
-            ) : null}
-            {googleReviewsUrl ? (
-              <a href={googleReviewsUrl} target="_blank" className="inline-flex items-center gap-2 rounded-full border border-neutral-200 bg-white/70 px-5 py-3 text-sm font-bold text-neutral-800 shadow-sm backdrop-blur">
-                <Star size={17} className="fill-amber-400 text-amber-400" /> Ver avaliações no Google
-              </a>
-            ) : null}
-          </div>
-        ) : null}
-        <div className="mt-10 grid gap-5 md:grid-cols-2">
-          {testimonials.map((item, index) => (
-            <article key={`${item.nome || "depoimento"}-${index}`} className={`public-card-reveal ${index % 2 === 0 ? "public-reveal-left" : "public-reveal-right"} public-hover-card rounded-[1.75rem] border border-neutral-200 bg-white/70 p-7 shadow-[0_18px_44px_rgba(23,19,15,0.07)] backdrop-blur`}>
-              <Quote size={34} className="text-[var(--clinic-primary)] opacity-35" />
-              <p className="mt-5 text-sm leading-7 text-neutral-700">{item.texto || "Experiência excelente, atendimento cuidadoso e resultado alinhado ao que eu buscava."}</p>
-              <div className="mt-7 flex items-end justify-between gap-4">
-                <div>
-                  <strong>{item.nome || "Paciente"}</strong>
-                  <p className="mt-1 text-xs text-neutral-500">{item.procedimento || terminology.procedimento}</p>
-                </div>
-                <span className="text-amber-400">{"★".repeat(Math.max(1, Math.min(5, Number(item.rating || 5))))}</span>
-              </div>
-            </article>
-          ))}
-        </div>
-      </section>
+      {testimonials.length || googleConnected ? <TestimonialsSection slug={clinic.slug} connected={googleConnected} manual={testimonials} clientLabel={terminology.clientes.toLocaleLowerCase("pt-BR")} /> : null}
 
       {site.video_ativo ? (
         <section className="site-video-section px-5 py-24 sm:px-8">
@@ -560,7 +518,7 @@ export default async function PublicClinicPage({ params, searchParams }) {
               <a href="#sobre">Sobre</a>
               <a href="#servicos">Serviços</a>
               {lojinhaAtiva ? <a href="#loja">Lojinha</a> : null}
-              <a href="#depoimentos">Depoimentos</a>
+              {testimonials.length || googleConnected ? <a href="#depoimentos">Depoimentos</a> : null}
               {site.faq_ativo !== false && faqItems.length ? <a href="#faq">Dúvidas frequentes</a> : null}
               <a href="#agendar">Agendamento</a>
               <a href="#localizacao">Localização</a>
@@ -594,7 +552,7 @@ export default async function PublicClinicPage({ params, searchParams }) {
 
       <PublicLeadForm slug={clinic.slug} query={query} />
       <PublicAnalyticsTracker slug={clinic.slug} />
-      <PublicMobileMenu lojinhaAtiva={lojinhaAtiva} />
+      <PublicMobileMenu lojinhaAtiva={lojinhaAtiva} depoimentosAtivos={testimonials.length > 0 || googleConnected} />
     </main>
   );
 }

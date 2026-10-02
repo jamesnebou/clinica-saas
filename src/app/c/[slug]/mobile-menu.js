@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Menu, X } from "lucide-react";
 
-export function PublicMobileMenu({ lojinhaAtiva = false }) {
+export function PublicMobileMenu({ lojinhaAtiva = false, depoimentosAtivos = false }) {
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
@@ -40,7 +40,7 @@ export function PublicMobileMenu({ lojinhaAtiva = false }) {
             <a href="#sobre" onClick={close}>Sobre</a>
             <a href="#servicos" onClick={close}>Serviços</a>
             {lojinhaAtiva ? <a href="#loja" onClick={close}>Lojinha</a> : null}
-            <a href="#depoimentos" onClick={close}>Depoimentos</a>
+            {depoimentosAtivos ? <a href="#depoimentos" onClick={close}>Depoimentos</a> : null}
             <a href="#localizacao" onClick={close}>Localização</a>
             <a href="popup" onClick={close}>Quero saber mais</a>
             <a href="/login-cliente" onClick={close}>Área da clínica</a>

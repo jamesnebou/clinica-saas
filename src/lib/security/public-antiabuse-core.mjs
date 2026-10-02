@@ -2,6 +2,8 @@ export const PUBLIC_RATE_LIMIT_MESSAGE = "Muitas tentativas. Aguarde alguns inst
 
 export const PUBLIC_RATE_LIMIT_POLICIES = Object.freeze({
   availability: Object.freeze({ limit: 60, windowSeconds: 60, failMode: "open" }),
+  google_reviews_read: Object.freeze({ limit: 30, windowSeconds: 60, failMode: "closed" }),
+  google_places_search: Object.freeze({ limit: 20, windowSeconds: 60, failMode: "closed" }),
   analytics: Object.freeze({ limit: 120, windowSeconds: 60, failMode: "closed" }),
   marketing_events: Object.freeze({ limit: 120, windowSeconds: 60, failMode: "closed" }),
   marketing_leads: Object.freeze({ limit: 3, windowSeconds: 120, targetLimit: 3, failMode: "closed" }),

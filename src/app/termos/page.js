@@ -17,6 +17,7 @@ const sections = [
   ["Acesso e segurança", "Cada usuário deve usar credenciais próprias. É proibido compartilhar senha, acessar dados sem autorização, exportar informações indevidamente ou utilizar o sistema para finalidade ilícita."],
   ["Planos e cobrança", "O uso pode estar sujeito a planos, limites, período de teste, cobrança recorrente, bloqueio por inadimplência e cancelamento conforme condições comerciais acordadas."],
   ["Disponibilidade", "A plataforma busca operar com estabilidade, mas pode passar por manutenções, indisponibilidades de terceiros, instabilidades de internet, falhas de provedores ou ajustes técnicos necessários à evolução do produto."],
+  ["Avaliações do Google", "Quando uma clínica conecta seu estabelecimento, a NexaWi exibe avaliações públicas fornecidas pelo Google Maps, sujeitas também aos termos do Google Maps Platform."],
   ["Suporte e contato", `Canais oficiais: ${company.contactEmail} e ${company.whatsapp}. `],
 ];
 
@@ -41,6 +42,7 @@ export default function TermosPage() {
         <div className="mt-8 space-y-6">
           {sections.map(([title, text]) => <section key={title}><h2 className="text-lg font-semibold">{title}</h2><p className="mt-2 text-sm leading-7 text-neutral-600">{text}</p></section>)}
         </div>
+        <p className="mt-4 text-sm text-neutral-600">Avaliações Google: <a className="underline" href="https://cloud.google.com/maps-platform/terms" target="_blank" rel="noopener noreferrer">Termos do Google Maps Platform</a>.</p>
         <p className="mt-8 rounded-lg bg-amber-50 p-4 text-sm leading-7 text-amber-900">Para mais informações, entre em contato com o suporte.</p>
       </section>
     </main>

@@ -20,6 +20,7 @@ const sections = [
   ["Segurança", "O sistema usa autenticação, segregação por clínica, controles de acesso por papel e armazenamento privado para fotos clínicas. Usuários da clínica devem manter senhas protegidas e conceder acesso apenas a pessoas autorizadas."],
   ["Direitos dos titulares", "Clientes podem solicitar confirmação de tratamento, acesso, correção, exclusão, portabilidade, informação sobre compartilhamento e revisão de consentimento diretamente à clínica responsável pelos dados."],
   ["Retenção", "Os dados são mantidos enquanto necessários para a prestação do serviço, obrigações legais, defesa de direitos ou conforme orientação da clínica controladora."],
+  ["Avaliações do Google", "Quando a clínica conecta seu estabelecimento, guardamos apenas o Place ID. Avaliações e dados públicos do Google Maps são consultados sob demanda, sem armazenamento persistente pela NexaWi."],
 ];
 
 export default function PrivacidadePage() {
@@ -44,6 +45,7 @@ export default function PrivacidadePage() {
         <div className="mt-8 space-y-6">
           {sections.map(([title, text]) => <section key={title}><h2 className="text-lg font-semibold">{title}</h2><p className="mt-2 text-sm leading-7 text-neutral-600">{text}</p></section>)}
         </div>
+        <p className="mt-4 text-sm text-neutral-600">Conteúdo Google Maps: <a className="underline" href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer">Política de Privacidade do Google</a>.</p>
         <p className="mt-8 rounded-lg bg-amber-50 p-4 text-sm leading-7 text-amber-900">Para mais informações, entre em contato com o suporte.</p>
       </section>
     </main>
