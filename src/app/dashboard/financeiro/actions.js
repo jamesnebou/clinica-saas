@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { requireClinicSection } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 
@@ -31,7 +32,24 @@ export async function settleReceivableAction(fd) {
 export async function transferAction(fd) {
   const {supabase,clinicId}=await scope(); const {error}=await supabase.rpc("finance_transferir",{p_clinica_id:clinicId,p_conta_origem_id:text(fd,"conta_origem_id"),p_conta_destino_id:text(fd,"conta_destino_id"),p_valor:number(fd,"valor"),p_data:new Date().toISOString(),p_descricao:text(fd,"descricao")||"Transferência entre contas",p_idempotency_key:crypto.randomUUID()}); if(error) throw error; refresh();
 }
-export async function reconcileAction(fd) { const {supabase,clinicId}=await scope(); const {error}=await supabase.from("finance_conciliacoes").update({status:"conciliado",conciliado_em:new Date().toISOString()}).eq("clinica_id",clinicId).eq("id",text(fd,"id")); if(error) throw error; refresh(); }
+export async function reconcileAction(fd) {
+  const { supabase } = await scope();
+  const id = text(fd, "id");
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+    redirect("/dashboard/financeiro/conciliacao?erro=registro_invalido");
+  }
+
+  const { error } = await supabase.rpc("finance_conciliar_liquidacao", { p_conciliacao_id: id });
+  if (error) {
+    if (error.code === "42501") redirect("/dashboard/financeiro/conciliacao?erro=sem_permissao");
+    if (error.code === "23505") redirect("/dashboard/financeiro/conciliacao?erro=ja_conciliado");
+    if (["22023", "P0002"].includes(error.code)) redirect("/dashboard/financeiro/conciliacao?erro=divergencia");
+    throw error;
+  }
+
+  refresh();
+  redirect("/dashboard/financeiro/conciliacao?resultado=conciliado");
+}
 export async function saveFinanceSettingsAction(fd) { const {supabase,clinicId}=await scope(); const {error}=await supabase.from("finance_configuracoes").upsert({clinica_id:clinicId,regime:text(fd,"regime")||"caixa",dia_fechamento:Math.min(28,Math.max(1,number(fd,"dia_fechamento"))),reconhecer_receita_agendamento_em:text(fd,"reconhecer_receita_agendamento_em")||"conclusao",comissao_padrao_percentual:number(fd,"comissao_padrao_percentual")}); if(error) throw error; refresh(); }
 export async function createAccountAction(fd) { const {supabase,clinicId}=await scope(); const {error}=await supabase.from("finance_contas").insert({clinica_id:clinicId,nome:text(fd,"nome"),tipo:text(fd,"tipo")||"banco",instituicao:nullable(fd,"instituicao"),saldo_inicial:number(fd,"saldo_inicial")}); if(error) throw error; refresh(); }
 export async function recognizePackageSessionAction(fd) { const {supabase,clinicId}=await scope(); const {error}=await supabase.rpc("finance_reconhecer_sessao_pacote",{p_clinica_id:clinicId,p_cliente_pacote_id:text(fd,"cliente_pacote_id"),p_sessao:number(fd,"sessao"),p_competencia:nullable(fd,"competencia")||new Date().toISOString().slice(0,10)}); if(error) throw error; refresh(); }
