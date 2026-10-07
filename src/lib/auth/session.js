@@ -6,6 +6,7 @@ import { canAccessSection, getCurrentMembership } from "@/lib/auth/permissions";
 import { sectionHasCapability } from "@/lib/auth/permissions";
 import { getClinicCapabilities } from "@/lib/segments/service";
 import { getClinicPlan } from "@/lib/saas/plans";
+import { assertPlanEntitlement, effectivePlanAccess } from "@/lib/saas/plan-entitlements.mjs";
 
 export function isInternalAdminUser(user) {
   return (
@@ -56,9 +57,22 @@ export async function getUserClinics() {
   }
 
   const userEmail = String(user.email || "").trim().toLowerCase();
-  const memberships = (data || []).filter((item) => (
+  let memberships = (data || []).filter((item) => (
     item.user_id === user.id || String(item.email || "").trim().toLowerCase() === userEmail
   ));
+  if (memberships.length) {
+    const ids = [...new Set(memberships.map((item) => item.clinica_id).filter(Boolean))];
+    const { data: entitlementRows, error: entitlementError } = await supabase.from("clinicas")
+      .select("id, plan_entitlements_mode, plan_entitlements_version")
+      .in("id", ids);
+    if (!entitlementError) {
+      const entitlementById = new Map((entitlementRows || []).map((row) => [row.id, row]));
+      memberships = memberships.map((item) => ({
+        ...item,
+        clinicas: item.clinicas ? { ...item.clinicas, ...(entitlementById.get(item.clinica_id) || {}) } : null,
+      }));
+    }
+  }
   const cookieStore = await cookies();
   const selectedClinicId = cookieStore.get("nexawi_active_clinic")?.value || "";
   const selectedMembership = memberships.find((item) => item.clinica_id === selectedClinicId);
@@ -98,6 +112,29 @@ export async function requireClinicSection(section) {
   }
 
   return { ...context, supabase };
+}
+
+export async function resolveClinicPlanEntitlements(context) {
+  const clinic = context?.activeClinic;
+  if (!clinic?.id) return null;
+  const supabase = context.supabase || await createClient();
+  const { data, error } = await supabase.from("clinicas")
+    .select("id, plano, plan_entitlements_mode, plan_entitlements_version")
+    .eq("id", clinic.id)
+    .maybeSingle();
+  if (error || !data || data.id !== clinic.id) return null;
+  return data;
+}
+
+export async function requireClinicCapability(section, capability, { redirectOnDenied = false } = {}) {
+  const context = await requireClinicSection(section);
+  const entitlementClinic = await resolveClinicPlanEntitlements(context);
+  const membership = getCurrentMembership(context.memberships, entitlementClinic?.id);
+  if (effectivePlanAccess({ clinic: entitlementClinic, capability, membership, userAllowed: true })) return context;
+  if (redirectOnDenied) {
+    redirect(`/dashboard/assinatura?recurso=${encodeURIComponent(capability)}`);
+  }
+  assertPlanEntitlement(null, capability);
 }
 
 export async function requireInternalAdmin() {

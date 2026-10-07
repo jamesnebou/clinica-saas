@@ -1,5 +1,5 @@
 import { PageHeader, SubmitButton } from "@/components/app-shell/ui";
-import { requireClinicSection } from "@/lib/auth/session";
+import { requireClinicCapability } from "@/lib/auth/session";
 import { listFinanceRows, money } from "@/lib/finance/service";
 import { FinancePage, FinanceTable, SchemaNotice, StatusPill } from "../shared";
 import { reconcileAction } from "../actions";
@@ -12,7 +12,7 @@ const errors = {
 };
 
 export default async function ConciliacaoPage({ searchParams }) {
-  const { activeClinic } = await requireClinicSection("financeiro");
+  const { activeClinic } = await requireClinicCapability("financeiro", "conciliacao", { redirectOnDenied: true });
   const params = await searchParams;
   const result = await listFinanceRows("finance_conciliacoes", activeClinic.id, { dateColumn: "created_at", limit: 300 });
 

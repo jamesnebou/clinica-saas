@@ -1,4 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
+import { supabaseAdmin } from "@/lib/supabase/admin";
+import { requireClinicCapability } from "@/lib/auth/session";
 
 const MISSING_CODES = new Set(["42P01", "42883", "PGRST202", "PGRST205"]);
 
@@ -64,11 +66,13 @@ export async function getFinanceCashFlow(clinicId, period) {
 }
 
 export async function getFinanceBudgetComparison(clinicId, period) {
+  const { activeClinic } = await requireClinicCapability("financeiro", "financeiro_avancado");
+  if (activeClinic.id !== clinicId) throw new Error("Clínica financeira inválida.");
   const supabase = await createClient();
   const competenceStart = `${period.month}-01`;
   const [budgets, facts, categories, centers] = await Promise.all([
     supabase.from("finance_orcamentos").select("id,categoria_id,centro_custo_id,valor_planejado,observacoes").eq("clinica_id", clinicId).eq("competencia", competenceStart),
-    supabase.from("finance_competencias").select("categoria_id,centro_custo_id,tipo,valor,estornada").eq("clinica_id", clinicId).eq("competencia", competenceStart).eq("estornada", false),
+    supabaseAdmin.from("finance_competencias").select("categoria_id,centro_custo_id,tipo,valor,estornada").eq("clinica_id", clinicId).eq("competencia", competenceStart).eq("estornada", false),
     supabase.from("finance_categorias").select("id,nome,tipo,grupo_dre").eq("clinica_id", clinicId),
     supabase.from("finance_centros_custo").select("id,nome").eq("clinica_id", clinicId),
   ]);
@@ -102,6 +106,14 @@ export async function listFinanceRows(table, clinicId, { start, end, dateColumn,
   if (isFinanceSchemaMissing(error)) return { available: false, rows: [] };
   if (error) throw error;
   return { available: true, rows: data || [] };
+}
+
+export async function getFinanceReceiptAccounts(clinicId) {
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("finance_contas").select("id,nome").eq("clinica_id", clinicId).order("nome");
+  if (isFinanceSchemaMissing(error)) return { available: false, accounts: [] };
+  if (error) throw error;
+  return { available: true, accounts: data || [] };
 }
 
 export async function getFinanceSettings(clinicId) {

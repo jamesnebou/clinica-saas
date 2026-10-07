@@ -1,5 +1,5 @@
 import { PageHeader } from "@/components/app-shell/ui";
-import { requireClinicSection } from "@/lib/auth/session";
+import { requireClinicCapability } from "@/lib/auth/session";
 import { getFinanceSettings, listFinanceRows, money, monthPeriod } from "@/lib/finance/service";
 import { payCommissionsAction } from "../actions";
 import { ExportCsvLink, FinancePage, FinanceTable, Metric, SchemaNotice, StatusPill } from "../shared";
@@ -7,7 +7,7 @@ import { ExportCsvLink, FinancePage, FinanceTable, Metric, SchemaNotice, StatusP
 const payableStatuses = new Set(["provisionada", "disponivel"]);
 
 export default async function ComissoesPage({ searchParams }) {
-  const { activeClinic } = await requireClinicSection("financeiro");
+  const { activeClinic } = await requireClinicCapability("financeiro", "comissoes", { redirectOnDenied: true });
   const params = await searchParams;
   const period = monthPeriod(params?.month);
   const [result, settings, payments] = await Promise.all([

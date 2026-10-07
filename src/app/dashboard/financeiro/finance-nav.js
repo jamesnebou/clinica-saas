@@ -12,11 +12,11 @@ const items = [
   ["/dashboard/financeiro/configuracoes", "Configurações"],
 ];
 
-export function FinanceNav() {
+export function FinanceNav({ allowedPaths = [] }) {
   const pathname = usePathname();
   return <nav aria-label="Financeiro" className="overflow-x-auto border-b border-neutral-200 bg-white/85 px-5 backdrop-blur sm:px-8 lg:px-10">
     <div className="mx-auto flex min-w-max max-w-7xl gap-1 py-2">
-      {items.map(([href,label]) => {
+      {items.filter(([href]) => allowedPaths.includes(href)).map(([href,label]) => {
         const active = href === "/dashboard/financeiro" ? pathname === href : pathname.startsWith(href);
         return <Link key={href} href={href} className={`rounded-lg px-3 py-2 text-sm font-semibold transition ${active ? "bg-[var(--clinic-primary)] text-white shadow-sm" : "text-neutral-600 hover:bg-neutral-100 hover:text-neutral-950"}`}>{label}</Link>;
       })}

@@ -6,9 +6,9 @@ insert into auth.users(id, instance_id, aud, role, email, encrypted_password) va
   ('10000000-0000-4000-8000-000000000031', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'owner-p003@nexawi.test', ''),
   ('20000000-0000-4000-8000-000000000031', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'recepcao-p003@nexawi.test', ''),
   ('30000000-0000-4000-8000-000000000031', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'owner-b-p003@nexawi.test', '');
-insert into public.clinicas(id, nome, slug, status) values
-  ('a0000000-0000-4000-8000-000000000031', 'P0-03 A', 'p003-a', 'ativa'),
-  ('b0000000-0000-4000-8000-000000000031', 'P0-03 B', 'p003-b', 'ativa');
+insert into public.clinicas(id, nome, slug, status, plano) values
+  ('a0000000-0000-4000-8000-000000000031', 'P0-03 A', 'p003-a', 'ativa', 'growth'),
+  ('b0000000-0000-4000-8000-000000000031', 'P0-03 B', 'p003-b', 'ativa', 'growth');
 insert into public.usuarios_clinica(clinica_id, user_id, email, papel, ativo) values
   ('a0000000-0000-4000-8000-000000000031', '10000000-0000-4000-8000-000000000031', 'owner-p003@nexawi.test', 'owner', true),
   ('a0000000-0000-4000-8000-000000000031', '20000000-0000-4000-8000-000000000031', 'recepcao-p003@nexawi.test', 'recepcao', true),

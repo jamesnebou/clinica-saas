@@ -1,10 +1,10 @@
 import { PageHeader, Field, SelectField, SubmitButton } from "@/components/app-shell/ui";
 import { requireClinicSection } from "@/lib/auth/session";
-import { getFinanceSettings, listFinanceRows, money, monthPeriod } from "@/lib/finance/service";
+import { getFinanceReceiptAccounts, listFinanceRows, money, monthPeriod } from "@/lib/finance/service";
 import { ExportCsvLink, FinancePage, FinanceTable, SchemaNotice, StatusPill } from "../shared";
 import { createReceivableAction, settleReceivableAction } from "../actions";
 
-export default async function ReceberPage({searchParams}) { const {activeClinic}=await requireClinicSection("financeiro"); const params=await searchParams; const period=monthPeriod(params?.month); const [result,settings]=await Promise.all([listFinanceRows("finance_recebiveis",activeClinic.id,{start:period.start,end:period.end,dateColumn:"vencimento",limit:250}),getFinanceSettings(activeClinic.id)]); return <FinancePage>
+export default async function ReceberPage({searchParams}) { const {activeClinic}=await requireClinicSection("financeiro"); const params=await searchParams; const period=monthPeriod(params?.month); const [result,settings]=await Promise.all([listFinanceRows("finance_recebiveis",activeClinic.id,{start:period.start,end:period.end,dateColumn:"vencimento",limit:250}),getFinanceReceiptAccounts(activeClinic.id)]); return <FinancePage>
   <PageHeader eyebrow="Financeiro" title="Contas a receber" description="Obrigações geradas por atendimentos, pacotes, loja, gateways e lançamentos manuais." />
   <div className="mt-4"><ExportCsvLink report="receber" month={period.month} /></div>
   {!result.available ? <div className="mt-6"><SchemaNotice/></div> : <><div className="mt-6 grid gap-5 xl:grid-cols-[1fr_340px]"><FinanceTable rows={result.rows} columns={[

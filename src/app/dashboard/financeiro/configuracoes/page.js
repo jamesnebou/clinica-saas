@@ -1,5 +1,5 @@
 import { Field, PageHeader, SelectField, SubmitButton } from "@/components/app-shell/ui";
-import { requireClinicSection } from "@/lib/auth/session";
+import { requireClinicCapability } from "@/lib/auth/session";
 import { getFinanceSettings, money } from "@/lib/finance/service";
 import {
   createAccountAction,
@@ -26,7 +26,7 @@ function Panel({ title, description, children }) {
 }
 
 export default async function ConfigPage() {
-  const { activeClinic } = await requireClinicSection("financeiro");
+  const { activeClinic } = await requireClinicCapability("financeiro", "financeiro_avancado", { redirectOnDenied: true });
   const finance = await getFinanceSettings(activeClinic.id);
 
   if (!finance.available) {

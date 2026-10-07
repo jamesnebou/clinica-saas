@@ -1,4 +1,5 @@
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import { isFullAccessClinic } from "@/lib/saas/plan-entitlements.mjs";
 
 export const ACTIVE_CLINIC_STATUSES = new Set(["trial", "ativa"]);
 export const BILLING_WARNING_STATUSES = new Set(["trial", "inadimplente", "cancelada", "bloqueada"]);
@@ -85,6 +86,7 @@ export async function getSystemPlans() {
 }
 
 export async function getClinicPlan(clinic) {
+  if (isFullAccessClinic(clinic)) return FALLBACK_PLANS.ilimitado;
   const slug = clinic?.plano || "starter";
   const { data, error } = await supabaseAdmin
     .from("planos_sistema")
@@ -120,6 +122,12 @@ export async function getClinicUsage(clinicaId) {
 }
 
 export function getClinicBillingState(clinic) {
+  if (isFullAccessClinic(clinic)) {
+    if (["inativa", "cancelada", "bloqueada"].includes(clinic.status)) {
+      return { blocked: true, level: "danger", title: "Clínica bloqueada", message: clinic.bloqueio_motivo || "A clínica está inativa ou bloqueada." };
+    }
+    return { blocked: false, level: "ok", title: "Acesso integral", message: "Acesso sem prazo de expiração." };
+  }
   const status = clinic?.status || "trial";
   const assinaturaStatus = String(clinic?.assinatura_status || "").toLowerCase();
   const trialEndsAt = clinic?.trial_ends_at ? new Date(clinic.trial_ends_at) : null;
@@ -168,6 +176,7 @@ export function assertClinicOperational(clinic) {
 
 export async function assertClinicLimit({ clinic, resource }) {
   assertClinicOperational(clinic);
+  if (isFullAccessClinic(clinic)) return;
 
   if (resource === "agendamentos_mes") {
     const plan = await getClinicPlan(clinic);

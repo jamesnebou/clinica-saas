@@ -1,11 +1,11 @@
 import { Field, PageHeader, SelectField, SubmitButton } from "@/components/app-shell/ui";
-import { requireClinicSection } from "@/lib/auth/session";
+import { requireClinicCapability } from "@/lib/auth/session";
 import { getFinanceSettings, listFinanceRows, money, monthPeriod } from "@/lib/finance/service";
 import { createPayableAction, settlePayableAction } from "../actions";
 import { ExportCsvLink, FinancePage, FinanceTable, SchemaNotice, StatusPill } from "../shared";
 
 export default async function PagarPage({ searchParams }) {
-  const { activeClinic } = await requireClinicSection("financeiro");
+  const { activeClinic } = await requireClinicCapability("financeiro", "financeiro_avancado", { redirectOnDenied: true });
   const period = monthPeriod((await searchParams)?.month);
   const [result, settings] = await Promise.all([
     listFinanceRows("finance_pagaveis", activeClinic.id, { start: period.start, end: period.end, dateColumn: "vencimento", limit: 250 }),

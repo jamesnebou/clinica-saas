@@ -1,12 +1,12 @@
 import { PageHeader } from "@/components/app-shell/ui";
-import { requireClinicSection } from "@/lib/auth/session";
+import { requireClinicCapability } from "@/lib/auth/session";
 import { getFinanceCashFlow, money, monthPeriod } from "@/lib/finance/service";
 import { FinancePage, FinanceTable, Metric, SchemaNotice, StatusPill } from "../shared";
 
 export const metadata = { title: "Fluxo de caixa | Financeiro 2.0" };
 
 export default async function FluxoPage({ searchParams }) {
-  const { activeClinic } = await requireClinicSection("financeiro");
+  const { activeClinic } = await requireClinicCapability("financeiro", "financeiro_avancado", { redirectOnDenied: true });
   const period = monthPeriod((await searchParams)?.month);
   const result = await getFinanceCashFlow(activeClinic.id, period);
   const summary = result.summary || {};

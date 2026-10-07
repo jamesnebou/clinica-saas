@@ -5,8 +5,9 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { after } from "next/server";
-import { requireClinic } from "@/lib/auth/session";
+import { requireClinic, resolveClinicPlanEntitlements } from "@/lib/auth/session";
 import { isDemoClinic, isDemoLoginEmail } from "@/lib/demo/demo-account";
+import { isFullAccessClinic } from "@/lib/saas/plan-entitlements.mjs";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import {
   createAsaasCustomerForClinic,
@@ -77,7 +78,7 @@ function safeErrorMessage(error) {
   if (error?.code === "SUBSCRIPTION_MIGRATION_REQUIRED") return "A migration de segurança das assinaturas ainda não foi aplicada.";
   if (error?.code === "ASAAS_DUPLICATE_SUBSCRIPTIONS") return "Foram encontradas múltiplas assinaturas reutilizáveis no Asaas. Faça a conciliação antes de alterar a recorrência.";
   if (error?.code === "ASAAS_SUBSCRIPTION_NOT_FOUND") return "Nenhuma assinatura reutilizável foi encontrada no Asaas.";
-  if (error?.code === "DEMO_SUBSCRIPTION_FORBIDDEN") return "A demonstração não pode criar ou alterar cobranças reais.";
+  if (error?.code === "DEMO_SUBSCRIPTION_FORBIDDEN") return "Esta clínica possui acesso integral ou isento e não pode alterar cobranças recorrentes.";
   return error?.message || "Não foi possível processar a assinatura agora.";
 }
 
@@ -95,9 +96,10 @@ function ensureCanManageSubscription(memberships, activeClinic) {
   }
 }
 
-function ensureRealClinic(user, clinic) {
-  if (isDemoLoginEmail(user?.email) || isDemoClinic(clinic) || clinic?.assinatura_status === "isenta") {
-    const error = new Error("A demonstração não pode alterar assinaturas.");
+async function ensureRealClinic(user, clinic) {
+  const entitlementClinic = await resolveClinicPlanEntitlements({ activeClinic: clinic });
+  if (isDemoLoginEmail(user?.email) || isDemoClinic(clinic) || clinic?.assinatura_status === "isenta" || isFullAccessClinic(entitlementClinic)) {
+    const error = new Error("Esta clínica possui acesso integral ou isento.");
     error.code = "DEMO_SUBSCRIPTION_FORBIDDEN";
     throw error;
   }
@@ -239,7 +241,7 @@ export async function startSubscriptionAction(formData) {
   let clinic;
   try {
     clinic = await getFullClinic(activeClinic.id);
-    ensureRealClinic(user, clinic);
+    await ensureRealClinic(user, clinic);
   } catch (error) {
     redirectSubscriptionError(error, "clinica");
   }
@@ -392,7 +394,7 @@ export async function pauseSubscriptionAction(formData) {
   try {
     ensureCanManageSubscription(memberships, activeClinic);
     clinic = await getFullClinic(activeClinic.id);
-    ensureRealClinic(user, clinic);
+    await ensureRealClinic(user, clinic);
   } catch (error) {
     redirectSubscriptionError(error, "permissao");
   }
@@ -447,7 +449,7 @@ export async function cancelSubscriptionAction(formData) {
   try {
     ensureCanManageSubscription(memberships, activeClinic);
     clinic = await getFullClinic(activeClinic.id);
-    ensureRealClinic(user, clinic);
+    await ensureRealClinic(user, clinic);
   } catch (error) {
     redirectSubscriptionError(error, "permissao");
   }

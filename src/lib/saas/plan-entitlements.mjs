@@ -126,6 +126,25 @@ export const SECTION_ENTITLEMENT = Object.freeze({
   procedimentos: "procedimentos", financeiro: "financeiro", crm: "crm", automacoes: "automacoes",
   bi: "bi", whatsapp: "whatsapp", produtos: "ecommerce", pedidos: "ecommerce",
 });
+export const FINANCE_REPORT_ENTITLEMENT = Object.freeze({
+  receber: "financeiro",
+  pagar: "financeiro_avancado",
+  movimentacoes: "financeiro_avancado",
+  comissoes: "comissoes",
+  dre: "dre",
+});
+export const FINANCE_NAV_ENTITLEMENT = Object.freeze({
+  "/dashboard/financeiro": "financeiro",
+  "/dashboard/financeiro/receber": "financeiro",
+  "/dashboard/financeiro/pacotes": "financeiro_avancado",
+  "/dashboard/financeiro/pagar": "financeiro_avancado",
+  "/dashboard/financeiro/movimentacoes": "financeiro_avancado",
+  "/dashboard/financeiro/fluxo-caixa": "financeiro_avancado",
+  "/dashboard/financeiro/comissoes": "comissoes",
+  "/dashboard/financeiro/conciliacao": "conciliacao",
+  "/dashboard/financeiro/dre": "dre",
+  "/dashboard/financeiro/configuracoes": "financeiro_avancado",
+});
 
 export function isFullAccessClinic(clinic) {
   return clinic?.plan_entitlements_version === ENTITLEMENTS_VERSION &&
@@ -138,19 +157,23 @@ export function clinicHasEntitlement(clinic, capability) {
   if (clinic?.plan_entitlements_mode === "catalog_v1" && clinic?.plan_entitlements_version === ENTITLEMENTS_VERSION) {
     return planHasEntitlement(clinic.plano, capability);
   }
-  // Existing rows need explicit classification by confirmed ID before rollout.
-  // Commercial onboarding never assigns this transitional state.
-  return clinic?.plan_entitlements_mode == null && clinic?.plan_entitlements_version == null;
+  return false;
 }
 
 export function minimumPlanFor(capability) {
   return Object.keys(PLAN_ENTITLEMENTS).find(slug => planHasEntitlement(slug, capability)) || null;
 }
 
+export function entitlementUpgradeMessage(capability) {
+  const plan = minimumPlanFor(capability);
+  if (!plan) return "Recurso indisponível para este plano.";
+  return plan === "premium" ? "Recurso exclusivo do plano Premium." : "Disponível a partir do plano Growth.";
+}
+
 export function assertPlanEntitlement(clinic, capability) {
   if (clinicHasEntitlement(clinic, capability)) return;
   const plan = minimumPlanFor(capability);
-  const error = new Error(plan ? `Este recurso está disponível no ${plan === "premium" ? "Premium" : "Growth"}. Compare os planos em Assinatura.` : "Recurso indisponível para este plano.");
+  const error = new Error(entitlementUpgradeMessage(capability));
   error.code = "PLAN_ENTITLEMENT_REQUIRED";
   error.status = 403;
   error.capability = capability;
@@ -158,8 +181,8 @@ export function assertPlanEntitlement(clinic, capability) {
   throw error;
 }
 
-export function effectivePlanAccess({ clinic, capability, userAllowed }) {
-  return userAllowed === true && clinicHasEntitlement(clinic, capability);
+export function effectivePlanAccess({ clinic, capability, membership, userAllowed }) {
+  return userAllowed === true && membership?.clinica_id === clinic?.id && clinicHasEntitlement(clinic, capability);
 }
 
 export function fullAccessLabel(clinic) {

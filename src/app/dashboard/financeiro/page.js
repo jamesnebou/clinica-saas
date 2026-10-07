@@ -1,20 +1,31 @@
 import { PageHeader } from "@/components/app-shell/ui";
-import { requireClinicSection } from "@/lib/auth/session";
+import Link from "next/link";
+import { requireClinicSection, resolveClinicPlanEntitlements } from "@/lib/auth/session";
+import { clinicHasEntitlement, entitlementUpgradeMessage } from "@/lib/saas/plan-entitlements.mjs";
 import { getFinanceBudgetComparison, getFinanceSummary, monthPeriod, money } from "@/lib/finance/service";
 import { FinancePage, FinanceTable, Metric, SchemaNotice } from "./shared";
 
 export const metadata = { title: "Financeiro 2.0 | Clínica SaaS" };
 
 export default async function FinanceiroPage({ searchParams }) {
-  const { activeClinic } = await requireClinicSection("financeiro");
+  const context = await requireClinicSection("financeiro");
+  const { activeClinic } = context;
+  const entitlementClinic = await resolveClinicPlanEntitlements(context);
+  const advanced = clinicHasEntitlement(entitlementClinic, "financeiro_avancado");
   const params = await searchParams;
   const period = monthPeriod(params?.month);
-  const [summary, budget] = await Promise.all([
-    getFinanceSummary(activeClinic.id, period),
-    getFinanceBudgetComparison(activeClinic.id, period),
-  ]);
+  const summary = await getFinanceSummary(activeClinic.id, period);
   const data = summary.data || {};
   const receber = data.receber || {}, pagar = data.pagar || {}, caixa = data.caixa || {}, comissoes = data.comissoes || {};
+  if (!advanced) return <FinancePage>
+    <PageHeader eyebrow="Financeiro" title="Financeiro essencial" description="Acompanhe recebíveis e pagamentos de atendimentos." />
+    {!summary.available ? <div className="mt-6"><SchemaNotice /></div> : <div className="mt-6 grid gap-4 sm:grid-cols-2">
+      <Metric label="Recebido no período" value={Number(receber.recebido || 0)} detail={`${money(receber.aberto)} ainda em aberto`} />
+      <Link href="/dashboard/financeiro/receber" className="premium-panel rounded-lg p-5 text-sm font-semibold text-[var(--clinic-primary)]">Ver contas a receber</Link>
+    </div>}
+    <p className="mt-6 text-sm text-neutral-600">{entitlementUpgradeMessage("financeiro_avancado")} <Link href="/dashboard/assinatura?recurso=financeiro_avancado" className="font-semibold underline">Ver planos</Link></p>
+  </FinancePage>;
+  const budget = await getFinanceBudgetComparison(activeClinic.id, period);
   return <FinancePage>
     <PageHeader eyebrow="Financeiro 2.0" title="Controle financeiro da clínica" description="Obrigações, caixa, competência, comissões e conciliação em uma fonte única e auditável." />
     <form className="mt-6 flex max-w-sm gap-3" action="/dashboard/financeiro"><input aria-label="Mês" name="month" type="month" defaultValue={period.month} className="dashboard-field h-11 min-w-0 flex-1 rounded-lg border border-neutral-200 bg-white px-3"/><button className="rounded-lg bg-neutral-950 px-4 text-sm font-bold text-white">Filtrar</button></form>

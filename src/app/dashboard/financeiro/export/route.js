@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
-import { getUserClinics } from "@/lib/auth/session";
+import { getUserClinics, resolveClinicPlanEntitlements } from "@/lib/auth/session";
 import { canAccessSection, getCurrentMembership } from "@/lib/auth/permissions";
 import { createClient } from "@/lib/supabase/server";
 import { monthPeriod } from "@/lib/finance/service";
+import { clinicHasEntitlement, FINANCE_REPORT_ENTITLEMENT } from "@/lib/saas/plan-entitlements.mjs";
 
 const REPORTS = {
   receber: { table: "finance_recebiveis", date: "vencimento", columns: ["descricao", "origem_tipo", "vencimento", "valor_total", "valor_recebido", "status", "provider"] },
@@ -29,6 +30,10 @@ export async function GET(request) {
   const reportName = String(searchParams.get("relatorio") || "");
   const report = REPORTS[reportName];
   if (!report) return NextResponse.json({ error: "Relatório inválido." }, { status: 400 });
+  const entitlementClinic = await resolveClinicPlanEntitlements(context);
+  if (FINANCE_REPORT_ENTITLEMENT[reportName] !== "financeiro" && !clinicHasEntitlement(entitlementClinic, FINANCE_REPORT_ENTITLEMENT[reportName])) {
+    return NextResponse.json({ error: "Recurso indisponível para este plano." }, { status: 403 });
+  }
 
   const period = monthPeriod(searchParams.get("month"));
   const supabase = await createClient();

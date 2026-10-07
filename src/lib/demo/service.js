@@ -49,6 +49,7 @@ async function ensureDemoClinic() {
     nome: DEMO_CLINIC_NAME, slug: DEMO_SLUG, documento: "00.000.000/0001-00",
     telefone: "77999990000", email: DEMO_EMAIL, cidade: "Vitória da Conquista", estado: "BA",
     endereco: "Av. Demo Premium, 1200 - Centro", status: "ativa", plano: "ilimitado",
+    plan_entitlements_mode: "internal_full_access", plan_entitlements_version: 1,
     trial_ends_at: null, billing_email: DEMO_EMAIL, assinatura_status: "isenta",
     asaas_customer_id: null, asaas_subscription_id: null,
     proxima_cobranca_em: null, bloqueada_em: null, bloqueio_motivo: null,

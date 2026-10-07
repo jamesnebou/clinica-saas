@@ -4,7 +4,8 @@ import { randomBytes } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { requireClinic, requireClinicSection } from "@/lib/auth/session";
+import { requireClinic, requireClinicCapability, requireClinicSection, resolveClinicPlanEntitlements } from "@/lib/auth/session";
+import { clinicHasEntitlement, entitlementUpgradeMessage } from "@/lib/saas/plan-entitlements.mjs";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { uploadClientPhoto, uploadClinicLogo, uploadClinicSiteImage, uploadProcedureImage, uploadProductImage } from "@/lib/supabase/storage";
 import { assertClinicLimit, assertClinicOperational } from "@/lib/saas/plans";
@@ -47,8 +48,8 @@ async function getScopedSupabase() {
   return { supabase, clinicaId, activeClinic, memberships: context.memberships || [], user: context.user };
 }
 
-async function getScopedSectionSupabase(section) {
-  const context = await requireClinicSection(section);
+async function getScopedSectionSupabase(section, capability = null) {
+  const context = capability ? await requireClinicCapability(section, capability) : await requireClinicSection(section);
   const activeClinic = context.activeClinic;
   const clinicaId = activeClinic?.id;
 
@@ -1130,7 +1131,7 @@ export async function updateAgendamentoFinanceiroAction(formData) {
 }
 
 export async function createPacoteAction(formData) {
-  const { supabase, clinicaId } = await getScopedSectionSupabase("financeiro");
+  const { supabase, clinicaId } = await getScopedSectionSupabase("financeiro", "financeiro_avancado");
   const procedimentoIds = formData
     .getAll("procedimento_ids")
     .map((value) => String(value || "").trim())
@@ -1153,7 +1154,7 @@ export async function createPacoteAction(formData) {
 }
 
 export async function sellClientePacoteAction(formData) {
-  const { clinicaId } = await getScopedSectionSupabase("financeiro");
+  const { clinicaId } = await getScopedSectionSupabase("financeiro", "financeiro_avancado");
   const pacoteId = requireValue(text(formData, "pacote_id"), "Pacote não informado.");
   const clienteId = requireValue(text(formData, "cliente_id"), "Cliente não informado.");
 
@@ -1461,6 +1462,7 @@ export async function updateClinicAccountAction(formData) {
 }
 
 export async function syncClinicDomainAction(formData) {
+  await requireClinicCapability("configuracoes", "dominio_personalizado", { redirectOnDenied: true });
   const { clinicaId, memberships } = await getScopedSupabase();
   requireClinicManager(memberships, clinicaId, "/dashboard/configuracoes");
   const domain = normalizeCustomDomain(requireValue(text(formData, "dominio"), "Domínio não informado."));
@@ -1495,6 +1497,7 @@ export async function syncClinicDomainAction(formData) {
 }
 
 export async function removeClinicDomainAction(formData) {
+  await requireClinicSection("configuracoes");
   const { clinicaId, memberships } = await getScopedSupabase();
   requireClinicManager(memberships, clinicaId, "/dashboard/configuracoes");
   const domain = normalizeCustomDomain(requireValue(text(formData, "dominio"), "Domínio não informado."));
@@ -1521,6 +1524,16 @@ export async function removeClinicDomainAction(formData) {
 export async function updateClinicSettingsAction(formData) {
   const { clinicaId, activeClinic, memberships } = await getScopedSupabase();
   requireClinicManager(memberships, clinicaId, "/dashboard/configuracoes");
+  const dominio = nullableText(formData, "site_dominio");
+  const entitlementClinic = await resolveClinicPlanEntitlements({ activeClinic });
+  const canManageDomain = clinicHasEntitlement(entitlementClinic, "dominio_personalizado");
+  if (dominio && !canManageDomain) {
+    const normalized = normalizeCustomDomain(dominio);
+    const { data: ownedDomain, error: ownedDomainError } = await supabaseAdmin.from("clinica_dominios")
+      .select("id").eq("clinica_id", clinicaId).eq("dominio", normalized).maybeSingle();
+    if (ownedDomainError) throw ownedDomainError;
+    if (!ownedDomain) redirectWithMessage("/dashboard/configuracoes", "dominio", entitlementUpgradeMessage("dominio_personalizado"));
+  }
 
   let simpleReviewLinks;
   try {
@@ -1653,8 +1666,6 @@ export async function updateClinicSettingsAction(formData) {
     },
   };
 
-  const dominio = nullableText(formData, "site_dominio");
-
   const { data: updatedClinic, error } = await supabaseAdmin
     .from("clinicas")
     .update({
@@ -1708,7 +1719,7 @@ export async function updateClinicSettingsAction(formData) {
 
   if (integrationError) throw integrationError;
 
-  if (dominio) {
+  if (dominio && canManageDomain) {
     const normalizedDomain = normalizeCustomDomain(dominio);
     const { data: existingDomain, error: existingDomainError } = await supabaseAdmin
       .from("clinica_dominios")

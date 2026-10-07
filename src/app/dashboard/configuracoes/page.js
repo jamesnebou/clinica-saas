@@ -1,5 +1,6 @@
 import { Clock, CreditCard, Mail, MessageCircle, Palette, Settings, ShieldCheck, UsersRound } from "lucide-react";
-import { requireClinicSection } from "@/lib/auth/session";
+import { requireClinicSection, resolveClinicPlanEntitlements } from "@/lib/auth/session";
+import { clinicHasEntitlement, entitlementUpgradeMessage } from "@/lib/saas/plan-entitlements.mjs";
 import { EmptyClinicState, Field, PageHeader, SubmitButton, TextArea } from "@/components/app-shell/ui";
 import { connectClinicAsaasAction, connectClinicInfinitePayAction, disconnectClinicAsaasAction, disconnectClinicInfinitePayAction, removeClinicDomainAction, syncClinicDomainAction, testClinicEmailIntegrationAction, testClinicWhatsappIntegrationAction, updateClinicAccountAction, updateClinicSettingsAction, updateClinicUserAction } from "../actions";
 import { ConfigTabs } from "./config-tabs";
@@ -60,7 +61,7 @@ function dnsHint(domain) {
   return "Para domínio raiz, confira na Vercel o registro solicitado. Normalmente será um A/ALIAS conforme a verificação do projeto.";
 }
 
-function DomainStatusCard({ domain }) {
+function DomainStatusCard({ domain, canSync, canRemove }) {
   const notes = parseDomainNotes(domain.observacoes);
   const status = domain.status || "pendente";
   const ready = ["ativo", "verificado"].includes(status);
@@ -88,8 +89,8 @@ function DomainStatusCard({ domain }) {
           ))}
         </div>
       ) : null}
-      <div className="mt-3 flex flex-wrap gap-2">
-        <button
+      {canSync || canRemove ? <div className="mt-3 flex flex-wrap gap-2">
+        {canSync ? <button
           type="submit"
           name="dominio"
           value={domain.dominio}
@@ -98,8 +99,8 @@ function DomainStatusCard({ domain }) {
           className="h-9 rounded-lg border border-neutral-200 bg-white px-3 text-xs font-bold text-neutral-700 shadow-sm transition hover:border-[var(--clinic-primary)] hover:text-[var(--clinic-primary)]"
         >
           Sincronizar Vercel
-        </button>
-        <button
+        </button> : null}
+        {canRemove ? <button
           type="submit"
           name="dominio"
           value={domain.dominio}
@@ -108,8 +109,8 @@ function DomainStatusCard({ domain }) {
           className="h-9 rounded-lg border border-red-200 bg-red-50 px-3 text-xs font-bold text-red-700 shadow-sm transition hover:bg-red-100"
         >
           Remover vínculo
-        </button>
-      </div>
+        </button> : null}
+      </div> : null}
     </div>
   );
 }
@@ -117,6 +118,8 @@ function DomainStatusCard({ domain }) {
 export default async function ConfiguracoesPage({ searchParams }) {
   const params = await searchParams;
   const context = await requireClinicSection("configuracoes");
+  const entitlementClinic = await resolveClinicPlanEntitlements(context);
+  const canManageDomain = clinicHasEntitlement(entitlementClinic, "dominio_personalizado");
   const initialClinic = context.activeClinic;
 
   if (!initialClinic) {
@@ -262,7 +265,12 @@ export default async function ConfiguracoesPage({ searchParams }) {
                 <input type="checkbox" name="site_publicado" defaultChecked={site.publicado !== false} />
                 Publicar site e agendamento online
               </label>
-              <Field label="Domínio próprio desejado" name="site_dominio" placeholder="www.suaclinica.com.br" defaultValue={domains[0]?.dominio || ""} />
+              {canManageDomain ? <Field label="Domínio próprio desejado" name="site_dominio" placeholder="www.suaclinica.com.br" defaultValue={domains[0]?.dominio || ""} /> : (
+                <label className="block text-sm font-medium text-neutral-700">Domínio próprio desejado
+                  <input name="site_dominio" readOnly defaultValue={domains[0]?.dominio || ""} className="mt-2 h-11 w-full rounded-lg border border-neutral-200 bg-neutral-50 px-3 text-sm text-neutral-600" />
+                  <span className="mt-2 block text-xs text-amber-800">{entitlementUpgradeMessage("dominio_personalizado")} <a href="/dashboard/assinatura?recurso=dominio_personalizado" className="font-semibold underline">Ver planos</a></span>
+                </label>
+              )}
               <Field label="Texto pequeno acima do título" name="site_eyebrow" defaultValue={site.eyebrow || ""} placeholder="Estética premium e atendimento personalizado" />
               <Field label="Título principal" name="site_titulo_hero" defaultValue={site.titulo_hero || ""} placeholder="Realce sua beleza com naturalidade" />
               <div className="lg:col-span-2">
@@ -334,7 +342,7 @@ export default async function ConfiguracoesPage({ searchParams }) {
             {domains.length ? (
               <div className="mt-5 grid gap-2">
                 {domains.map((domain) => (
-                  <DomainStatusCard key={domain.dominio} domain={domain} />
+                  <DomainStatusCard key={domain.dominio} domain={domain} canSync={canManageDomain} canRemove={["owner", "admin"].includes(membership?.papel)} />
                 ))}
               </div>
             ) : null}

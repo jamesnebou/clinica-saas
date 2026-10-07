@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { Field, PageHeader, SelectField, SubmitButton, TextArea } from "@/components/app-shell/ui";
-import { requireClinicSection } from "@/lib/auth/session";
+import { requireClinicCapability } from "@/lib/auth/session";
 import { money } from "@/lib/finance/service";
 import { createClient } from "@/lib/supabase/server";
 import { createPacoteAction, sellClientePacoteAction } from "../../actions";
@@ -8,7 +8,7 @@ import { recognizePackageSessionAction } from "../actions";
 import { FinancePage, FinanceTable } from "../shared";
 
 export default async function PacotesPage() {
-  const { activeClinic } = await requireClinicSection("financeiro");
+  const { activeClinic } = await requireClinicCapability("financeiro", "financeiro_avancado", { redirectOnDenied: true });
   const supabase = await createClient();
   const [procedures, clients, packages, sales] = await Promise.all([
     supabase.from("procedimentos").select("id,nome").eq("clinica_id", activeClinic.id).eq("ativo", true).order("nome"),

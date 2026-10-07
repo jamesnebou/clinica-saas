@@ -1,5 +1,5 @@
 import { PageHeader } from "@/components/app-shell/ui";
-import { requireClinicSection } from "@/lib/auth/session";
+import { requireClinicCapability } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { buildManagerialDre } from "@/lib/finance/core.mjs";
 import { getFinanceSettings, isFinanceSchemaMissing, money, monthPeriod } from "@/lib/finance/service";
@@ -22,7 +22,7 @@ function variation(current, previous) {
 }
 
 export default async function DrePage({ searchParams }) {
-  const { activeClinic } = await requireClinicSection("financeiro");
+  const { activeClinic } = await requireClinicCapability("financeiro", "dre", { redirectOnDenied: true });
   const currentPeriod = monthPeriod((await searchParams)?.month);
   const priorPeriod = previousMonth(currentPeriod.month);
   const supabase = await createClient();

@@ -4,6 +4,7 @@ import { Field, PageHeader, SubmitButton } from "@/components/app-shell/ui";
 import { requireClinicSection } from "@/lib/auth/session";
 import { getClinicBillingState, getClinicPlan, getClinicUsage, getLimitRows, getSystemPlans } from "@/lib/saas/plans";
 import { filterOperationalCharges } from "@/lib/saas/subscription-lifecycle.mjs";
+import { entitlementUpgradeMessage, isFullAccessClinic, REGISTERED_CAPABILITIES } from "@/lib/saas/plan-entitlements.mjs";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { cancelSubscriptionAction, pauseSubscriptionAction, startSubscriptionAction, updateBillingEmailAction } from "./actions";
 
@@ -90,7 +91,7 @@ export default async function AssinaturaPage({ searchParams }) {
     : isOpenChargeStatus(latestCharge?.status) ? latestCharge : null;
   const assinaturaStatus = String(activeClinic.assinatura_status || "").toLowerCase();
   const hasSubscription = Boolean(activeClinic.asaas_subscription_id);
-  const isExempt = assinaturaStatus === "isenta";
+  const isExempt = assinaturaStatus === "isenta" || isFullAccessClinic(activeClinic);
   const selectedPlanIntent = String(activeClinic.metadata?.selected_plan_intent || "").toLowerCase();
   const intentPlan = plans.find((plan) => String(plan.slug || "").toLowerCase() === selectedPlanIntent) || null;
   const nextBillingDate = assinaturaStatus === "isenta"
@@ -105,6 +106,8 @@ export default async function AssinaturaPage({ searchParams }) {
           title="Plano, limites e cobrança"
           description="Acompanhe o status comercial da clínica, consumo do plano e ativação de assinatura."
         />
+
+        {REGISTERED_CAPABILITIES.includes(params?.recurso) ? <Notice>{entitlementUpgradeMessage(params.recurso)} Compare os planos abaixo.</Notice> : null}
 
         {params?.ok === "assinatura" ? <Notice type="success">Assinatura enviada ao Asaas e plano ativado no sistema. O webhook manterá a cobrança sincronizada.</Notice> : null}
         {params?.ok === "reactivate" ? <Notice type="success">A cobrança recorrente foi reativada na mesma assinatura Asaas.</Notice> : null}
