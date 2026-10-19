@@ -17,7 +17,10 @@ export async function POST(request) {
   if (!verifyWebhookSignature(raw, request.headers.get("x-hub-signature-256"))) return NextResponse.json({ error: "Assinatura inválida." }, { status: 401 });
   let payload; try { payload = JSON.parse(raw); } catch { return NextResponse.json({ error: "JSON inválido." }, { status: 400 }); }
   if (payload?.object !== "whatsapp_business_account") return NextResponse.json({ ok: true, ignored: true });
-  try { const result = await ingestWhatsAppWebhook(payload); return NextResponse.json({ ok: true, ...result }); }
+  try {
+    const result = await ingestWhatsAppWebhook(payload);
+    if (result.invalidTimestampCount) return NextResponse.json({ ok: false, ...result }, { status: 422 });
+    return NextResponse.json({ ok: true, ...result });
+  }
   catch (error) { console.error("meta_whatsapp_webhook_failed", { message: error?.message }); return NextResponse.json({ ok: false }, { status: 500 }); }
 }
-

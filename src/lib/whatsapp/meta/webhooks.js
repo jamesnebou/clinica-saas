@@ -158,23 +158,31 @@ async function processOptionalSync(connection, entry, change) {
   const key = webhookDeduplicationKey({ field: change.field, waba: entry.id, phone: connection.phone_number_id, payload_hash: hashOpaqueToken(JSON.stringify(change.value)) });
   const prior = await supabaseAdmin.from("whatsapp_webhook_events").select("status").eq("deduplication_key", key).eq("clinica_id", connection.clinica_id).maybeSingle();
   if (prior.error) throw prior.error;
-  if (["processed", "ignored"].includes(prior.data?.status)) return;
+  if (["processed", "ignored"].includes(prior.data?.status)) return 0;
   const authorized = Boolean(run?.requests?.[change.field === "history" ? "history" : "smb_app_state_sync"]);
   const summary = authorized
     ? await (change.field === "history" ? importHistory : importContacts)({ connection, run, value: change.value || {} })
     : { reason: "sync_not_requested", imported: false };
+  const invalidTimestampCount = summary.invalid_timestamp_count || 0;
   const result = await supabaseAdmin.from("whatsapp_webhook_events").upsert({
     connection_id: connection.id, clinica_id: connection.clinica_id,
     deduplication_key: key,
     object_type: "whatsapp_business_account", event_type: change.field,
-    waba_id: entry.id, phone_number_id: connection.phone_number_id, status: authorized ? "processed" : "ignored",
-    payload: summary, processed_at: new Date().toISOString(),
-  }, { onConflict: "deduplication_key", ignoreDuplicates: true });
+    waba_id: entry.id, phone_number_id: connection.phone_number_id,
+    status: invalidTimestampCount ? "failed" : authorized ? "processed" : "ignored",
+    last_error: invalidTimestampCount ? "invalid_timestamp" : null,
+    payload: summary, processed_at: invalidTimestampCount ? null : new Date().toISOString(),
+  }, { onConflict: "deduplication_key", ignoreDuplicates: prior.data?.status !== "failed" });
   if (result.error) throw result.error;
+  if (invalidTimestampCount) console.warn("meta_whatsapp_import_invalid_timestamp", {
+    field: change.field, count: invalidTimestampCount, samples: summary.invalid_timestamp_samples,
+  });
+  return invalidTimestampCount;
 }
 
 export async function ingestWhatsAppWebhook(payload) {
   let processed = 0;
+  let invalidTimestampCount = 0;
   for (const entry of payload?.entry || []) for (const change of entry?.changes || []) {
     if (!["messages", "smb_message_echoes", "history", "smb_app_state_sync"].includes(change?.field)) continue;
     const value = change?.value || {}; const connection = await resolveConnection(value?.metadata?.phone_number_id, entry.id);
@@ -184,12 +192,12 @@ export async function ingestWhatsAppWebhook(payload) {
       if (change.field === "smb_message_echoes") {
         for (const message of value.message_echoes || []) { await processAppEcho({ connection, entry, value, message }); processed += 1; }
       } else {
-        await processOptionalSync(connection, entry, change);
+        invalidTimestampCount += await processOptionalSync(connection, entry, change);
       }
       continue;
     }
     for (const status of value.statuses || []) { await processStatus({ connection, entry, value, status }); processed += 1; }
     for (const message of value.messages || []) { await processInbound({ connection, entry, value, message }); processed += 1; }
   }
-  return { processed };
+  return { processed, invalidTimestampCount };
 }

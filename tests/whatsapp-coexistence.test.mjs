@@ -1,15 +1,19 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { createHmac } from "node:crypto";
 import { embeddedSignupOptions, parseSignupEvent, createSignupAttempt, COEXISTENCE_FINISH } from "../src/lib/whatsapp/embedded-signup-core.mjs";
 import { provisionMetaOnboarding, verifiedConnectionMode } from "../src/lib/whatsapp/meta/onboarding-core.mjs";
 import { insertMetaMessage } from "../src/lib/whatsapp/meta/message-storage.mjs";
 import { graphMock, memoryDatabase, installWhatsAppTestHooks, setDatabase } from "./helpers/whatsapp-db.mjs";
 const hooks = installWhatsAppTestHooks();
 const { ingestWhatsAppWebhook } = await import("../src/lib/whatsapp/meta/webhooks.js");
+const { parseHistoryTimestamp, parseContactTimestamp } = await import("../src/lib/whatsapp/meta/coexistence-history.js");
+const { POST: webhookPost } = await import("../src/app/api/webhooks/meta/whatsapp/route.js");
 const { createEmbeddedSignupSession, completeEmbeddedSignup } = await import("../src/lib/whatsapp/onboarding.js");
 const { authorizeCoexistenceImport } = await import("../src/lib/whatsapp/meta/coexistence-import.js");
 hooks.deregister();
 const origin = "https://www.facebook.com";
+const validHistoryTimestamp = "1780000000";
 const finish = (event = "FINISH", data = { waba_id: "40004", phone_number_id: "50005" }) => ({ type: "WA_EMBEDDED_SIGNUP", event, data });
 const args = (mode = "cloud_only") => ({
   client: graphMock(mode), code: "test-code", wabaId: "40004", phoneNumberId: "50005",
@@ -250,8 +254,8 @@ test("historico autorizado deduplica IDs e nao confirma agenda nem processa opt-
   const db = webhookDb();
   await authorizeCoexistenceImport(importArgs());
   const payload = syncPayload("history", { history: [{ threads: [{ id: "5511999991111", messages: [
-    { id: "wamid.h-in", from: "5511999991111", timestamp: "1800000000", type: "text", text: { body: "PARAR" }, button: { payload: "nxw:confirm:test" } },
-    { id: "wamid.h-out", from: "5511999990000", timestamp: "1800000001", type: "text", text: { body: "hello" }, history_context: { status: "READ" } },
+    { id: "wamid.h-in", from: "5511999991111", timestamp: validHistoryTimestamp, type: "text", text: { body: "PARAR" }, button: { payload: "nxw:confirm:test" } },
+    { id: "wamid.h-out", from: "5511999990000", timestamp: String(Number(validHistoryTimestamp) + 1), type: "text", text: { body: "hello" }, history_context: { status: "READ" } },
   ] }] }] });
   await ingestWhatsAppWebhook(payload); await ingestWhatsAppWebhook(payload);
   assert.equal(db.tables.whatsapp_messages.length, 2);
@@ -276,10 +280,10 @@ test("contatos importados isolados de pacientes e eventos fora de ordem nao ress
   const db = webhookDb();
   await authorizeCoexistenceImport(importArgs());
   const contact = (action, time) => syncPayload("smb_app_state_sync", { state_sync: [{ type: "contact", action, contact: { full_name: "Contato ficticio", phone_number: "5511999992222" }, metadata: { timestamp: time } }] });
-  await ingestWhatsAppWebhook(contact("add", "1800000000"));
-  await ingestWhatsAppWebhook(contact("add", "1800000000"));
-  await ingestWhatsAppWebhook(contact("remove", "1800000002"));
-  await ingestWhatsAppWebhook(contact("add", "1800000001"));
+  await ingestWhatsAppWebhook(contact("add", validHistoryTimestamp));
+  await ingestWhatsAppWebhook(contact("add", validHistoryTimestamp));
+  await ingestWhatsAppWebhook(contact("remove", String(Number(validHistoryTimestamp) + 2)));
+  await ingestWhatsAppWebhook(contact("add", String(Number(validHistoryTimestamp) + 1)));
   assert.equal(db.tables.whatsapp_imported_contacts.length, 1);
   assert.equal(db.tables.whatsapp_imported_contacts[0].removed, true);
   assert.equal(db.tables.whatsapp_imported_contacts[0].full_name, null);
@@ -289,7 +293,204 @@ test("consentimento de outro numero nao autoriza historia desta conexao", async 
   const db = webhookDb();
   await authorizeCoexistenceImport(importArgs());
   db.tables.whatsapp_coexistence_imports[0].phone_number_id = "different";
-  await ingestWhatsAppWebhook(syncPayload("smb_app_state_sync", { state_sync: [{ type: "contact", action: "add", contact: { full_name: "Contato", phone_number: "5511999992222" }, metadata: { timestamp: "1800000000" } }] }));
+  await ingestWhatsAppWebhook(syncPayload("smb_app_state_sync", { state_sync: [{ type: "contact", action: "add", contact: { full_name: "Contato", phone_number: "5511999992222" }, metadata: { timestamp: validHistoryTimestamp } }] }));
   assert.equal(db.tables.whatsapp_imported_contacts, undefined);
   assert.equal(db.tables.whatsapp_webhook_events[0].status, "ignored");
+});
+
+test("history aceita somente segundos Unix plausiveis", () => {
+  const now = Date.parse("2026-10-19T16:00:00Z");
+  const expected = new Date(Number(validHistoryTimestamp) * 1000).toISOString();
+  assert.deepEqual(parseHistoryTimestamp(validHistoryTimestamp, now), { seconds: Number(validHistoryTimestamp), iso: expected });
+  assert.deepEqual(parseHistoryTimestamp(Number(validHistoryTimestamp), now), { seconds: Number(validHistoryTimestamp), iso: expected });
+  for (const value of [1780000000000, "1780000000000", expected, "", null, undefined, NaN, -1, "-1", "1e9", " 1780000000 ", 0, 999999999, 4102444800, 1780000000.5]) {
+    assert.throws(() => parseHistoryTimestamp(value, now), /Timestamp de importacao invalido/);
+  }
+});
+
+test("contact aceita segundos e milissegundos sem confundir unidade", () => {
+  const now = Date.parse("2026-10-19T16:00:00Z");
+  const seconds = Number(validHistoryTimestamp);
+  const milliseconds = seconds * 1000 + 123;
+  for (const value of [seconds, validHistoryTimestamp]) {
+    assert.deepEqual(parseContactTimestamp(value, "add", now), {
+      seconds, iso: new Date(seconds * 1000).toISOString(), unit: "seconds",
+    });
+  }
+  for (const value of [milliseconds, String(milliseconds)]) {
+    assert.deepEqual(parseContactTimestamp(value, "add", now), {
+      seconds, iso: new Date(milliseconds).toISOString(), unit: "milliseconds",
+    });
+  }
+  for (const value of ["17800000000", 17800000000, "178000000000", 178000000000]) {
+    assert.throws(() => parseContactTimestamp(value, "add", now), (error) => error.reason === "timestamp_ambiguous");
+  }
+  for (const value of [new Date(milliseconds).toISOString(), "", null, undefined, NaN, -1, 999999999, 4102444800, 4102444800000, 1780000000.5]) {
+    assert.throws(() => parseContactTimestamp(value, "add", now), /Timestamp de importacao invalido/);
+  }
+});
+
+test("contact remove/0 e sentinela sem data, mas add/0 e invalido", () => {
+  for (const value of [0, "0"]) {
+    assert.deepEqual(parseContactTimestamp(value, "remove"), { seconds: 0, iso: null, unit: "unknown" });
+    assert.throws(() => parseContactTimestamp(value, "add"), (error) => error.reason === "timestamp_out_of_range");
+  }
+  assert.throws(() => parseContactTimestamp("00", "remove"), /Timestamp de importacao invalido/);
+});
+
+test("historico preserva itens validos, registra falha sanitizada e deduplica retry", async () => {
+  const db = webhookDb();
+  await authorizeCoexistenceImport(importArgs());
+  const payload = syncPayload("history", { history: [{ threads: [{ id: "5511999991111", messages: [
+    { id: "wamid.valid", from: "5511999991111", timestamp: validHistoryTimestamp, type: "text", text: { body: "conteudo privado" } },
+    { id: "wamid.invalid", from: "5511999991111", type: "text", text: { body: "outro conteudo privado" } },
+  ] }] }] });
+  assert.equal((await ingestWhatsAppWebhook(payload)).invalidTimestampCount, 1);
+  assert.equal((await ingestWhatsAppWebhook(payload)).invalidTimestampCount, 1);
+  assert.equal(db.tables.whatsapp_messages.length, 1);
+  assert.equal(db.tables.whatsapp_webhook_events.length, 1);
+  const event = db.tables.whatsapp_webhook_events[0];
+  assert.equal(event.status, "failed");
+  assert.equal(event.last_error, "invalid_timestamp");
+  assert.equal(event.payload.invalid_timestamp_count, 1);
+  assert.deepEqual(event.payload.invalid_timestamp_samples[0], {
+    source: "history", field: "history.message.timestamp", typeof: "undefined", digit_count: null,
+    numeric: false, reason: "timestamp_missing",
+  });
+  assert.doesNotMatch(JSON.stringify(event.payload), /551199|conteudo privado|wamid/);
+});
+
+test("retry recuperado atualiza o evento falho sem duplicar mensagem", async () => {
+  const db = webhookDb();
+  await authorizeCoexistenceImport(importArgs());
+  const payload = syncPayload("history", { history: [{ threads: [{ id: "5511999991111", messages: [
+    { id: "wamid.retry", from: "5511999991111", timestamp: validHistoryTimestamp, type: "text" },
+  ] }] }] });
+  await ingestWhatsAppWebhook(payload);
+  const event = db.tables.whatsapp_webhook_events[0];
+  event.status = "failed";
+  event.last_error = "invalid_timestamp";
+  event.processed_at = null;
+  assert.equal((await ingestWhatsAppWebhook(payload)).invalidTimestampCount, 0);
+  assert.equal(db.tables.whatsapp_messages.length, 1);
+  assert.equal(db.tables.whatsapp_webhook_events.length, 1);
+  assert.equal(event.status, "processed");
+  assert.equal(event.last_error, null);
+  assert.ok(event.processed_at);
+});
+
+test("contatos preservam itens validos e nao marcam lote incompleto como processado", async () => {
+  const db = webhookDb();
+  await authorizeCoexistenceImport(importArgs());
+  const contact = (phone, timestamp) => ({ type: "contact", action: "add", contact: { full_name: "Nome privado", phone_number: phone }, metadata: { timestamp } });
+  const payload = syncPayload("smb_app_state_sync", { state_sync: [
+    contact("5511999992222", Number(validHistoryTimestamp)), contact("5511999993333", null),
+  ] });
+  assert.equal((await ingestWhatsAppWebhook(payload)).invalidTimestampCount, 1);
+  assert.equal(db.tables.whatsapp_imported_contacts.length, 1);
+  assert.equal(db.tables.whatsapp_imported_contacts[0].source_timestamp, Number(validHistoryTimestamp));
+  const event = db.tables.whatsapp_webhook_events[0];
+  assert.equal(event.status, "failed");
+  assert.deepEqual(event.payload.invalid_timestamp_samples[0], {
+    source: "contact", field: "state_sync.metadata.timestamp", action: "add", typeof: "object",
+    digit_count: null, numeric: false, reason: "timestamp_missing",
+  });
+  assert.doesNotMatch(JSON.stringify(event.payload), /551199|Nome privado/);
+});
+
+test("contact milliseconds atualiza estado com segundos canonicos e sem erro", async () => {
+  const db = webhookDb();
+  await authorizeCoexistenceImport(importArgs());
+  const contact = (action, timestamp) => syncPayload("smb_app_state_sync", { state_sync: [{
+    type: "contact", action, contact: { full_name: "Nome privado", phone_number: "5511999992222" }, metadata: { timestamp },
+  }] });
+  await ingestWhatsAppWebhook(contact("add", validHistoryTimestamp));
+  const milliseconds = (Number(validHistoryTimestamp) + 2) * 1000 + 123;
+  assert.equal((await ingestWhatsAppWebhook(contact("remove", String(milliseconds)))).invalidTimestampCount, 0);
+  assert.equal(db.tables.whatsapp_imported_contacts[0].removed, true);
+  assert.equal(db.tables.whatsapp_imported_contacts[0].source_timestamp, Math.floor(milliseconds / 1000));
+  assert.ok(db.tables.whatsapp_webhook_events.every((event) => event.status === "processed"));
+});
+
+test("remove/0 persiste tombstone sem 1970 e nao e revertido por add antigo", async () => {
+  const db = webhookDb();
+  await authorizeCoexistenceImport(importArgs());
+  const contact = (phone, action, timestamp) => syncPayload("smb_app_state_sync", { state_sync: [{
+    type: "contact", action, contact: { full_name: "Nome privado", phone_number: phone }, metadata: { timestamp },
+  }] });
+  const phone = "5511999992222";
+  await ingestWhatsAppWebhook(contact(phone, "add", validHistoryTimestamp));
+  assert.equal((await ingestWhatsAppWebhook(contact(phone, "remove", "0"))).invalidTimestampCount, 0);
+  await ingestWhatsAppWebhook(contact(phone, "remove", "0"));
+  await ingestWhatsAppWebhook(contact(phone, "add", String(Number(validHistoryTimestamp) + 1)));
+  const row = db.tables.whatsapp_imported_contacts[0];
+  assert.equal(row.removed, true);
+  assert.equal(row.full_name, null);
+  assert.equal(row.source_timestamp, 0);
+  assert.equal(db.tables.whatsapp_imported_contacts.length, 1);
+  assert.equal((await ingestWhatsAppWebhook(contact("5511999993333", "remove", 0))).invalidTimestampCount, 0);
+  assert.equal(db.tables.whatsapp_imported_contacts[1].source_timestamp, 0);
+  assert.equal(db.tables.whatsapp_imported_contacts[1].removed, true);
+  assert.equal((await ingestWhatsAppWebhook(contact("5511999994444", "add", 0))).invalidTimestampCount, 1);
+});
+
+test("add posterior ao recebimento do remove/0 pode reativar contato", async () => {
+  const db = webhookDb();
+  await authorizeCoexistenceImport(importArgs());
+  const phone = "5511999992222";
+  const contact = (action, timestamp) => syncPayload("smb_app_state_sync", { state_sync: [{
+    type: "contact", action, contact: { full_name: "Nome privado", phone_number: phone }, metadata: { timestamp },
+  }] });
+  await ingestWhatsAppWebhook(contact("remove", 0));
+  const row = db.tables.whatsapp_imported_contacts[0];
+  row.updated_at = new Date((Number(validHistoryTimestamp) - 1) * 1000).toISOString();
+  assert.equal((await ingestWhatsAppWebhook(contact("add", validHistoryTimestamp))).invalidTimestampCount, 0);
+  assert.equal(row.removed, false);
+  assert.equal(row.source_timestamp, Number(validHistoryTimestamp));
+  assert.equal(row.full_name, "Nome privado");
+});
+
+test("contact ambiguo gera somente diagnostico sanitizado", async () => {
+  const db = webhookDb();
+  await authorizeCoexistenceImport(importArgs());
+  const payload = syncPayload("smb_app_state_sync", { state_sync: [
+    { type: "contact", action: "add", contact: { phone_number: "5511999992222" }, metadata: { timestamp: "17800000000" } },
+    { type: "contact", action: "add", contact: { phone_number: "5511999993333" }, metadata: { timestamp: validHistoryTimestamp } },
+  ] });
+  assert.equal((await ingestWhatsAppWebhook(payload)).invalidTimestampCount, 1);
+  assert.equal(db.tables.whatsapp_imported_contacts.length, 1);
+  assert.deepEqual(db.tables.whatsapp_webhook_events[0].payload.invalid_timestamp_samples[0], {
+    source: "contact", field: "state_sync.metadata.timestamp", action: "add", typeof: "string",
+    digit_count: 11, numeric: true, reason: "timestamp_ambiguous",
+  });
+  assert.doesNotMatch(JSON.stringify(db.tables.whatsapp_webhook_events[0].payload), /551199|17800000000/);
+});
+
+test("rota rejeita assinatura e JSON invalidos sem mascarar importacao incompleta", async () => {
+  const originalSecret = process.env.META_APP_SECRET;
+  const secret = "test-app-secret";
+  process.env.META_APP_SECRET = secret;
+  const request = (body, signature) => new Request("https://example.test/api/webhooks/meta/whatsapp", {
+    method: "POST", body, headers: { "x-hub-signature-256": signature },
+  });
+  const signed = (body) => `sha256=${createHmac("sha256", secret).update(body).digest("hex")}`;
+  try {
+    const normalBody = JSON.stringify({ object: "whatsapp_business_account", ...webhook("messages") });
+    assert.equal((await webhookPost(request(normalBody, "sha256=invalid"))).status, 401);
+    assert.equal((await webhookPost(request("{", signed("{")))).status, 400);
+    webhookDb("cloud_only");
+    assert.equal((await webhookPost(request(normalBody, signed(normalBody)))).status, 200);
+
+    webhookDb();
+    await authorizeCoexistenceImport(importArgs());
+    const invalidBody = JSON.stringify({ object: "whatsapp_business_account", ...syncPayload("history", {
+      history: [{ threads: [{ id: "5511999991111", messages: [{ id: "wamid.no-time", from: "5511999991111", type: "text" }] }] }],
+    }) });
+    const response = await webhookPost(request(invalidBody, signed(invalidBody)));
+    assert.equal(response.status, 422);
+    assert.equal((await response.json()).invalidTimestampCount, 1);
+  } finally {
+    if (originalSecret === undefined) delete process.env.META_APP_SECRET;
+    else process.env.META_APP_SECRET = originalSecret;
+  }
 });

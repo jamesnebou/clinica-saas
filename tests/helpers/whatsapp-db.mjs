@@ -8,7 +8,10 @@ export function installWhatsAppTestHooks() {
   return registerHooks({
     resolve(specifier, context, next) {
       if (specifier === "server-only") return { url: dataModule("export {};"), shortCircuit: true };
+      if (specifier === "next/server") return { url: dataModule("export class NextResponse extends Response { static json(value, init) { return Response.json(value, init); } }"), shortCircuit: true };
       if (specifier === "@/lib/supabase/admin") return { url: import.meta.url, shortCircuit: true };
+      if (specifier === "@/lib/whatsapp/core.mjs") return next(new URL("../../src/lib/whatsapp/core.mjs", import.meta.url).href, context);
+      if (specifier === "@/lib/whatsapp/meta/webhooks") return next(new URL("../../src/lib/whatsapp/meta/webhooks.js", import.meta.url).href, context);
       if (specifier === "./meta/provider") return { url: dataModule("export class MetaCloudProvider { async syncTemplates() { return []; } }"), shortCircuit: true };
       if (specifier === "./broker") return { url: dataModule('export const getMetaConnectOrigin=()=> "https://connect.example.com"; export async function resolveClinicReturnOrigin({requestOrigin}) { return requestOrigin; }'), shortCircuit: true };
       try { return next(specifier, context); } catch (error) {
@@ -41,6 +44,7 @@ export function memoryDatabase(seed = {}) {
         is(key, value) { filters.push((row) => (row[key] ?? null) === value); return query; },
         in(key, values) { filters.push((row) => values.includes(row[key])); return query; },
         lt(key, value) { filters.push((row) => row[key] < value); return query; },
+        gt(key, value) { filters.push((row) => row[key] > value); return query; },
         or(expression) {
           const clauses = expression.split(",").map((part) => part.split(".eq."));
           filters.push((row) => clauses.some(([key, value]) => row[key] === value));
