@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Field, PageHeader, SelectField, SubmitButton, TextArea } from "@/components/app-shell/ui";
 import { requireClinicCapability } from "@/lib/auth/session";
 import { money } from "@/lib/finance/service";
+import { packageSalesQuery } from "@/lib/finance/package-sales.mjs";
 import { createClient } from "@/lib/supabase/server";
 import { createPacoteAction, sellClientePacoteAction } from "../../actions";
 import { recognizePackageSessionAction } from "../actions";
@@ -14,7 +15,7 @@ export default async function PacotesPage() {
     supabase.from("procedimentos").select("id,nome").eq("clinica_id", activeClinic.id).eq("ativo", true).order("nome"),
     supabase.from("clientes").select("id,nome").eq("clinica_id", activeClinic.id).eq("status", "ativo").order("nome"),
     supabase.from("pacotes_clinica").select("*").eq("clinica_id", activeClinic.id).order("nome"),
-    supabase.from("cliente_pacotes").select("*,clientes(nome)").eq("clinica_id", activeClinic.id).order("created_at", { ascending: false }).limit(200),
+    packageSalesQuery(supabase, activeClinic.id),
   ]);
   const error = [procedures.error, clients.error, packages.error, sales.error].find(Boolean);
   if (error) throw error;

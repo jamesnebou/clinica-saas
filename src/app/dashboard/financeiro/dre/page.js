@@ -1,7 +1,7 @@
 import { PageHeader } from "@/components/app-shell/ui";
 import { requireClinicCapability } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
-import { buildManagerialDre } from "@/lib/finance/core.mjs";
+import { compareDrePeriods } from "@/lib/finance/dre-periods.mjs";
 import { getFinanceSettings, isFinanceSchemaMissing, money, monthPeriod } from "@/lib/finance/service";
 import { ExportCsvLink, FinancePage, SchemaNotice } from "../shared";
 
@@ -36,8 +36,7 @@ export default async function DrePage({ searchParams }) {
 
   const categoryGroups = new Map(settings.categories.map((category) => [category.id, category.grupo_dre]));
   const normalized = (data || []).map((item) => ({ ...item, grupo_dre: categoryGroups.get(item.categoria_id) }));
-  const current = buildManagerialDre(normalized.filter((item) => item.competencia >= currentPeriod.start));
-  const prior = buildManagerialDre(normalized.filter((item) => item.competencia <= priorPeriod.end));
+  const { currentRows, current, prior } = compareDrePeriods(normalized, currentPeriod, priorPeriod);
   const lines = [
     ["Receita bruta", "receita_bruta", false],
     ["(-) Deduções", "deducoes", true],
@@ -51,10 +50,19 @@ export default async function DrePage({ searchParams }) {
   return (
     <FinancePage>
       <PageHeader eyebrow="Financeiro" title="DRE gerencial" description="Resultado por competência, separado do fluxo de caixa e comparado ao mês anterior." />
-      <div className="mt-4"><ExportCsvLink report="dre" month={currentPeriod.month} /></div>
+      <div className="mt-4 flex flex-wrap items-end gap-3">
+        <form method="get" className="flex flex-wrap items-end gap-2">
+          <label className="text-sm font-medium text-neutral-700" htmlFor="dre-month">Competência
+            <input id="dre-month" name="month" type="month" required defaultValue={currentPeriod.month} className="mt-1 block h-10 rounded-md border border-neutral-300 bg-white px-3 text-sm" />
+          </label>
+          <button type="submit" className="h-10 rounded-md border border-neutral-300 bg-white px-4 text-sm font-bold text-neutral-800">Ver período</button>
+        </form>
+        <ExportCsvLink report="dre" month={currentPeriod.month} />
+      </div>
+      {!currentRows.length ? <p className="mt-4 text-sm text-neutral-600">Nenhum lançamento de competência neste mês.</p> : null}
       <section className="premium-panel mt-6 overflow-x-auto rounded-lg p-6">
         <table className="w-full min-w-[720px] text-sm">
-          <thead><tr className="border-b border-neutral-200 text-left text-xs uppercase text-neutral-500"><th className="py-3">Linha gerencial</th><th>Atual</th><th>% receita</th><th>Anterior</th><th>Variação</th><th>Variação %</th></tr></thead>
+          <thead><tr className="border-b border-neutral-200 text-left text-xs uppercase text-neutral-500"><th className="py-3">Linha gerencial</th><th>Selecionado</th><th>% receita</th><th>Anterior</th><th>Variação</th><th>Variação %</th></tr></thead>
           <tbody>{lines.map(([label, key, negative]) => {
             const currentValue = Number(current[key] || 0) * (negative ? -1 : 1);
             const priorValue = Number(prior[key] || 0) * (negative ? -1 : 1);
