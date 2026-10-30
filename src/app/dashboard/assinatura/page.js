@@ -66,6 +66,7 @@ async function getBillingRows(clinicaId, currentSubscriptionId) {
 
 function planButtonState({ plan, currentPlan, assinaturaStatus, hasSubscription, isExempt }) {
   if (isExempt) return { label: "Plano isento", disabled: true };
+  if (assinaturaStatus === "pendente" && hasSubscription && plan.slug === currentPlan.slug) return { label: "Aguardando pagamento", disabled: true };
   if (!hasSubscription || assinaturaStatus === "cancelada") return { label: "Ativar plano", disabled: false };
   if (assinaturaStatus === "pausada") {
     return { label: plan.slug === currentPlan.slug ? "Reativar cobrança" : "Reativar neste plano", disabled: false };
@@ -109,10 +110,10 @@ export default async function AssinaturaPage({ searchParams }) {
 
         {REGISTERED_CAPABILITIES.includes(params?.recurso) ? <Notice>{entitlementUpgradeMessage(params.recurso)} Compare os planos abaixo.</Notice> : null}
 
-        {params?.ok === "assinatura" ? <Notice type="success">Assinatura enviada ao Asaas e plano ativado no sistema. O webhook manterá a cobrança sincronizada.</Notice> : null}
+        {params?.ok === "assinatura" ? <Notice>Assinatura criada no Asaas. O acesso pago será ativado após a confirmação do pagamento.</Notice> : null}
         {params?.ok === "reactivate" ? <Notice type="success">A cobrança recorrente foi reativada na mesma assinatura Asaas.</Notice> : null}
         {params?.ok === "update" ? <Notice type="success">O plano foi atualizado na assinatura existente. Cobranças já emitidas não foram alteradas.</Notice> : null}
-        {params?.ok === "synchronize" ? <Notice type="success">A assinatura já estava ativa e foi sincronizada sem criar uma nova recorrência.</Notice> : null}
+        {params?.ok === "synchronize" ? <Notice>Assinatura sincronizada sem criar outra recorrência. Consulte o status da cobrança abaixo.</Notice> : null}
         {params?.ok === "pausada" ? <Notice type="success">A recorrência foi pausada. Cobranças já emitidas continuam válidas até serem tratadas.</Notice> : null}
         {params?.ok === "cancelada" ? <Notice type="success">A assinatura foi cancelada definitivamente no Asaas.</Notice> : null}
         {params?.ok === "email" ? <Notice type="success">E-mail de cobrança atualizado.</Notice> : null}

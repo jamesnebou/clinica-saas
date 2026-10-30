@@ -2,6 +2,7 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 import { normalizePublicCartItems } from "@/lib/store/config";
 import { consumePublicRateLimit, noStoreJson, publicRateLimitResponse } from "@/lib/security/public-antiabuse";
 import { isValidPublicSlug, readBoundedJson, safePublicOriginMetadata } from "@/lib/security/public-antiabuse-core.mjs";
+import { canAcceptPublicOperation } from "@/lib/saas/public-access.mjs";
 
 export const runtime = "nodejs";
 
@@ -14,12 +15,11 @@ function clean(value, max = 180) {
 async function getClinic(slug) {
   const { data, error } = await supabaseAdmin
     .from("clinicas")
-    .select("id, slug, status, metadata")
+    .select("id, slug, status, assinatura_status, trial_ends_at, plan_entitlements_mode, plan_entitlements_version, metadata")
     .eq("slug", slug)
-    .in("status", ["trial", "ativa"])
     .maybeSingle();
   if (error) throw error;
-  if (!data || data.metadata?.site_publico?.publicado === false || data.metadata?.site_publico?.lojinha_ativa === false) return null;
+  if (!canAcceptPublicOperation(data) || data.metadata?.site_publico?.publicado === false || data.metadata?.site_publico?.lojinha_ativa === false) return null;
   return data;
 }
 

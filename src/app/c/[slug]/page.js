@@ -17,6 +17,7 @@ import { getSegmentDefinition } from "@/lib/segments/registry";
 import { getPrimaryClinicSegment } from "@/lib/segments/service";
 import { selectPublicTestimonials } from "@/lib/public-testimonials.mjs";
 import { simpleGoogleLinks } from "@/lib/google/simple-review-links.mjs";
+import { isFullAccessClinic } from "@/lib/saas/plan-entitlements.mjs";
 
 export const dynamic = "force-dynamic";
 
@@ -227,13 +228,13 @@ export default async function PublicClinicPage({ params, searchParams }) {
 
   const { data: clinic, error } = await supabaseAdmin
     .from("clinicas")
-    .select("id, nome, slug, telefone, email, endereco, cidade, estado, status, metadata")
+    .select("id, nome, slug, telefone, email, endereco, cidade, estado, status, metadata, plan_entitlements_mode, plan_entitlements_version")
     .eq("slug", slug)
-    .in("status", ["trial", "ativa"])
+    .in("status", ["trial", "ativa", "inadimplente"])
     .maybeSingle();
 
   if (error) throw error;
-  if (!clinic) notFound();
+  if (!clinic || (clinic.status === "inadimplente" && !isFullAccessClinic(clinic))) notFound();
 
   const meta = clinic.metadata || {};
   const site = meta.site_publico || {};

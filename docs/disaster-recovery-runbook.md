@@ -55,6 +55,18 @@ O PostgreSQL contém metadados, não o conteúdo físico dos objetos. O backup p
 
 ## Laboratório local reproduzível
 
+### Restore físico do export operacional P1-A
+
+O `scripts/ops/backup-export.mjs` exporta o custom dump PostgreSQL, roles e objetos físicos dos três buckets para um snapshot restic externo. O manifesto `nexawi-ops-backup-v1` guarda bucket, path, metadados, tamanho e SHA-256. Banco e Storage não formam um snapshot atômico: pause writers externamente e registre o intervalo da exportação. O backup não substitui a validação de restore.
+
+Para recuperação, extraia o snapshot restic para um diretório local criptografado/descartável e verifique `manifest.json`, `database.dump`, `roles.sql` e `storage/*.bin`. Com um projeto **novo e isolado**, configure `DR_ARCHIVE_DIR`, `DR_SOURCE_PROJECT_REF`, `DR_PROJECT_REF`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `DR_CONFIRM_RESTORE=RESTORE:<ref>` e, se remoto, `DR_ISOLATED_REMOTE_CONFIRM=ISOLATED:<ref>`. Nunca inclua essas credenciais em terminal compartilhado ou no Git.
+
+Execute primeiro `DR_DRY_RUN=true node scripts/ops/storage-restore.mjs`; depois retire `DR_DRY_RUN` e repita. O importador valida todos os hashes antes do upload, cria buckets ausentes, preserva path, MIME e cache-control quando disponível, recusa visibilidade divergente, conflito de objeto e overwrite, e baixa cada objeto para conferir SHA-256. Metadados gerados pelo provedor, como ETag e `lastModified`, serão novos no destino; não são recuperáveis por upload. Um segundo restore recusa os objetos já presentes; não tenta mesclar nem sobrescrever. Production e Staging continuam bloqueados como destinos deste importador. O banco/Auth requer procedimento separado e revisão do TOC/roles; restaurar apenas Storage não reconstrói referências SQL.
+
+Para auditar fotos órfãs sem exclusão, use `scripts/ops/client-photo-orphans.mjs` com `AUDIT_PROJECT_REF`, `AUDIT_SUPABASE_URL`, `AUDIT_SERVICE_ROLE_KEY` e `AUDIT_CONFIRM=READ_ONLY:<ref>`. Por padrão, a saída contém só contagens. `AUDIT_REPORT_PATH` opcional escreve paths em arquivo novo protegido; trate-o como dado sensível. Nenhum objeto é removido pela auditoria.
+
+O ensaio P1-A de Storage em staging usa somente fixture sintética criada pelo script `scripts/ops/storage-fixture-drill.mjs`. Exige URL e service role **exclusivas de staging** (`P1A_STAGING_SUPABASE_URL`, `P1A_STAGING_SERVICE_ROLE_KEY`), `P1A_STAGING_CONFIRM=STAGING_FIXTURE_ONLY:ojmszqqxnvmvudhzzzgo` e `P1A_DR_ARCHIVE_ROOT` em volume protegido. O script cria path UUID próprio no bucket privado, faz backup com hash, remove somente esse path, restaura sem overwrite, confere hash e remove a fixture recuperada. O diretório de evidência local é mantido para auditoria; apague-o somente após revisão formal. Se qualquer etapa falhar, não execute limpeza em massa: examine o manifesto e o path exato. O ensaio não prova restore conjunto de Database/Auth.
+
 Pré-requisitos: Docker, Node, Supabase CLI, cadeia de 55 migrations e stack local dedicado. A senha sintética deve existir apenas no processo em `DR_TEST_PASSWORD`.
 
 ```powershell

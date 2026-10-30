@@ -6,6 +6,7 @@ import * as runtime from "../src/lib/security/public-antiabuse-runtime.mjs";
 import * as schedule from "../src/lib/clinic/schedule.js";
 import { totalAppointmentMinutes } from "../src/lib/domain/schedule-core.mjs";
 import { getStoreConfig } from "../src/lib/store/config.js";
+import { canAcceptPublicOperation } from "../src/lib/saas/public-access.mjs";
 
 process.env.NODE_ENV = "test";
 const id = (n) => "00000000-0000-4000-8000-" + String(n).padStart(12, "0");
@@ -32,7 +33,7 @@ function form(extra = {}) {
 }
 function harness(options = {}) {
   const state = { bookings: 0, orders: 0, charges: 0, notifications: 0, reads: 0, rpc: [], operations: new Map(), orderRows: new Map(), publicRow: null };
-  const clinic = { id: id(1), nome: "Fixture", slug: "fixture", metadata: { site_publico: {} } };
+  const clinic = { id: id(1), nome: "Fixture", slug: "fixture", status: "ativa", assinatura_status: "ativa", metadata: { site_publico: {} } };
   const product = { id: id(3), nome: "Fixture", preco: 100, duracao_minutos: 60, sinal_valor: 50, crm_booking_behavior: "none" };
   const supabase = {
     from(table) {
@@ -99,7 +100,7 @@ function harness(options = {}) {
     return { id: "fake-payment", invoiceUrl: "https://payment.example.test/fixture", link: "https://payment.example.test/fixture" };
   };
   const deps = {
-    ...guards, ...runtime, ...schedule, totalAppointmentMinutes, getStoreConfig,
+    ...guards, ...runtime, ...schedule, totalAppointmentMinutes, getStoreConfig, canAcceptPublicOperation,
     supabaseAdmin: supabase, redirect, revalidatePath() {}, headers: async () => new Headers(),
     consumePublicRateLimit: async () => ({ allowed: !options.limited }),
     createAsaasCustomerForPatient: async () => ({ id: "fake-customer" }),

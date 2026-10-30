@@ -13,6 +13,7 @@ import {
 } from "@/lib/clinic/schedule";
 import { intervalsOverlap, totalAppointmentMinutes } from "@/lib/domain/schedule-core.mjs";
 import { buildCalendarMonth, shiftMonthKey } from "@/lib/public-booking/calendar-core.mjs";
+import { canAcceptPublicOperation } from "@/lib/saas/public-access.mjs";
 
 function pad(value) {
   return String(value).padStart(2, "0");
@@ -100,13 +101,12 @@ export async function GET(request) {
 
   const { data: clinic, error: clinicError } = await supabaseAdmin
     .from("clinicas")
-    .select("id, nome, slug, status, metadata")
+    .select("id, nome, slug, status, assinatura_status, trial_ends_at, plan_entitlements_mode, plan_entitlements_version, metadata")
     .eq("slug", slug)
-    .in("status", ["trial", "ativa"])
     .maybeSingle();
 
   if (clinicError) throw clinicError;
-  if (!clinic || clinic.metadata?.site_publico?.publicado === false) {
+  if (!canAcceptPublicOperation(clinic) || clinic.metadata?.site_publico?.publicado === false) {
     return noStoreJson({ slots: [], message: "Clínica indisponível." }, { status: 404 });
   }
 

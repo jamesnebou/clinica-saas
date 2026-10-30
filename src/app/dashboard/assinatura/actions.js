@@ -32,6 +32,7 @@ import {
 } from "@/lib/saas/subscription-lifecycle.mjs";
 import { getSystemPlans } from "@/lib/saas/plans";
 import { deterministicMetaEventId } from "@/lib/tracking/core.mjs";
+import { saasPaymentActivation } from "@/lib/saas/payment-tracking.mjs";
 import { deliverMetaConversionRecord, enqueueClinicLifecycleMetaEvent, queueAndDeliverMetaConversionEvent } from "@/lib/tracking/service";
 import { getTrustedAppOrigin } from "@/lib/security/app-origin";
 
@@ -217,6 +218,18 @@ async function syncSubscriptionPayments({ clinic, subscription, plan }) {
     }, { onConflict: "asaas_payment_id" });
     if (error) throw error;
   }
+  return payments || [];
+}
+
+async function hasConfirmedSubscriptionPayment(clinicId, subscriptionId) {
+  if (!subscriptionId) return false;
+  const { count, error } = await supabaseAdmin.from("asaas_cobrancas")
+    .select("id", { count: "exact", head: true })
+    .eq("clinica_id", clinicId)
+    .eq("asaas_subscription_id", subscriptionId)
+    .in("status", ["pago", "confirmed", "received", "received_in_cash"]);
+  if (error) throw error;
+  return (count || 0) > 0;
 }
 
 export async function startSubscriptionAction(formData) {
@@ -285,9 +298,10 @@ export async function startSubscriptionAction(formData) {
   try {
     clinic = await getFullClinic(clinic.id);
     subscription = await findReusableSubscription(clinic);
+    const previouslyPaid = await hasConfirmedSubscriptionPayment(clinic.id, subscription?.id);
     const mutation = decideSubscriptionMutation({
       subscription,
-      currentPlanSlug: clinic.plano,
+      currentPlanSlug: clinic.metadata?.assinatura_solicitada_plano || clinic.plano,
       targetPlanSlug: plan.slug,
       billingType,
     });
@@ -319,19 +333,23 @@ export async function startSubscriptionAction(formData) {
       );
     }
 
+    const keepPaidAccess = previouslyPaid && clinic.status === "ativa" && clinic.assinatura_status === "ativa" && mutationType !== "reactivate" && !createdSubscription;
     const { error: clinicError } = await supabaseAdmin.from("clinicas").update({
-      plano: plan.slug,
+      plano: clinic.plano,
       billing_email: billingEmail || null,
       asaas_customer_id: subscription.customer || clinic.asaas_customer_id || null,
       asaas_subscription_id: subscription.id,
-      status: "ativa",
-      assinatura_status: "ativa",
+      status: keepPaidAccess ? "ativa" : clinic.status === "trial" ? "trial" : "pendente",
+      assinatura_status: keepPaidAccess ? "ativa" : "pendente",
       proxima_cobranca_em: subscription.nextDueDate || nextSubscriptionDueDate(),
-      bloqueada_em: null,
-      bloqueio_motivo: null,
+      bloqueada_em: keepPaidAccess ? null : clinic.bloqueada_em,
+      bloqueio_motivo: keepPaidAccess ? null : "Aguardando confirmação do pagamento Asaas.",
       metadata: {
         ...(clinic.metadata || {}),
-        assinatura_ativada_em: createdSubscription ? new Date().toISOString() : clinic.metadata?.assinatura_ativada_em,
+        assinatura_solicitada_em: new Date().toISOString(),
+        assinatura_solicitada_plano: plan.slug,
+        assinatura_solicitada_subscription_id: subscription.id,
+        assinatura_solicitada_valor: Number(plan.preco_mensal || 0),
         assinatura_sincronizada_em: new Date().toISOString(),
         asaas_subscription_status: normalizeAsaasSubscriptionStatus(subscription),
         asaas_billing_type: subscription.billingType || billingType,
@@ -340,7 +358,33 @@ export async function startSubscriptionAction(formData) {
     }).eq("id", clinic.id);
     if (clinicError) throw clinicError;
 
-    await syncSubscriptionPayments({ clinic, subscription, plan });
+    const syncedPayments = await syncSubscriptionPayments({ clinic, subscription, plan });
+    if (createdSubscription && !keepPaidAccess) {
+      const activationClinic = {
+        ...clinic,
+        asaas_customer_id: subscription.customer || clinic.asaas_customer_id,
+        asaas_subscription_id: subscription.id,
+        metadata: {
+          ...(clinic.metadata || {}),
+          assinatura_solicitada_plano: plan.slug,
+          assinatura_solicitada_subscription_id: subscription.id,
+          assinatura_solicitada_valor: Number(plan.preco_mensal || 0),
+        },
+      };
+      const confirmedPayment = syncedPayments.find((payment) => saasPaymentActivation({
+        clinic: activationClinic,
+        payment: { ...payment, subscription: payment.subscription || subscription.id },
+        event: "SUBSCRIPTION_PAYMENT_SYNC",
+      }).activate);
+      if (confirmedPayment) {
+        const { error: activationError } = await supabaseAdmin.from("clinicas")
+          .update({ status: "ativa", assinatura_status: "ativa", plano: plan.slug,
+            bloqueada_em: null, bloqueio_motivo: null })
+          .eq("id", clinic.id).eq("asaas_subscription_id", subscription.id)
+          .in("status", ["trial", "pendente"]).in("assinatura_status", ["trial", "pendente"]);
+        if (activationError) throw activationError;
+      }
+    }
     await finishSubscriptionOperation(operationId, {
       status: "succeeded",
       subscriptionId: subscription.id,

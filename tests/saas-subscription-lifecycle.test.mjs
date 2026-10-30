@@ -69,10 +69,11 @@ test("concorrência permite apenas uma operação processing por clínica", () =
   assert.match(migration, /on conflict do nothing[\s\S]*returning id into v_operation_id/i);
 });
 
-test("falha Asaas não deixa estado local como ativo", () => {
+test("criação Asaas mantém acesso pago pendente até confirmação", () => {
   const apiMutation = actions.indexOf("subscription = await createAsaasSubscriptionForClinic");
-  const localActivation = actions.indexOf('assinatura_status: "ativa"');
-  assert.ok(apiMutation >= 0 && localActivation > apiMutation);
+  const pendingState = actions.indexOf('assinatura_status: keepPaidAccess ? "ativa" : "pendente"');
+  assert.ok(apiMutation >= 0 && pendingState > apiMutation);
+  assert.match(actions, /plano:\s*clinic\.plano/);
   assert.match(actions, /status:\s*"failed"[\s\S]*SUBSCRIPTION_OPERATION_FAILED/);
 });
 

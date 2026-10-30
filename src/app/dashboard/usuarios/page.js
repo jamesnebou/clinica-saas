@@ -51,8 +51,7 @@ export default async function UsuariosPage({ searchParams }) {
         <PageHeader eyebrow="Acesso" title="Usuários da clínica" description="Convide pessoas da equipe, defina papéis e controle usuários ativos dentro do limite do plano." />
 
         <div className="mt-6 space-y-3">
-          {params?.ok === "convite" ? <Notice type="success">Usuário criado no Auth e vinculado à clínica. Envie manualmente o e-mail e a senha temporária para ele acessar em `/login-cliente`.</Notice> : null}
-          {params?.ok === "senha" ? <Notice type="success">O usuário já existia no Auth. A credencial atual foi preservada e o vínculo com a clínica foi criado/reativado.</Notice> : null}
+          {params?.ok === "convite" ? <Notice type="success">Convite enviado. O acesso será ativado após o aceite pelo próprio funcionário.</Notice> : null}
           {params?.ok === "usuario" ? <Notice type="success">Usuário atualizado com sucesso.</Notice> : null}
           {params?.erro === "limite" ? <LimitNotice resource="usuarios" message={params?.mensagem} /> : null}
           {params?.erro && params?.erro !== "limite" ? <Notice type="warning">{params?.mensagem || "Não foi possível concluir esta ação."}</Notice> : null}
@@ -60,11 +59,10 @@ export default async function UsuariosPage({ searchParams }) {
 
         <div className="mt-8 grid gap-6 lg:grid-cols-[420px_1fr]">
           <Card>
-            <SectionTitle icon={UserPlus} title="Convidar usuário" description={`Usuários ativos: ${usage.usuarios}/${plan.limite_usuarios}. Restam ${remaining} no plano ${plan.nome}. O sistema cria o acesso direto; não depende de e-mail automático.`} />
+            <SectionTitle icon={UserPlus} title="Convidar usuário" description={`Usuários ativos: ${usage.usuarios}/${plan.limite_usuarios}. Restam ${remaining} no plano ${plan.nome}. O convite é enviado por e-mail.`} />
             <form action={inviteClinicUserAction} className="mt-4 space-y-4">
               <Field label="Nome" name="nome" />
               <Field label="E-mail" name="email" type="email" required />
-              <Field label="Senha temporária" name="senha_temporaria" type="password" required placeholder="Mínimo recomendado: 8 caracteres" />
               <SelectField label="Papel" name="papel" defaultValue="recepcao">
                 {assignableRoles.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
               </SelectField>
@@ -90,7 +88,7 @@ export default async function UsuariosPage({ searchParams }) {
                       {(usuario.papel === "owner" && actorRole !== "owner" ? roles.filter(([value]) => value === "owner") : assignableRoles).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
                     </SelectField>
                     <SelectField label="Status" name="ativo" defaultValue={usuario.ativo ? "true" : "false"}>
-                      <option value="true">Ativo</option>
+                      {usuario.accepted_at ? <option value="true">Ativo</option> : null}
                       <option value="false">Desativado</option>
                     </SelectField>
                   </div>
@@ -112,7 +110,7 @@ export default async function UsuariosPage({ searchParams }) {
                     </div>
                   </div>
                   <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-                    <p className="inline-flex items-center gap-2 text-xs text-neutral-500"><ShieldCheck size={14} /> {usuario.accepted_at ? "Acesso criado no Auth" : "Vínculo pendente de login/Auth"}</p>
+                    <p className="inline-flex items-center gap-2 text-xs text-neutral-500"><ShieldCheck size={14} /> {usuario.accepted_at ? "Convite aceito" : "Convite pendente"}</p>
                     <SubmitButton>Salvar usuário</SubmitButton>
                   </div>
                 </form>

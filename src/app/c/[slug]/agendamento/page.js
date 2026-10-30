@@ -6,6 +6,7 @@ import { publicImageSrcSet, publicImageUrl } from "@/lib/public-image";
 import { getPrimaryClinicSegment } from "@/lib/segments/service";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { PublicBookingForm } from "../booking-form";
+import { canAcceptPublicOperation } from "@/lib/saas/public-access.mjs";
 
 export const dynamic = "force-dynamic";
 
@@ -17,13 +18,12 @@ function safeColor(value, fallback) {
 async function loadBookingPage(slug) {
   const { data: clinic, error } = await supabaseAdmin
     .from("clinicas")
-    .select("id, nome, slug, telefone, email, endereco, cidade, estado, status, metadata")
+    .select("id, nome, slug, telefone, email, endereco, cidade, estado, status, assinatura_status, trial_ends_at, plan_entitlements_mode, plan_entitlements_version, metadata")
     .eq("slug", slug)
-    .in("status", ["trial", "ativa"])
     .maybeSingle();
 
   if (error) throw error;
-  if (!clinic || clinic.metadata?.site_publico?.publicado === false) notFound();
+  if (!canAcceptPublicOperation(clinic) || clinic.metadata?.site_publico?.publicado === false) notFound();
 
   const [proceduresResult, professionalsResult, segment] = await Promise.all([
     supabaseAdmin

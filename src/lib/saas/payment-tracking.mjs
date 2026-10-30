@@ -39,6 +39,41 @@ export function normalizeAsaasPaymentStatus({ event, status } = {}) {
   return "pendente";
 }
 
+export function saasPaymentActivation({ clinic, payment, event } = {}) {
+  const trustedFinancialSource = PURCHASE_EVENTS.has(normalized(event)) || normalized(event) === "SUBSCRIPTION_PAYMENT_SYNC";
+  if (!trustedFinancialSource || !PAID_STATUSES.has(normalized(payment?.status))) {
+    return { activate: false, reason: "payment_not_confirmed" };
+  }
+  if (!payment?.id || !payment?.subscription || payment.subscription !== clinic?.asaas_subscription_id) {
+    return { activate: false, reason: "subscription_mismatch" };
+  }
+  if (["cancelada", "pausada"].includes(clinic?.assinatura_status) || ["cancelada", "inativa", "bloqueada"].includes(clinic?.status)) {
+    return { activate: false, reason: "subscription_inactive" };
+  }
+  if (clinic?.asaas_customer_id && payment?.customer && clinic.asaas_customer_id !== payment.customer) {
+    return { activate: false, reason: "customer_mismatch" };
+  }
+  if (payment?.externalReference && payment.externalReference !== clinic?.id) {
+    return { activate: false, reason: "clinic_mismatch" };
+  }
+
+  const target = clinic?.metadata?.assinatura_solicitada_plano;
+  const targetSubscription = clinic?.metadata?.assinatura_solicitada_subscription_id;
+  const targetValue = Number(clinic?.metadata?.assinatura_solicitada_valor);
+  if (target && targetSubscription === payment.subscription) {
+    const actualValue = Number(payment.value);
+    if (!Number.isFinite(actualValue) || !Number.isFinite(targetValue) || Math.abs(actualValue - targetValue) > 0.009) {
+      return clinic?.status === "ativa" && clinic?.assinatura_status === "ativa"
+        ? { activate: true, plan: clinic.plano, reason: "prior_plan_payment" }
+        : { activate: false, reason: "amount_mismatch" };
+    }
+    return { activate: true, plan: target, reason: "target_plan_paid" };
+  }
+  return clinic?.status === "ativa" && clinic?.assinatura_status === "ativa"
+    ? { activate: true, plan: clinic.plano, reason: "existing_paid_plan" }
+    : { activate: false, reason: "pending_plan_missing" };
+}
+
 export function buildSaasPurchaseDecision({ event, payment, clinic } = {}) {
   const eventName = normalized(event);
   const paymentStatus = normalized(payment?.status);

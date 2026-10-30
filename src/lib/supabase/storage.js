@@ -1,8 +1,17 @@
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import { isOwnedClientPhotoPath } from "./client-photo-path.mjs";
 
 export const CLIENT_PHOTOS_BUCKET = "cliente-fotos";
 export const CLINIC_LOGOS_BUCKET = "clinica-logos";
 export const CLINIC_SITE_IMAGES_BUCKET = "clinica-site-images";
+
+export async function removeClientPhotoObject({ clinicaId, clienteId, storagePath }) {
+  if (!isOwnedClientPhotoPath(storagePath, clinicaId, clienteId)) {
+    throw new Error("Caminho da foto fora da clínica ou do cliente autorizado.");
+  }
+  const { error } = await supabaseAdmin.storage.from(CLIENT_PHOTOS_BUCKET).remove([storagePath]);
+  if (error) throw new Error("Falha ao remover a foto do Storage. A referência foi preservada.", { cause: error });
+}
 
 const CLINIC_STORAGE_BUCKETS = [CLIENT_PHOTOS_BUCKET, CLINIC_LOGOS_BUCKET, CLINIC_SITE_IMAGES_BUCKET];
 

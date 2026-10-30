@@ -4,6 +4,7 @@ import { decryptClinicSecrets } from "@/lib/security/clinic-secrets";
 import { resolveClinicPaymentProvider, paymentProviderLabel } from "@/lib/payments/provider";
 import { getStoreConfig } from "@/lib/store/config";
 import { StoreCheckout } from "./checkout-client";
+import { canAcceptPublicOperation } from "@/lib/saas/public-access.mjs";
 
 export const dynamic = "force-dynamic";
 
@@ -17,12 +18,11 @@ export default async function StoreCheckoutPage({ params, searchParams }) {
   const query = await searchParams;
   const { data: clinic, error } = await supabaseAdmin
     .from("clinicas")
-    .select("id, nome, slug, status, metadata")
+    .select("id, nome, slug, status, assinatura_status, trial_ends_at, plan_entitlements_mode, plan_entitlements_version, metadata")
     .eq("slug", slug)
-    .in("status", ["trial", "ativa"])
     .maybeSingle();
   if (error) throw error;
-  if (!clinic || clinic.metadata?.site_publico?.publicado === false || clinic.metadata?.site_publico?.lojinha_ativa === false) notFound();
+  if (!canAcceptPublicOperation(clinic) || clinic.metadata?.site_publico?.publicado === false || clinic.metadata?.site_publico?.lojinha_ativa === false) notFound();
 
   const { data: integration } = await supabaseAdmin
     .from("clinica_integracoes")

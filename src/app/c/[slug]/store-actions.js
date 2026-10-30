@@ -12,6 +12,7 @@ import { getStoreConfig } from "@/lib/store/config";
 import { getTrustedAppOrigin } from "@/lib/security/app-origin";
 import { consumePublicRateLimit, hashPublicRateLimitValue } from "@/lib/security/public-antiabuse";
 import { isValidPublicSlug, looksLikeAutomatedForm, validPublicForm } from "@/lib/security/public-antiabuse-core.mjs";
+import { canAcceptPublicOperation } from "@/lib/saas/public-access.mjs";
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -145,12 +146,11 @@ export async function createPublicStoreOrderAction(formData) {
 
   const { data: clinic, error: clinicError } = await supabaseAdmin
     .from("clinicas")
-    .select("id, nome, slug, status, email, telefone, metadata")
+    .select("id, nome, slug, status, assinatura_status, trial_ends_at, plan_entitlements_mode, plan_entitlements_version, email, telefone, metadata")
     .eq("slug", slug)
-    .in("status", ["trial", "ativa"])
     .maybeSingle();
   if (clinicError) throw clinicError;
-  if (!clinic || clinic.metadata?.site_publico?.publicado === false || clinic.metadata?.site_publico?.lojinha_ativa === false) {
+  if (!canAcceptPublicOperation(clinic) || clinic.metadata?.site_publico?.publicado === false || clinic.metadata?.site_publico?.lojinha_ativa === false) {
     redirectCheckout(slug, "loja", "A lojinha está indisponível no momento.");
   }
 

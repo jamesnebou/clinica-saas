@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { canAcceptPublicOperation } from "@/lib/saas/public-access.mjs";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { availableProductStock } from "@/lib/store/config";
 import { PublicStorefront } from "../store-cart";
@@ -15,13 +16,12 @@ export default async function CompleteStorePage({ params, searchParams }) {
   const query = await searchParams;
   const { data: clinic, error } = await supabaseAdmin
     .from("clinicas")
-    .select("id, nome, slug, status, metadata")
+    .select("id, nome, slug, status, assinatura_status, trial_ends_at, plan_entitlements_mode, plan_entitlements_version, metadata")
     .eq("slug", slug)
-    .in("status", ["trial", "ativa"])
     .maybeSingle();
 
   if (error) throw error;
-  if (!clinic) notFound();
+  if (!canAcceptPublicOperation(clinic)) notFound();
 
   const metadata = clinic.metadata || {};
   const site = metadata.site_publico || {};

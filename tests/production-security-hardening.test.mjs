@@ -38,13 +38,13 @@ test("desenvolvimento aceita somente origem local", () => {
 });
 
 test("convite preserva a senha global de usuário Auth existente", () => {
-  const helper = dashboardActions.slice(
-    dashboardActions.indexOf("async function upsertAuthUserWithPassword"),
-    dashboardActions.indexOf("function safeHexColor"),
+  const invite = dashboardActions.slice(
+    dashboardActions.indexOf("export async function inviteClinicUserAction"),
+    dashboardActions.indexOf("export async function updateClinicUserAction"),
   );
-  assert.match(helper, /if \(existing\?\.id\)[\s\S]*return \{ user: existing, existed: true \}/);
-  assert.doesNotMatch(helper, /updateUserById/);
-  assert.match(usersPage, /A credencial atual foi preservada/);
+  assert.match(invite, /existingAuthUser \? "magiclink" : "invite"/);
+  assert.doesNotMatch(invite, /\bpassword:\s*[^!]|updateUserById|createUser\(/);
+  assert.doesNotMatch(usersPage, /senha_temporaria|Senha temporária/);
 });
 
 test("somente owner pode conceder ou administrar owner", () => {

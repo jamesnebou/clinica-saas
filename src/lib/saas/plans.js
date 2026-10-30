@@ -2,7 +2,7 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 import { isFullAccessClinic } from "@/lib/saas/plan-entitlements.mjs";
 
 export const ACTIVE_CLINIC_STATUSES = new Set(["trial", "ativa"]);
-export const BILLING_WARNING_STATUSES = new Set(["trial", "inadimplente", "cancelada", "bloqueada"]);
+export const BILLING_WARNING_STATUSES = new Set(["trial", "pendente", "inadimplente", "cancelada", "bloqueada"]);
 
 export const FALLBACK_PLANS = {
   starter: {
@@ -131,18 +131,25 @@ export function getClinicBillingState(clinic) {
   const status = clinic?.status || "trial";
   const assinaturaStatus = String(clinic?.assinatura_status || "").toLowerCase();
   const trialEndsAt = clinic?.trial_ends_at ? new Date(clinic.trial_ends_at) : null;
-  const trialExpired = status === "trial" && trialEndsAt && trialEndsAt < new Date();
+  const trialExpired = status === "trial" && (!trialEndsAt || !Number.isFinite(trialEndsAt.getTime()) || trialEndsAt <= new Date());
+
+  if (status === "cancelada" || status === "bloqueada") {
+    return { blocked: true, level: "danger", title: "Clínica bloqueada", message: clinic?.bloqueio_motivo || "A assinatura desta clínica está cancelada ou bloqueada." };
+  }
+  if (status === "inativa") {
+    return { blocked: true, level: "warning", title: "Clínica inativa", message: clinic?.bloqueio_motivo || "Esta clínica está inativa." };
+  }
 
   if (assinaturaStatus === "isenta") {
     return { blocked: false, level: "ok", title: "Assinatura isenta", message: "Esta clínica está liberada por isenção comercial." };
   }
 
-  if (assinaturaStatus === "pausada" || status === "inativa") {
-    return { blocked: true, level: "warning", title: "Cobrança pausada", message: clinic?.bloqueio_motivo || "A recorrência está pausada e pode ser reativada usando a mesma assinatura Asaas." };
+  if (status === "pendente" || (assinaturaStatus === "pendente" && status !== "trial")) {
+    return { blocked: true, level: "warning", title: "Pagamento pendente", message: "A assinatura aguarda a confirmação do pagamento para liberar o acesso pago." };
   }
 
-  if (status === "cancelada" || status === "bloqueada") {
-    return { blocked: true, level: "danger", title: "Clínica bloqueada", message: clinic?.bloqueio_motivo || "A assinatura desta clínica está cancelada ou bloqueada." };
+  if (assinaturaStatus === "pausada") {
+    return { blocked: true, level: "warning", title: "Cobrança pausada", message: clinic?.bloqueio_motivo || "A recorrência está pausada e pode ser reativada usando a mesma assinatura Asaas." };
   }
 
   if (status === "inadimplente") {
@@ -154,7 +161,17 @@ export function getClinicBillingState(clinic) {
   }
 
   if (status === "trial") {
-    return { blocked: false, level: "info", title: "Clínica em trial", message: trialEndsAt ? `Teste válido até ${trialEndsAt.toLocaleDateString("pt-BR")}.` : "Clínica em período de teste." };
+    return { blocked: false, level: "info", title: "Clínica em trial", message: assinaturaStatus === "pendente"
+      ? `Assinatura aguardando pagamento. O teste continua válido até ${trialEndsAt.toLocaleDateString("pt-BR")}.`
+      : `Teste válido até ${trialEndsAt.toLocaleDateString("pt-BR")}.` };
+  }
+
+  if (["cancelada", "atrasada"].includes(assinaturaStatus)) {
+    return { blocked: true, level: "danger", title: "Assinatura indisponível", message: clinic?.bloqueio_motivo || "Regularize a assinatura para continuar." };
+  }
+
+  if (assinaturaStatus !== "ativa") {
+    return { blocked: true, level: "warning", title: "Pagamento pendente", message: "A assinatura aguarda a confirmação do pagamento para liberar o acesso pago." };
   }
 
   return { blocked: false, level: "ok", title: "Assinatura ativa", message: "Plano comercial ativo." };

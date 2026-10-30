@@ -15,6 +15,7 @@ import { emitDomainEvent, upsertTransactionalConsent } from "@/lib/whatsapp/even
 import { getTrustedAppOrigin } from "@/lib/security/app-origin";
 import { consumePublicRateLimit, hashPublicRateLimitValue } from "@/lib/security/public-antiabuse";
 import { isUuid, isValidPublicSlug, looksLikeAutomatedForm, validPublicForm } from "@/lib/security/public-antiabuse-core.mjs";
+import { canAcceptPublicOperation } from "@/lib/saas/public-access.mjs";
 
 function text(formData, key, max = 500) {
   return String(formData.get(key) || "").trim().slice(0, max);
@@ -182,13 +183,12 @@ export async function createPublicBookingAction(formData) {
 
   const { data: clinic, error: clinicError } = await supabaseAdmin
     .from("clinicas")
-    .select("id, nome, slug, status, email, telefone, metadata")
+    .select("id, nome, slug, status, assinatura_status, trial_ends_at, plan_entitlements_mode, plan_entitlements_version, email, telefone, metadata")
     .eq("slug", slug)
-    .in("status", ["trial", "ativa"])
     .maybeSingle();
 
   if (clinicError) throw clinicError;
-  if (!clinic) publicRedirect(slug, { erro: "clínica", mensagem: "Clínica indisponível para agendamento online." }, returnTo);
+  if (!canAcceptPublicOperation(clinic)) publicRedirect(slug, { erro: "clínica", mensagem: "Clínica indisponível para agendamento online." }, returnTo);
 
   const bookingRateLimit = await consumePublicRateLimit({
     scope: "booking_create",
@@ -459,13 +459,12 @@ export async function createPublicLeadAction(formData) {
 
   const { data: clinic, error: clinicError } = await supabaseAdmin
     .from("clinicas")
-    .select("id, nome, slug, status, metadata")
+    .select("id, nome, slug, status, assinatura_status, trial_ends_at, plan_entitlements_mode, plan_entitlements_version, metadata")
     .eq("slug", slug)
-    .in("status", ["trial", "ativa"])
     .maybeSingle();
 
   if (clinicError) throw clinicError;
-  if (!clinic) publicLeadRedirect(slug, { lead_erro: "clinica", mensagem: "Clínica indisponível para receber solicitações agora." });
+  if (!canAcceptPublicOperation(clinic)) publicLeadRedirect(slug, { lead_erro: "clinica", mensagem: "Clínica indisponível para receber solicitações agora." });
 
   const leadRateLimit = await consumePublicRateLimit({
     scope: "clinic_lead_create",

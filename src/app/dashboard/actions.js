@@ -7,7 +7,8 @@ import { createClient } from "@/lib/supabase/server";
 import { requireClinic, requireClinicCapability, requireClinicSection, resolveClinicPlanEntitlements } from "@/lib/auth/session";
 import { clinicHasEntitlement, entitlementUpgradeMessage } from "@/lib/saas/plan-entitlements.mjs";
 import { supabaseAdmin } from "@/lib/supabase/admin";
-import { uploadClientPhoto, uploadClinicLogo, uploadClinicSiteImage, uploadProcedureImage, uploadProductImage } from "@/lib/supabase/storage";
+import { sendAutomationEmail } from "@/lib/automations/email";
+import { removeClientPhotoObject, uploadClientPhoto, uploadClinicLogo, uploadClinicSiteImage, uploadProcedureImage, uploadProductImage } from "@/lib/supabase/storage";
 import { assertClinicLimit, assertClinicOperational } from "@/lib/saas/plans";
 import { ensureVercelProjectDomain, getVercelProjectDomain, normalizeCustomDomain, removeVercelProjectDomain } from "@/lib/vercel/domains";
 import { removeOwnedClinicDomain } from "@/lib/vercel/clinic-domain-removal.mjs";
@@ -227,26 +228,6 @@ async function findAuthUserByEmail(email) {
   }
 
   return null;
-}
-
-async function upsertAuthUserWithPassword({ email, password, nome }) {
-  const existing = await findAuthUserByEmail(email);
-
-  if (existing?.id) {
-    // A clínica que convida nunca pode redefinir a credencial global de uma
-    // pessoa que já possui acesso a outro tenant.
-    return { user: existing, existed: true };
-  }
-
-  const { data, error } = await supabaseAdmin.auth.admin.createUser({
-    email,
-    password,
-    email_confirm: true,
-    user_metadata: { nome },
-  });
-
-  if (error) throw error;
-  return { user: data?.user, existed: false };
 }
 
 function safeHexColor(value, fallback) {
@@ -969,6 +950,13 @@ export async function deleteClienteFotoAction(formData) {
   const clienteId = requireValue(text(formData, "cliente_id"), "Cliente não informado.");
   requireProntuarioAccess(memberships, clinicaId, `/dashboard/clientes/${clienteId}`);
 
+  const { data: photo, error: lookupError } = await supabase.from("cliente_fotos")
+    .select("id, storage_path").eq("id", id).eq("clinica_id", clinicaId).eq("cliente_id", clienteId).maybeSingle();
+  if (lookupError) throw lookupError;
+  if (!photo) throw new Error("Foto não encontrada nesta clínica e cliente.");
+  if (photo.storage_path) {
+    await removeClientPhotoObject({ clinicaId, clienteId, storagePath: photo.storage_path });
+  }
   const { error } = await supabase.from("cliente_fotos").delete().eq("id", id).eq("clinica_id", clinicaId).eq("cliente_id", clienteId);
   if (error) throw error;
   await auditProntuario({ clinicaId, actorId: user?.id, acao: "prontuario.foto_deleted", clienteId });
@@ -1171,14 +1159,13 @@ export async function sellClientePacoteAction(formData) {
   redirect(financeRedirectUrl(formData));
 }
 export async function inviteClinicUserAction(formData) {
-  const { supabase, clinicaId, activeClinic, memberships } = await getScopedSupabase();
+  const { clinicaId, activeClinic, memberships } = await getScopedSupabase();
   const redirectTo = userRedirectPath(formData);
   requireClinicManager(memberships, clinicaId, redirectTo);
   await redirectLimitError({ clinic: activeClinic, resource: "usuarios", redirectTo });
 
   const email = normalizeEmail(requireValue(text(formData, "email"), "Informe o e-mail do usuario."));
   const papel = requireValue(text(formData, "papel"), "Informe o papel do usuario.");
-  const senhaTemporaria = requireValue(text(formData, "senha_temporaria"), "Informe uma senha temporaria para o usuario.");
 
   if (!CLINIC_ROLES.has(papel)) {
     redirectWithMessage("/dashboard/usuarios", "papel", "Papel de usuario invalido.");
@@ -1189,29 +1176,65 @@ export async function inviteClinicUserAction(formData) {
     redirectWithMessage(redirectTo, "permissao", "Somente um owner pode conceder o papel de owner.");
   }
 
-  const authResult = await upsertAuthUserWithPassword({
-    email,
-    password: senhaTemporaria,
-    nome: nullableText(formData, "nome") || email,
-  });
+  const { data: existingMembership, error: lookupError } = await supabaseAdmin
+    .from("usuarios_clinica")
+    .select("id, ativo, accepted_at, invite_requires_password")
+    .eq("clinica_id", clinicaId)
+    .eq("email", email)
+    .maybeSingle();
+  if (lookupError) throw lookupError;
+  if (existingMembership?.ativo || existingMembership?.accepted_at) {
+    redirectWithMessage(redirectTo, "convite", "Este e-mail já possui vínculo com a clínica. Edite o usuário existente.");
+  }
 
-  const { error } = await supabase.from("usuarios_clinica").upsert({
+  const existingAuthUser = await findAuthUserByEmail(email);
+  const linkType = existingAuthUser ? "magiclink" : "invite";
+  const requiresPassword = existingMembership?.id ? existingMembership.invite_requires_password : !existingAuthUser;
+  const { data: link, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
+    type: linkType,
+    email,
+    ...(!existingAuthUser ? { options: { data: { nome: nullableText(formData, "nome") || email } } } : {}),
+  });
+  if (linkError || !link?.user?.id || !link?.properties?.hashed_token) {
+    throw linkError || new Error("Não foi possível gerar o convite.");
+  }
+
+  const now = new Date();
+  const { data: invitation, error } = await supabaseAdmin.from("usuarios_clinica").upsert({
+    ...(existingMembership?.id ? { id: existingMembership.id } : {}),
     clinica_id: clinicaId,
-    user_id: authResult.user?.id || null,
+    user_id: link.user.id,
     nome: nullableText(formData, "nome") || email,
     email,
     papel,
     permissoes: permissionsFromForm(formData, papel),
-    ativo: true,
-    invited_at: new Date().toISOString(),
-    accepted_at: authResult.user?.id ? new Date().toISOString() : null,
-  }, { onConflict: "clinica_id,email" });
-
+    ativo: false,
+    invited_at: now.toISOString(),
+    accepted_at: null,
+    invite_expires_at: new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString(),
+    invite_requires_password: requiresPassword,
+  }, { onConflict: "clinica_id,email" }).select("id").single();
   if (error) throw error;
+
+  const origin = await getTrustedAppOrigin();
+  const inviteUrl = new URL("/convite/verificar", origin);
+  inviteUrl.searchParams.set("id", invitation.id);
+  inviteUrl.searchParams.set("type", linkType);
+  inviteUrl.searchParams.set("token_hash", link.properties.hashed_token);
+  const sent = await sendAutomationEmail({
+    to: email,
+    subject: `Convite para ${activeClinic.nome} | NexaWi Clínicas`,
+    message: `Você recebeu um convite para acessar ${activeClinic.nome}. Abra o link abaixo em até 24 horas para aceitar. Se você não esperava este convite, ignore a mensagem.\n\n${inviteUrl.toString()}`,
+    actionUrl: inviteUrl.toString(),
+    idempotencyKey: `staff-invite:${invitation.id}:${now.getTime()}`,
+  });
+  if (sent.status !== "completed") {
+    redirectWithMessage(redirectTo, "convite", "Convite pendente: e-mail não configurado ou não entregue. Configure o envio e reenvie o convite.");
+  }
   revalidatePath("/dashboard/usuarios");
   revalidatePath("/dashboard/configuracoes");
   revalidatePath("/dashboard/assinatura");
-  redirect(`${redirectTo}?ok=${authResult.existed ? "senha" : "convite"}`);
+  redirect(`${redirectTo}?ok=convite`);
 }
 
 export async function updateClinicUserAction(formData) {
@@ -1229,13 +1252,16 @@ export async function updateClinicUserAction(formData) {
 
   const { data: existing, error: existingError } = await supabase
     .from("usuarios_clinica")
-    .select("id, papel, ativo")
+    .select("id, papel, ativo, accepted_at")
     .eq("clinica_id", clinicaId)
     .eq("id", id)
     .maybeSingle();
 
   if (existingError) throw existingError;
   if (!existing) redirectWithMessage("/dashboard/usuarios", "usuario", "Usuário não encontrado nesta clínica.");
+  if (ativo && !existing.accepted_at) {
+    redirectWithMessage(redirectTo, "convite", "O funcionário precisa aceitar o convite antes de receber acesso.");
+  }
 
   const actorMembership = currentMembership(memberships, clinicaId);
   if ((existing.papel === "owner" || papel === "owner") && actorMembership?.papel !== "owner") {
