@@ -18,8 +18,8 @@ export function summarizeClinicRows({ period, appointments, movements, customerT
   const count = (rows, status) => rows.filter((row) => row.status === status).length;
   const money = (n) => Math.round(n * 100) / 100;
   const totals = (rows) => ({
-    entries: money(rows.filter((row) => row.tipo === "entrada").reduce((sum, row) => sum + Number(row.valor_liquido || 0), 0)),
-    exits: money(rows.filter((row) => row.tipo === "saida").reduce((sum, row) => sum + Number(row.valor_liquido || 0), 0)),
+    entries: money(rows.filter((row) => ["entrada", "ajuste_entrada"].includes(row.tipo)).reduce((sum, row) => sum + Number(row.valor_liquido || 0), 0)),
+    exits: money(rows.filter((row) => ["saida", "ajuste_saida", "estorno"].includes(row.tipo)).reduce((sum, row) => sum + Number(row.valor_liquido || 0), 0)),
   });
   const finance = totals(movements.filter((row) => row.data_movimento >= period.start && row.data_movimento < period.end));
   const previousFinance = totals(movements.filter((row) => row.data_movimento >= period.previousStart && row.data_movimento < period.start));

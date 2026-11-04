@@ -70,6 +70,47 @@ test("reads structured SDK data and a known gateway type without retaining free 
   assert.equal(extractSafeGatewayErrorCode(direct), "customer_verification_required");
 });
 
+test("only explicit gateway codes survive nested causes and structured responses", () => {
+  for (const type of ["access_denied", "forbidden", "customer_verification_required", "quota_for_entity_exceeded",
+    "insufficient_funds", "no_providers_available", "model_not_found", "authentication_error",
+    "rate_limit_exceeded", "invalid_request_error"]) {
+    assert.equal(extractSafeGatewayErrorCode(apiError(403, { data: { error: { type } } })), type);
+  }
+  for (const type of ["patient_maria_silva_cpf_12345678900", "unknown_snake_case", "x".repeat(100),
+    "Authorization: Bearer fake-secret", 123, { name: "access_denied" }]) {
+    const error = new GatewayInternalServerError({ cause: apiError(403, { data: { error: { type } } }) });
+    assert.equal(classifyAiGenerationError(error).aiGatewayErrorType, null);
+  }
+  assert.equal(extractSafeGatewayErrorCode(new GatewayInternalServerError({ cause: apiError(403, {
+    responseBody: JSON.stringify({ error: { type: "unknown_snake_case", code: "forbidden" } }),
+  }) })), "forbidden");
+});
+
+test("arbitrary provider type never reaches clinic_ai_summary log", async () => {
+  const snapshot = {
+    period: { days: 30 }, agenda: { total: 0, completed: 0, confirmed: 0, canceled: 0, noShows: 0, upcoming: 0 },
+    finance: { realizedEntries: 0, realizedExits: 0 }, customers: { total: 0, newInPeriod: 0 }, procedures: [],
+    trends: { appointmentsPercent: null, receivedPercent: null, noShowRatePercent: null },
+  };
+  const previous = console.warn;
+  let record;
+  console.warn = (...args) => { record = args; };
+  try {
+    await assert.rejects(generateClinicSummary({ snapshot, model: "test/model", tenantHash: "opaque", generate: async () => {
+      throw apiError(403, { responseBody: JSON.stringify({ error: {
+        type: "patient_maria_silva_cpf_12345678900", message: "Authorization: Bearer fake-secret",
+      } }) });
+    } }), { message: "AI_UNAVAILABLE" });
+  } finally {
+    console.warn = previous;
+  }
+  assert.equal(record[1].aiGatewayErrorType, null);
+  const serialized = JSON.stringify(record);
+  for (const fragment of ["patient_maria", "fake-secret", "Authorization", "responseBody"]) {
+    assert.equal(serialized.includes(fragment), false);
+  }
+});
+
 test("rejects malicious types, invalid JSON, and unbounded cause chains", () => {
   const malicious = new GatewayInternalServerError({ cause: apiError(403, { responseBody: JSON.stringify({ error: {
     type: "Paciente Maria Authorization Bearer fake-secret", message: "Rua Ficticia CPF 000",

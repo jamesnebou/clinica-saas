@@ -9,10 +9,14 @@ const PROVIDER_CODES = new Set([
   "insufficient_funds", "customer_verification_required", "quota_for_entity_exceeded",
   "model_not_found", "invalid_request_error",
 ]);
-const SAFE_GATEWAY_CODE = /^[a-z][a-z0-9_]{0,63}$/;
+const SAFE_GATEWAY_CODES = new Set([
+  "access_denied", "forbidden", "customer_verification_required", "quota_for_entity_exceeded",
+  "insufficient_funds", "no_providers_available", "model_not_found", "authentication_error",
+  "rate_limit_exceeded", "invalid_request_error",
+]);
 
 function safeGatewayCode(value) {
-  return typeof value === "string" && SAFE_GATEWAY_CODE.test(value) ? value : null;
+  return typeof value === "string" && SAFE_GATEWAY_CODES.has(value) ? value : null;
 }
 
 function structuredGatewayCode(value) {
@@ -64,7 +68,7 @@ export function classifyAiGenerationError(error) {
   const retryable = (api || stream || gatewayName) && typeof source.isRetryable === "boolean" ? source.isRetryable : null;
 
   let category = "UNKNOWN";
-  if (structured || (source instanceof Error && source.message === "AI_INVALID_OUTPUT")) category = "STRUCTURED_OUTPUT";
+  if (structured || (source instanceof Error && ["AI_INVALID_OUTPUT", "AI_UNSAFE_OUTPUT"].includes(source.message))) category = "STRUCTURED_OUTPUT";
   else if (gatewayType === "access_denied" || gatewayType === "forbidden") category = "ACCESS_OR_ENTITLEMENT";
   else if (gatewayType === "customer_verification_required") category = "CUSTOMER_VERIFICATION";
   else if (gatewayType === "quota_for_entity_exceeded") category = "BUDGET";
