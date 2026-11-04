@@ -1,5 +1,6 @@
 import { generateText, Output } from "ai";
 import { z } from "zod";
+import { classifyAiGenerationError } from "./summary-error-diagnostics.mjs";
 
 const item = z.strictObject({ title: z.string().min(1).max(100), detail: z.string().min(1).max(400) });
 export const clinicSummarySchema = z.strictObject({
@@ -68,8 +69,9 @@ export async function generateClinicSummary({ snapshot, model, tenantHash, envir
     console.info("clinic_ai_summary", { feature: "clinic-summary", status: "ok", model, durationMs: Date.now() - started,
       inputTokens: result.usage?.inputTokens ?? null, outputTokens: result.usage?.outputTokens ?? null, tenantHash });
     return parsed.data;
-  } catch {
-    console.warn("clinic_ai_summary", { feature: "clinic-summary", status: "error", model, durationMs: Date.now() - started, tenantHash, errorCode: "AI_UNAVAILABLE" });
+  } catch (error) {
+    console.warn("clinic_ai_summary", { feature: "clinic-summary", status: "error", model, durationMs: Date.now() - started,
+      tenantHash, errorCode: "AI_UNAVAILABLE", ...classifyAiGenerationError(error) });
     throw new Error("AI_UNAVAILABLE");
   }
 }
