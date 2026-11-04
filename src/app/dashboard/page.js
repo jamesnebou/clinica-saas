@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { CalendarDays, CreditCard, Scissors, ShieldCheck, TrendingUp, UsersRound, Wallet } from "lucide-react";
+import { CalendarDays, CreditCard, Scissors, ShieldCheck, Sparkles, TrendingUp, UsersRound, Wallet } from "lucide-react";
 import { requireClinic } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { isBillableRecord, paidAmount } from "@/lib/domain/finance-core.mjs";
@@ -7,6 +7,7 @@ import { Card, EmptyClinicState, EmptyState, Notice, PageHeader } from "@/compon
 import { getClinicBillingState, getClinicPlan } from "@/lib/saas/plans";
 import { clinicTimeZone, dateKeyInTimeZone, utcRangeForClinicDate } from "@/lib/clinic/schedule";
 import { getPrimaryClinicSegment } from "@/lib/segments/service";
+import { canUseClinicAi } from "@/lib/ai/access.mjs";
 
 async function countRows(supabase, table, clinicaId) {
   const { count, error } = await supabase.from(table).select("id", { count: "exact", head: true }).eq("clinica_id", clinicaId);
@@ -68,7 +69,8 @@ function statusLabel(status) {
 
 export default async function DashboardPage({ searchParams }) {
   const params = await searchParams;
-  const { activeClinic } = await requireClinic();
+  const context = await requireClinic();
+  const { activeClinic } = context;
 
   if (!activeClinic) {
     return <main className="px-5 py-8 sm:px-8 lg:px-10"><EmptyClinicState /></main>;
@@ -154,6 +156,17 @@ export default async function DashboardPage({ searchParams }) {
     <main className="min-w-0 overflow-x-hidden px-4 py-8 sm:px-6 lg:px-8 xl:px-10">
       <section className="mx-auto max-w-[1480px] min-w-0">
         <PageHeader eyebrow={segment.name} title="Operação da clínica" description={`Visão executiva de ${brandName}: faturamento, agenda, ${terminology.clientes.toLocaleLowerCase("pt-BR")}, equipe e status comercial.`} />
+        {canUseClinicAi(context) ? (
+          <Card className="mt-6">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div className="flex items-start gap-3">
+                <Sparkles size={20} className="mt-1 shrink-0 text-[var(--clinic-primary)]" />
+                <div><h2 className="text-base font-bold text-neutral-900">NexaWi IA</h2><p className="mt-1 text-sm text-neutral-600">Veja um resumo inteligente do desempenho da sua clínica e os principais pontos de atenção.</p></div>
+              </div>
+              <Link href="/dashboard/ia" className="inline-flex h-10 items-center rounded-md bg-[var(--clinic-primary)] px-4 text-sm font-semibold text-white">Gerar análise</Link>
+            </div>
+          </Card>
+        ) : null}
         {params?.erro === "permissao" ? (
           <div className="mt-6">
             <Notice type="warning" title="Acesso restrito">Seu papel atual não tem permissão para abrir esta área. O menu mostra apenas os módulos liberados para o seu acesso.</Notice>
