@@ -127,6 +127,36 @@ async function finish(chat, index, body, status = 200) {
 
 const analysis = { type: "analysis", intent: "agenda", lastIntent: "agenda", confirmed: [{ label: "Agendamentos", value: 12, kind: "count" }],
   interpretation: "Acompanhe a agenda.", nextSteps: ["Revisar horários disponíveis."] };
+const agenda = { type: "agenda_details", lastIntent: "agenda_details", period: { startDate: "2026-11-04", endDate: "2026-11-05" },
+  agendaContext: { startDate: "2026-11-04", endDate: "2026-11-05", status: null, mode: "list" },
+  days: [{ date: "2026-11-04", label: "Hoje", total: 1 }, { date: "2026-11-05", label: "Amanhã", total: 1 }],
+  appointments: [{ date: "2026-11-04", time: "09:00", client: "Ana Silva", procedures: ["Limpeza"], professional: "Lia", status: "agendado" }],
+  total: 2, hasMore: true, page: 0, mode: "list" };
+
+test("agenda answer shows days and paginates without model text or client-provided IDs", async () => {
+  const chat = createChat();
+  chat.find((node) => node.type === "textarea").props.onChange({ target: { value: "Quais clientes tenho hoje e amanhã?" } });
+  chat.render();
+  const first = chat.button("Enviar pergunta").props.onClick();
+  await finish(chat, 0, agenda);
+  await first;
+  assert.match(chat.text, /Hoje 1 agendamento/);
+  assert.match(chat.text, /Ana Silva/);
+  assert.doesNotMatch(chat.text, /Leitura gerencial|Próximos passos/);
+  const more = chat.button("Mostrar mais agendamentos").props.onClick();
+  const body = JSON.parse(chat.requests[1].options.body);
+  assert.equal(body.lastIntent, "agenda_details");
+  assert.equal(body.agendaPage, 1);
+  assert.deepEqual(body.agendaContext, agenda.agendaContext);
+  assert.equal(Object.hasOwn(body, "clinicId"), false);
+  await finish(chat, 1, { ...agenda, appointments: [{ date: "2026-11-05", time: "10:00", client: "Bia Lima", procedures: ["Drenagem"], professional: null, status: "confirmado" }], hasMore: false, page: 1 });
+  await more;
+  assert.match(chat.text, /Bia Lima/);
+  assert.match(chat.text, /Ana Silva/);
+  chat.render("user-b:clinic-b");
+  assert.doesNotMatch(chat.text, /Ana Silva|Bia Lima/);
+  chat.unmount();
+});
 
 test("suggestion sends manually, renders confirmed metrics and keeps temporary history for follow-up", async () => {
   const chat = createChat();

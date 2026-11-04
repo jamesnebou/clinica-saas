@@ -6,13 +6,23 @@ const A = "00000000-0000-4000-8000-000000000001";
 const B = "00000000-0000-4000-8000-000000000002";
 const user = { id: "user-a" };
 const clinic = (id = A, mode = "unlimited_lifetime") => ({ id, plan_entitlements_mode: mode });
-const state = { context: null, clinic: null, limiter: { allowed: true }, snapshotCalls: [], generationCalls: [], limitCalls: [] };
+const state = { context: null, clinic: null, limiter: { allowed: true }, snapshotCalls: [], generationCalls: [], limitCalls: [], agendaCalls: [], agendaAllowed: true };
 globalThis.__ia03 = state;
 
 const fake = new Map([
   ["@/lib/auth/session", `export const getUserClinics = async () => globalThis.__ia03.context;
     export const resolveClinicPlanEntitlements = async () => globalThis.__ia03.clinic;`],
   ["@/lib/supabase/server", "export const createClient = async () => ({});"],
+  ["@/lib/auth/permissions", `export const getCurrentMembership = (memberships, id) => memberships.find((item) => item.clinica_id === id);
+    export const canAccessSection = () => globalThis.__ia03.agendaAllowed;
+    export const sectionHasCapability = () => globalThis.__ia03.agendaAllowed;`],
+  ["@/lib/saas/plans", "export const getClinicPlan = async () => ({});"],
+  ["@/lib/segments/service", "export const getClinicCapabilities = async () => ({ effective: ['agenda'] });"],
+  ["@/lib/ai/agenda-details.mjs", `export const getClinicAgendaDetails = async (args) => {
+    globalThis.__ia03.agendaCalls.push({ clinicId: args.clinic.id, request: args.request, page: args.page });
+    return { type: 'agenda_details', period: args.request, days: [], appointments: [], total: 0, hasMore: false,
+      lastIntent: 'agenda_details', agendaContext: { ...args.request } };
+  };`],
   ["@/lib/ai/clinic-summary-data", `export const getClinicSummarySnapshot = async ({ clinic, days }) => {
     globalThis.__ia03.snapshotCalls.push({ clinicId: clinic.id, days }); return globalThis.__ia03.snapshot(days);
   };`],
@@ -64,6 +74,8 @@ function reset({ role = "owner", mode = "unlimited_lifetime", selected = A, auth
   state.snapshotCalls.length = 0;
   state.generationCalls.length = 0;
   state.limitCalls.length = 0;
+  state.agendaCalls.length = 0;
+  state.agendaAllowed = true;
 }
 
 async function post(body, origin = "https://test.invalid") {
@@ -140,6 +152,61 @@ test("agenda, finance, customers, absences and follow-up use controlled intentio
   const explicitFollowUp = await post({ question: "Explique melhor essa queda de agendamentos", days: 30, lastIntent: "agenda" });
   assert.equal(explicitFollowUp.body.intent, "agenda");
   assert.equal(state.generationCalls[0].followUp, true);
+});
+
+test("exact customer-and-procedure question routes to scoped agenda without model or snapshot", async () => {
+  reset();
+  const response = await post({ question: "Quais são os clientes que tenho para hoje e amanhã e quais são os procedimentos?", days: 30 });
+  assert.equal(response.status, 200);
+  assert.equal(response.body.type, "agenda_details");
+  assert.equal(state.agendaCalls.length, 1);
+  assert.equal(state.agendaCalls[0].clinicId, A);
+  assert.equal(state.agendaCalls[0].request.mode, "list");
+  assert.equal(state.generationCalls.length, 0);
+  assert.equal(state.snapshotCalls.length, 0);
+  reset({ selected: B });
+  await post({ question: "Quais clientes tenho hoje?", days: 7 });
+  assert.equal(state.agendaCalls[0].clinicId, B);
+});
+
+test("agenda permission is checked before lookup and never calls the model", async () => {
+  reset();
+  state.agendaAllowed = false;
+  const response = await post({ question: "Quem está agendado para amanhã?", days: 30 });
+  assert.equal(response.status, 403);
+  assert.equal(state.agendaCalls.length, 0);
+  assert.equal(state.generationCalls.length, 0);
+});
+
+test("day-specific customer aggregates state the limitation instead of showing unrelated totals", async () => {
+  reset();
+  const response = await post({ question: "Quantos clientes novos tenho hoje?", days: 30 });
+  assert.equal(response.status, 200);
+  assert.equal(response.body.type, "local");
+  assert.match(response.body.message, /não consigo analisar clientes por dia/);
+  assert.equal(state.agendaCalls.length, 0);
+  assert.equal(state.snapshotCalls.length, 0);
+  assert.equal(state.generationCalls.length, 0);
+});
+
+test("pointed aggregate question returns the supported metric without generic model commentary", async () => {
+  reset();
+  const response = await post({ question: "Quanto entrou neste período?", days: 30 });
+  assert.equal(response.status, 200);
+  assert.equal(response.body.type, "analysis");
+  assert.deepEqual(response.body.confirmed.map((item) => item.label), ["Entradas realizadas"]);
+  assert.equal(response.body.interpretation, "");
+  assert.deepEqual(response.body.nextSteps, []);
+  assert.equal(state.generationCalls.length, 0);
+});
+
+test("agenda day uses the authenticated clinic timezone, not the entitlement projection", async () => {
+  reset();
+  state.context.activeClinic = { ...state.context.activeClinic, metadata: { timezone: "Pacific/Kiritimati" } };
+  const response = await post({ question: "Quais clientes tenho hoje?", days: 30 });
+  assert.equal(response.status, 200);
+  const { dateKeyInTimeZone } = await import("../src/lib/clinic/schedule.js");
+  assert.equal(state.agendaCalls[0].request.startDate, dateKeyInTimeZone(new Date(), "Pacific/Kiritimati"));
 });
 
 test("unrecognized, sensitive and adversarial questions are local and never reach provider or limiter", async () => {

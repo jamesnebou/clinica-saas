@@ -22,6 +22,28 @@ const formatters = {
   currency: new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }),
   percent: new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 1 }),
 };
+const agendaStatuses = { agendado: "Agendado", confirmado: "Confirmado", em_atendimento: "Em atendimento",
+  concluido: "Concluído", cancelado: "Cancelado", faltou: "Faltou" };
+
+function AgendaAnswer({ message, onMore }) {
+  return <div className="space-y-5">
+    {message.days.map((day) => {
+      const items = message.appointments.filter((item) => item.date === day.date);
+      return <section key={day.date} className="border-b border-neutral-200 pb-4 last:border-0">
+        <h3 className="font-semibold text-neutral-950">{day.label} <span className="ml-2 text-xs font-normal text-neutral-500">{day.total} agendamento{day.total === 1 ? "" : "s"}</span></h3>
+        {message.mode === "count" && day.total ? null : items.length ? <ul className="mt-2 space-y-2">{items.map((item, index) => <li key={`${item.date}-${item.time}-${index}`} className="grid gap-1 rounded-md border border-neutral-200 bg-white px-3 py-2 sm:grid-cols-[4rem_1fr_auto] sm:gap-3">
+          <time className="font-semibold tabular-nums">{item.time}</time>
+          <span className="min-w-0"><span className="block font-medium">{item.client || item.procedures.join(", ")}</span>
+            {item.client ? <span className="block text-neutral-600">{item.procedures.join(", ") || "Procedimento indisponível"}</span> : null}
+            {item.professional ? <span className="block text-xs text-neutral-500">{item.professional}</span> : null}</span>
+          <span className="text-xs font-medium text-neutral-600">{agendaStatuses[item.status] || item.status}</span>
+        </li>)}</ul> : <p className="mt-2 text-neutral-600">{day.total ? message.mode === "first" ? "O primeiro horário do período está exibido acima." : "Agendamentos desta data podem estar em outra página." : "Não encontrei agendamentos para essa data."}</p>}
+      </section>;
+    })}
+    {message.hasMore && onMore ? <button type="button" onClick={onMore} className="text-sm font-semibold text-[var(--clinic-primary)] hover:underline">Mostrar mais agendamentos</button> : null}
+    {message.limitReached ? <p className="text-sm text-amber-800">Há mais resultados. Refine o período para consultar os demais.</p> : null}
+  </div>;
+}
 
 function Indicator({ metric }) {
   const formatted = formatters[metric.kind]?.format(metric.value) ?? "—";
@@ -31,7 +53,7 @@ function Indicator({ metric }) {
   </div>;
 }
 
-function ChatMessage({ message }) {
+function ChatMessage({ message, onMore }) {
   if (message.role === "user") return (
     <div className="flex justify-end">
       <div className="max-w-[88%] rounded-md bg-neutral-900 px-4 py-3 text-sm leading-6 text-white sm:max-w-[75%]">{message.text}</div>
@@ -41,12 +63,12 @@ function ChatMessage({ message }) {
     <div className="flex gap-3">
       <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-[var(--clinic-primary)] text-white"><Bot size={17} /></div>
       <div className="min-w-0 max-w-3xl flex-1 text-sm leading-6 text-neutral-800">
-        {message.local ? <p className="pt-1">{message.text}</p> : <>
+        {message.agenda ? <AgendaAnswer message={message} onMore={onMore} /> : message.local ? <p className="pt-1">{message.text}</p> : <>
           <p className="font-semibold text-neutral-950">Indicadores confirmados</p>
           {message.confirmed.length ? <dl className="mt-2 max-w-xl">{message.confirmed.map((metric) => <Indicator key={metric.label} metric={metric} />)}</dl>
             : <p className="mt-2 text-neutral-600">Não há base comparável para este indicador no período.</p>}
-          <p className="mt-5 font-semibold text-neutral-950">Leitura gerencial</p>
-          <p className="mt-1 whitespace-pre-wrap">{message.interpretation}</p>
+          {message.interpretation ? <><p className="mt-5 font-semibold text-neutral-950">Leitura gerencial</p>
+            <p className="mt-1 whitespace-pre-wrap">{message.interpretation}</p></> : null}
           {message.nextSteps.length ? <>
             <p className="mt-5 font-semibold text-neutral-950">Próximos passos</p>
             <ul className="mt-1 list-disc space-y-1 pl-5">{message.nextSteps.map((step, index) => <li key={index}>{step}</li>)}</ul>
@@ -68,6 +90,7 @@ export function ClinicChatPanel({ scopeKey }) {
   const generationRef = useRef(0);
   const messageIdRef = useRef(0);
   const lastIntentRef = useRef(null);
+  const agendaContextRef = useRef(null);
   const mountedRef = useRef(false);
   const scopeRef = useRef(scopeKey);
   const endRef = useRef(null);
@@ -85,6 +108,7 @@ export function ClinicChatPanel({ scopeKey }) {
     requestRef.current?.abort();
     requestRef.current = null;
     lastIntentRef.current = null;
+    agendaContextRef.current = null;
   }, []);
 
   const clearConversation = useCallback(() => {
@@ -117,9 +141,9 @@ export function ClinicChatPanel({ scopeKey }) {
 
   useEffect(() => { endRef.current?.scrollIntoView({ block: "end", behavior: "smooth" }); }, [messages, loading]);
 
-  async function submit(suggestion) {
+  async function submit(suggestion, agendaPage = 0) {
     if (requestRef.current) return;
-    const question = (typeof suggestion === "string" ? suggestion : draft).trim();
+    const question = (agendaPage ? "Me mostre mais desses agendamentos" : typeof suggestion === "string" ? suggestion : draft).trim();
     if (question.length < 2 || question.length > 400) {
       setError("Escreva uma pergunta de até 400 caracteres.");
       return;
@@ -130,23 +154,28 @@ export function ClinicChatPanel({ scopeKey }) {
     const isCurrent = () => mountedRef.current && generationRef.current === generation && scopeRef.current === requestScope;
     requestRef.current = controller;
     const lastIntent = lastIntentRef.current;
-    setMessages((current) => [...current.slice(-10), { id: ++messageIdRef.current, role: "user", text: question }]);
+    if (!agendaPage) setMessages((current) => [...current.slice(-10), { id: ++messageIdRef.current, role: "user", text: question }]);
     setDraft("");
     setError("");
     setLoading(true);
     try {
       const response = await fetch("/api/ai/chat", { method: "POST", credentials: "same-origin", cache: "no-store",
-        headers: { "Content-Type": "application/json" }, body: JSON.stringify({ question, days, lastIntent }), signal: controller.signal });
+        headers: { "Content-Type": "application/json" }, body: JSON.stringify({ question, days, lastIntent, agendaContext: agendaContextRef.current, agendaPage }), signal: controller.signal });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload?.error || "AI_UNAVAILABLE");
-      if (payload?.type !== "local" && payload?.type !== "analysis") throw new Error("AI_UNAVAILABLE");
+      if (!["local", "analysis", "agenda_details"].includes(payload?.type)) throw new Error("AI_UNAVAILABLE");
       if (payload.type === "analysis" && (!Array.isArray(payload.confirmed) || !Array.isArray(payload.nextSteps) || typeof payload.interpretation !== "string")) throw new Error("AI_UNAVAILABLE");
       if (payload.type === "local" && typeof payload.message !== "string") throw new Error("AI_UNAVAILABLE");
+      if (payload.type === "agenda_details" && (!Array.isArray(payload.days) || !Array.isArray(payload.appointments) || !payload.agendaContext)) throw new Error("AI_UNAVAILABLE");
       if (isCurrent()) {
         lastIntentRef.current = payload.lastIntent || null;
-        setMessages((current) => [...current.slice(-11), { id: ++messageIdRef.current, role: "assistant",
+        agendaContextRef.current = payload.type === "agenda_details" ? payload.agendaContext : null;
+        if (agendaPage) setMessages((current) => current.map((item, index) => index === current.length - 1 && item.agenda
+          ? { ...item, appointments: [...item.appointments, ...payload.appointments], hasMore: payload.hasMore, page: payload.page } : item));
+        else setMessages((current) => [...current.slice(-11), { id: ++messageIdRef.current, role: "assistant",
           ...(payload.type === "local" ? { local: true, text: payload.message }
-            : { local: false, confirmed: payload.confirmed, interpretation: payload.interpretation, nextSteps: payload.nextSteps }) }]);
+            : payload.type === "agenda_details" ? { agenda: true, ...payload }
+              : { local: false, confirmed: payload.confirmed, interpretation: payload.interpretation, nextSteps: payload.nextSteps }) }]);
       }
     } catch (cause) {
       if (isCurrent()) {
@@ -181,8 +210,9 @@ export function ClinicChatPanel({ scopeKey }) {
           <p className="mt-2 text-sm leading-6 text-neutral-600">Converse sobre agenda, financeiro, clientes e tendências com base nos indicadores disponíveis.</p>
           <div className="mt-6 flex flex-wrap gap-2">{suggestions.map((suggestion) => <button key={suggestion} type="button" disabled={loading} onClick={() => submit(suggestion)}
             className="rounded-md border border-neutral-300 bg-white px-3 py-2 text-left text-xs font-medium text-neutral-700 hover:border-[var(--clinic-primary)] hover:text-neutral-950 disabled:opacity-60">{suggestion}</button>)}</div>
-        </div> : visibleMessages.map((message) => <ChatMessage key={message.id} message={message} />)}
-        {loading ? <div className="flex items-center gap-2 text-sm text-neutral-500"><LoaderCircle size={17} className="animate-spin" /> Analisando indicadores...</div> : null}
+        </div> : visibleMessages.map((message, index) => <ChatMessage key={message.id} message={message}
+          onMore={index === visibleMessages.length - 1 ? () => submit(null, message.page + 1) : undefined} />)}
+        {loading ? <div className="flex items-center gap-2 text-sm text-neutral-500"><LoaderCircle size={17} className="animate-spin" /> Consultando dados...</div> : null}
         <div ref={endRef} />
       </div>
 
