@@ -48,8 +48,12 @@ operacional atual. Nao persistir textos livres ou dados de pacientes.
 Em Production, `NEXAWI_AI_BETA_ENABLED` deve ser `true` **e** o `user.id` e
 `clinic.id` devem estar nas allowlists server-side separadas. O default e
 desligado. Associacao ativa, role owner/admin e entitlement continuam
-obrigatorios. Preview conserva o gate Alpha existente. Nenhuma dessas variaveis
-de Production e alterada por esta entrega.
+obrigatorios para o gate Alpha em Preview. Em Production, a combinacao de flag,
+UUID do usuario e UUID da clinica autoriza somente o modulo IA Beta, mesmo sem
+`unlimited_lifetime` ou `internal_full_access`. O plano comercial e as
+capabilities dos demais modulos nao mudam; operacoes de Agenda ainda exigem
+permissao e capability proprias. Nenhuma dessas variaveis de Production e
+alterada por esta entrega.
 
 Consultas deterministicas nao chamam o AI Gateway. Analises usam no maximo
 1200 tokens de saida; continuacoes, 700. O limitador persistente permanece
@@ -70,9 +74,10 @@ monetario confiavel para registrar.
 
 Para a clinica Ingrid, antes de qualquer operacao em Production, obter
 autorizacao expressa da responsavel, identificar a conta permitida e confirmar
-associacao ativa, role, entitlement e IDs administrativos no ambiente correto.
-Nao usar e-mail sozinho como autorizacao nem consultar prontuarios para obter
-IDs. Ate esses gates e o smoke autenticado A/B em staging serem concluidos,
+associacao ativa, role e os dois UUIDs no ambiente correto. Obter os IDs pela
+interface administrativa aprovada ou por autoidentificacao legitima da Ingrid,
+sem consultar prontuarios. Nao usar e-mail ou dominio como autorizacao, nem
+alterar plano para habilitar a Beta. Ate esses gates e o smoke autenticado A/B em staging serem concluidos,
 flag e allowlists de Production permanecem inalteradas/desligadas.
 
 Se ocorrer regressao, desativar a flag e retornar ao deployment anterior.

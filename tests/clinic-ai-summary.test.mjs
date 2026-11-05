@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { canUseClinicAi } from "../src/lib/ai/access.mjs";
+import { canUseClinicAi, getClinicAiMembership } from "../src/lib/ai/access.mjs";
 import { sanitizeProcedureLabel, summarizeClinicRows, validateSummaryDays } from "../src/lib/ai/clinic-summary-core.mjs";
 import { runClinicSummary } from "../src/lib/ai/summary-flow.mjs";
 import { buildClinicSummaryModelPayload, clinicSummaryModelPayloadSchema, clinicSummarySchema, generateClinicSummary } from "../src/lib/ai/summary-generation.mjs";
@@ -32,6 +32,17 @@ test("Alpha gate checks current clinic, membership identity, role and mode", () 
   assert.equal(canUseClinicAi(context("owner", "catalog_v1")), false);
   assert.equal(canUseClinicAi({ ...context("owner"), memberships: [{ clinica_id: "other", user_id: user.id, papel: "owner", ativo: true }] }), false);
   assert.equal(canUseClinicAi(context("owner"), { id: "other", plan_entitlements_mode: "unlimited_lifetime" }), false);
+});
+
+test("AI operations use the active membership of the authenticated user", () => {
+  const current = context("admin");
+  const ownMembership = current.memberships[0];
+  current.memberships.unshift({ ...ownMembership, user_id: "other-user", papel: "owner" });
+  assert.equal(getClinicAiMembership(current), ownMembership);
+  assert.equal(canUseClinicAi(current), true);
+  current.memberships[1] = { ...ownMembership, ativo: false };
+  assert.equal(getClinicAiMembership(current), null);
+  assert.equal(canUseClinicAi(current), false);
 });
 
 test("Periods and procedure labels are bounded and untrusted", () => {
@@ -67,20 +78,41 @@ test("Snapshot contains only aggregated operational fields and server-computed t
 test("production Beta fails closed unless flag, user and clinic IDs all match", () => {
   const keys = ["VERCEL_ENV", "NEXAWI_AI_BETA_ENABLED", "NEXAWI_AI_BETA_USER_IDS", "NEXAWI_AI_BETA_CLINIC_IDS"];
   const original = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
+  const clinicId = "11111111-1111-4111-8111-111111111111";
+  const userId = "22222222-2222-4222-8222-222222222222";
+  const betaContext = (role = "owner", mode = "catalog_v1") => ({
+    user: { id: userId }, activeClinic: { id: clinicId, plan_entitlements_mode: mode },
+    memberships: [{ clinica_id: clinicId, user_id: userId, papel: role, ativo: true }],
+  });
   try {
     process.env.VERCEL_ENV = "production";
     delete process.env.NEXAWI_AI_BETA_ENABLED;
-    assert.equal(canUseClinicAi(context("owner")), false);
+    assert.equal(canUseClinicAi(betaContext()), false);
     process.env.NEXAWI_AI_BETA_ENABLED = "true";
-    process.env.NEXAWI_AI_BETA_USER_IDS = "another-user";
-    process.env.NEXAWI_AI_BETA_CLINIC_IDS = id;
+    process.env.NEXAWI_AI_BETA_USER_IDS = "33333333-3333-4333-8333-333333333333";
+    process.env.NEXAWI_AI_BETA_CLINIC_IDS = clinicId;
+    assert.equal(canUseClinicAi(betaContext()), false);
+    process.env.NEXAWI_AI_BETA_USER_IDS = userId;
+    process.env.NEXAWI_AI_BETA_CLINIC_IDS = "33333333-3333-4333-8333-333333333333";
+    assert.equal(canUseClinicAi(betaContext()), false);
+    process.env.NEXAWI_AI_BETA_CLINIC_IDS = clinicId;
+    assert.equal(canUseClinicAi(betaContext()), true);
+    assert.equal(canUseClinicAi(betaContext("admin")), true);
+    assert.equal(canUseClinicAi(betaContext("owner", "unlimited_lifetime")), true);
+    assert.equal(canUseClinicAi(betaContext("recepcao")), false);
+    assert.equal(canUseClinicAi({ ...betaContext(), memberships: [{ ...betaContext().memberships[0], ativo: false }] }), false);
+    assert.equal(canUseClinicAi({ ...betaContext(), memberships: [{ ...betaContext().memberships[0], user_id: "other" }] }), false);
+    assert.equal(canUseClinicAi({ ...betaContext(), activeClinic: { id: "other", plan_entitlements_mode: "catalog_v1" } }), false);
+    assert.equal(canUseClinicAi(betaContext(), { id: "other", plan_entitlements_mode: "catalog_v1" }), false);
     assert.equal(canUseClinicAi(context("owner")), false);
-    process.env.NEXAWI_AI_BETA_USER_IDS = user.id;
-    process.env.NEXAWI_AI_BETA_CLINIC_IDS = "another-clinic";
-    assert.equal(canUseClinicAi(context("owner")), false);
-    process.env.NEXAWI_AI_BETA_CLINIC_IDS = id;
-    assert.equal(canUseClinicAi(context("owner")), true);
-    assert.equal(canUseClinicAi(context("recepcao")), false);
+    process.env.NEXAWI_AI_BETA_USER_IDS = "owner@example.com";
+    assert.equal(canUseClinicAi(betaContext()), false);
+    process.env.NEXAWI_AI_BETA_USER_IDS = userId;
+    process.env.NEXAWI_AI_BETA_CLINIC_IDS = "ingridestetica.com.br";
+    assert.equal(canUseClinicAi(betaContext()), false);
+    process.env.VERCEL_ENV = "preview";
+    process.env.NEXAWI_AI_BETA_CLINIC_IDS = clinicId;
+    assert.equal(canUseClinicAi(betaContext()), false);
   } finally {
     for (const key of keys) {
       if (original[key] === undefined) delete process.env[key];

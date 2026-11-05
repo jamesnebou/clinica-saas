@@ -1,8 +1,8 @@
 import { createHash } from "node:crypto";
 import { getUserClinics, resolveClinicPlanEntitlements } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
-import { canUseClinicAi } from "@/lib/ai/access.mjs";
-import { canAccessSection, getCurrentMembership, sectionHasCapability } from "@/lib/auth/permissions";
+import { canUseClinicAi, getClinicAiMembership } from "@/lib/ai/access.mjs";
+import { canAccessSection, sectionHasCapability } from "@/lib/auth/permissions";
 import { getClinicPlan } from "@/lib/saas/plans";
 import { getClinicCapabilities } from "@/lib/segments/service";
 import { noStoreJson } from "@/lib/security/public-antiabuse";
@@ -15,7 +15,7 @@ export async function GET() {
     if (!context.user) return noStoreJson({ error: "AI_FORBIDDEN" }, { status: 401 });
     const clinic = await resolveClinicPlanEntitlements(context);
     if (!canUseClinicAi(context, clinic)) return noStoreJson({ error: "AI_FORBIDDEN" }, { status: 403 });
-    const membership = getCurrentMembership(context.memberships, clinic.id);
+    const membership = getClinicAiMembership(context, clinic);
     if (!canAccessSection(membership?.papel, "agenda", membership)) return noStoreJson({ error: "AI_FORBIDDEN" }, { status: 403 });
     const supabase = await createClient();
     const plan = await getClinicPlan(context.activeClinic);

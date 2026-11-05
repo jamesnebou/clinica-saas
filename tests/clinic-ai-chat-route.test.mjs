@@ -14,7 +14,8 @@ const fake = new Map([
     export const resolveClinicPlanEntitlements = async () => globalThis.__ia03.clinic;`],
   ["@/lib/supabase/server", "export const createClient = async () => ({});"],
   ["@/lib/auth/permissions", `export const getCurrentMembership = (memberships, id) => memberships.find((item) => item.clinica_id === id);
-    export const canAccessSection = () => globalThis.__ia03.agendaAllowed;
+    export const canAccessSection = (role, section, membership) => globalThis.__ia03.agendaAllowed
+      && (!membership?.permissoes?.secoes || membership.permissoes.secoes.includes(section));
     export const sectionHasCapability = () => globalThis.__ia03.agendaAllowed;`],
   ["@/lib/saas/plans", "export const getClinicPlan = async () => ({});"],
   ["@/lib/segments/service", "export const getClinicCapabilities = async () => ({ effective: ['agenda'] });"],
@@ -98,6 +99,16 @@ test("unauthenticated, wrong origin, role and entitlement are denied before gene
   }
   reset({ mode: "trial" });
   assert.equal((await post({ question: "Como está minha agenda?", days: 30 })).status, 403);
+  assert.equal(state.generationCalls.length, 0);
+});
+
+test("agenda checks the authenticated membership, not an email-matched association", async () => {
+  reset();
+  state.context.memberships[0].permissoes = { secoes: ["dashboard"] };
+  state.context.memberships.unshift({ clinica_id: A, user_id: "other-user", ativo: true, papel: "owner", permissoes: { secoes: ["agenda"] } });
+  const response = await post({ question: "Quais clientes tenho hoje?", days: 7 });
+  assert.equal(response.status, 403);
+  assert.equal(state.agendaCalls.length, 0);
   assert.equal(state.generationCalls.length, 0);
 });
 

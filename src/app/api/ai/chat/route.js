@@ -1,11 +1,11 @@
 import { getUserClinics, resolveClinicPlanEntitlements } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
-import { canUseClinicAi } from "@/lib/ai/access.mjs";
+import { canUseClinicAi, getClinicAiMembership } from "@/lib/ai/access.mjs";
 import { getClinicSummarySnapshot } from "@/lib/ai/clinic-summary-data";
 import { runClinicChat } from "@/lib/ai/chat-flow.mjs";
 import { generateClinicChatAnswer } from "@/lib/ai/chat-generation.mjs";
 import { getClinicAgendaDetails } from "@/lib/ai/agenda-details.mjs";
-import { canAccessSection, getCurrentMembership, sectionHasCapability } from "@/lib/auth/permissions";
+import { canAccessSection, sectionHasCapability } from "@/lib/auth/permissions";
 import { getClinicPlan } from "@/lib/saas/plans";
 import { getClinicCapabilities } from "@/lib/segments/service";
 import { consumePublicRateLimit, hashPublicRateLimitValue, noStoreJson } from "@/lib/security/public-antiabuse";
@@ -33,7 +33,7 @@ export async function POST(request) {
       limiter: (clinicId) => consumePublicRateLimit({ scope: "ai_summary", headers: request.headers, tenantId: clinicId, target: clinicId }),
       snapshot: async (currentClinic, days) => getClinicSummarySnapshot({ supabase, clinic: currentClinic, days }),
       agendaAllowed: async () => {
-        const membership = getCurrentMembership(context.memberships, clinic.id);
+        const membership = getClinicAiMembership(context, clinic);
         if (!canAccessSection(membership?.papel, "agenda", membership)) return false;
         const plan = await getClinicPlan(context.activeClinic);
         const capabilities = await getClinicCapabilities({ clinic: context.activeClinic, plan, client: supabase });
