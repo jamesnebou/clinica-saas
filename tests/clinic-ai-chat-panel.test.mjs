@@ -262,19 +262,67 @@ test("scope changes and stale responses cannot restore another tenant's messages
   chat.unmount();
 });
 
-test("unmount and page lifecycle abort requests and clear visible conversation", async () => {
-  for (const event of ["visibilitychange", "pagehide", "pageshow", "blur"]) {
+test("tab switch and blur hide content until read-only session revalidation", async () => {
+  for (const [hide, reveal] of [["visibilitychange", "visibilitychange"], ["pagehide", "pageshow"], ["blur", "focus"]]) {
     const chat = createChat();
     const action = chat.button("Analisar meus agendamentos").props.onClick();
     await finish(chat, 0, analysis);
     await action;
-    if (event === "visibilitychange") chat.document.hidden = true;
-    (event === "visibilitychange" ? chat.document : chat.window).dispatch(event);
+    if (hide === "visibilitychange") chat.document.hidden = true;
+    (hide === "visibilitychange" ? chat.document : chat.window).dispatch(hide);
     chat.render();
     assert.doesNotMatch(chat.text, /Acompanhe a agenda/);
     assert.equal(chat.requests.length, 1);
+    if (reveal === "visibilitychange") chat.document.hidden = false;
+    (reveal === "visibilitychange" ? chat.document : chat.window).dispatch(reveal);
+    chat.render();
+    assert.equal(chat.requests[1].url, "/api/ai/session");
+    assert.equal(chat.requests[1].options.method, "GET");
+    assert.equal(chat.requests[1].options.cache, "no-store");
+    assert.doesNotMatch(chat.text, /Acompanhe a agenda/);
+    await finish(chat, 1, { scopeKey: "user-a:clinic-a" });
+    assert.match(chat.text, /Acompanhe a agenda/);
     chat.unmount();
   }
+});
+
+test("failed or changed-session revalidation erases sensitive history and context", async () => {
+  for (const [body, status] of [[{ scopeKey: "user-b:clinic-b" }, 200], [{ error: "AI_FORBIDDEN" }, 403], [{ error: "AI_UNAVAILABLE" }, 503]]) {
+    const chat = createChat();
+    const action = chat.button("Analisar meus agendamentos").props.onClick();
+    await finish(chat, 0, analysis);
+    await action;
+    chat.window.dispatch("blur");
+    chat.render();
+    chat.window.dispatch("focus");
+    await finish(chat, 1, body, status);
+    assert.doesNotMatch(chat.text, /Acompanhe a agenda/);
+    const next = chat.button("Analisar meus agendamentos").props.onClick();
+    assert.equal(JSON.parse(chat.requests[2].options.body).lastIntent, null);
+    await finish(chat, 2, analysis);
+    await next;
+    chat.unmount();
+  }
+});
+
+test("late chat and verification responses cannot reveal data after a focus or scope change", async () => {
+  const chat = createChat();
+  const first = chat.button("Analisar meus agendamentos").props.onClick();
+  chat.window.dispatch("blur");
+  chat.render();
+  assert.equal(chat.requests[0].options.signal.aborted, true);
+  chat.window.dispatch("focus");
+  chat.render();
+  chat.render("user-b:clinic-b");
+  assert.equal(chat.requests[1].options.signal.aborted, true);
+  await finish(chat, 0, { ...analysis, interpretation: "LATE_PATIENT_DATA" });
+  await first;
+  await finish(chat, 1, { scopeKey: "user-a:clinic-a" });
+  assert.doesNotMatch(chat.text, /LATE_PATIENT_DATA/);
+  chat.unmount();
+});
+
+test("unmount aborts pending requests without updating state", async () => {
   const chat = createChat();
   const pending = chat.button("Analisar meus agendamentos").props.onClick();
   chat.unmount();

@@ -9,6 +9,7 @@ export async function runClinicChat({ body, clinic, agendaClinic = clinic, user,
   const classified = classifyManagementQuestion(input.question, previous?.intent || input.lastIntent);
   if (!classified.intent) return { type: "local", message: classified.message, lastIntent: input.lastIntent || null };
   if (classified.intent === "agenda_details") {
+    if (classified.followUp && !input.agendaContext) return { type: "local", message: "A quais agendamentos você se refere? Informe a data ou o período para consultar a agenda.", lastIntent: null };
     if (!await agendaAllowed?.()) throw new Error("AI_FORBIDDEN");
     if (agendaClinic?.id !== clinic.id) throw new Error("AI_FORBIDDEN");
     const request = agendaRequestForQuestion(input.question, input.agendaContext, agendaClinic);

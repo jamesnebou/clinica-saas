@@ -6,7 +6,10 @@ A conversa aberta usa apenas contexto temporario no navegador: assunto, periodo
 validado (7 ou 30 dias), rotulo de indicador confirmado e objetivo. O servidor
 valida o contrato e recalcula os indicadores a cada consulta. O contexto nao
 concede acesso, nao escolhe a clinica e nao e enviado como historico textual ao
-modelo. Troca de clinica, sessao, aba ou nova conversa descarta esse estado.
+modelo. Nova conversa ou troca de clinica descarta esse estado. Ao perder foco,
+a interface oculta a conversa e aborta a resposta pendente; ao retornar, uma
+consulta autenticada read-only valida novamente usuario, clinica, IA e Agenda
+antes de revela-la. Falha ou mudanca de escopo apaga o estado temporario.
 
 Nao ha historico persistente, metas salvas ou memoria compartilhada nesta
 entrega. Referencias sem lastro, como uma recomendacao anterior cujo texto nao
@@ -64,6 +67,13 @@ monetario confiavel para registrar.
    flag desligada. Confirmar Supabase de Production, sem copiar secrets de staging.
 5. Ativar Beta apenas para IDs aprovados apos smoke do deployment. Nao liberar
    para todas as clinicas.
+
+Para a clinica Ingrid, antes de qualquer operacao em Production, obter
+autorizacao expressa da responsavel, identificar a conta permitida e confirmar
+associacao ativa, role, entitlement e IDs administrativos no ambiente correto.
+Nao usar e-mail sozinho como autorizacao nem consultar prontuarios para obter
+IDs. Ate esses gates e o smoke autenticado A/B em staging serem concluidos,
+flag e allowlists de Production permanecem inalteradas/desligadas.
 
 Se ocorrer regressao, desativar a flag e retornar ao deployment anterior.
 Nao reverter schema automaticamente. Como nao ha persistencia nesta entrega,

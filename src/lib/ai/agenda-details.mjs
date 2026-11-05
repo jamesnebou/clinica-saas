@@ -39,6 +39,8 @@ export function agendaRequestForQuestion(question, previous, clinic, now = new D
   else if (dates.length === 2) return null;
   else if (dates.length === 1) startDate = endDate = dates[0];
   else if (/\bhoje\b/.test(text) && /\bamanha\b/.test(text)) [startDate, endDate] = [today, addDays(today, 1)];
+  else if (/\bdia\s+seguinte\b/.test(text) && previous?.endDate) startDate = endDate = addDays(previous.endDate, 1);
+  else if (/\bdepois\s+de\s+amanha\b/.test(text)) startDate = endDate = addDays(today, 2);
   else if (/\bamanha\b/.test(text)) startDate = endDate = addDays(today, 1);
   else if (/\bhoje\b/.test(text)) startDate = endDate = today;
   else if (previous?.startDate && previous?.endDate) [startDate, endDate] = [previous.startDate, previous.endDate];
@@ -48,11 +50,11 @@ export function agendaRequestForQuestion(question, previous, clinic, now = new D
   if (span < 0 || span >= MAX_DAYS) return null;
   const status = /\b(?:nao\s+confirm|sem\s+confirm)/.test(text) ? "agendado"
     : /\bconfirmad[oa]s?\b/.test(text) ? "confirmado"
-      : /\b(?:apenas|somente|desses|dessas|esses|essas)\b/.test(text) ? previous?.status || null : null;
-  const mode = /\b(?:quantos|quantas|total)\b/.test(text) ? "count"
-    : /\bprimeir[oa]\s+horario\b/.test(text) ? "first"
+      : previous?.status || null;
+  const mode = /\b(?:quantos|quantas|total|algum)\b/.test(text) ? "count"
+    : /\bprimeir[oa]\s+(?:horario|cliente|agendamento)\b/.test(text) ? "first"
       : /\bprocedimentos?\b/.test(text) && !/\b(?:clientes?|quem)\b/.test(text) ? "procedures"
-        : /\b(?:desses|dessas|esses|essas|apenas|somente)\b/.test(text) ? previous?.mode || "list" : "list";
+        : "list";
   return { startDate, endDate, status, mode };
 }
 

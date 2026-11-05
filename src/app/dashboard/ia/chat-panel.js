@@ -100,8 +100,12 @@ export function ClinicChatPanel({ scopeKey }) {
   const [messages, setMessages] = useState([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [privacyLocked, setPrivacyLocked] = useState(false);
   const [renderScope, setRenderScope] = useState(scopeKey);
   const requestRef = useRef(null);
+  const verificationRef = useRef(null);
+  const verificationGenerationRef = useRef(0);
+  const privacyLockedRef = useRef(false);
   const generationRef = useRef(0);
   const messageIdRef = useRef(0);
   const lastIntentRef = useRef(null);
@@ -128,6 +132,18 @@ export function ClinicChatPanel({ scopeKey }) {
     memoryRef.current = null;
   }, []);
 
+  const lockConversation = useCallback(() => {
+    privacyLockedRef.current = true;
+    setPrivacyLocked(true);
+    generationRef.current += 1;
+    requestRef.current?.abort();
+    requestRef.current = null;
+    verificationGenerationRef.current += 1;
+    verificationRef.current?.abort();
+    verificationRef.current = null;
+    setLoading(false);
+  }, []);
+
   const clearConversation = useCallback(() => {
     abortCurrent();
     setMessages([]);
@@ -136,30 +152,63 @@ export function ClinicChatPanel({ scopeKey }) {
     setLoading(false);
   }, [abortCurrent]);
 
+  const revalidateConversation = useCallback(async () => {
+    if (document.hidden || !privacyLockedRef.current) return;
+    const controller = new AbortController();
+    const generation = ++verificationGenerationRef.current;
+    verificationRef.current?.abort();
+    verificationRef.current = controller;
+    const expectedScope = scopeRef.current;
+    try {
+      const response = await fetch("/api/ai/session", { method: "GET", credentials: "same-origin", cache: "no-store", signal: controller.signal });
+      const payload = await response.json();
+      if (!response.ok || payload?.scopeKey !== expectedScope) throw new Error("AI_FORBIDDEN");
+      if (mountedRef.current && generation === verificationGenerationRef.current && scopeRef.current === expectedScope && !document.hidden) {
+        verificationRef.current = null;
+        privacyLockedRef.current = false;
+        setPrivacyLocked(false);
+      }
+    } catch {
+      if (mountedRef.current && generation === verificationGenerationRef.current && scopeRef.current === expectedScope && !document.hidden) {
+        verificationRef.current = null;
+        clearConversation();
+        privacyLockedRef.current = false;
+        setPrivacyLocked(false);
+        setError(errors.AI_FORBIDDEN);
+      }
+    }
+  }, [clearConversation]);
+
   useEffect(() => {
     mountedRef.current = true;
     scopeRef.current = scopeKey;
     abortCurrent();
-    const onVisibilityChange = () => { if (document.hidden) clearConversation(); };
-    const onPageChange = () => clearConversation();
+    if (privacyLockedRef.current && !document.hidden) revalidateConversation();
+    const onVisibilityChange = () => { if (document.hidden) lockConversation(); else revalidateConversation(); };
+    const onPageHide = () => lockConversation();
+    const onReturn = () => revalidateConversation();
     document.addEventListener("visibilitychange", onVisibilityChange);
-    window.addEventListener("pagehide", onPageChange);
-    window.addEventListener("pageshow", onPageChange);
-    window.addEventListener("blur", onPageChange);
+    window.addEventListener("pagehide", onPageHide);
+    window.addEventListener("pageshow", onReturn);
+    window.addEventListener("blur", onPageHide);
+    window.addEventListener("focus", onReturn);
     return () => {
       mountedRef.current = false;
       abortCurrent();
+      verificationGenerationRef.current += 1;
+      verificationRef.current?.abort();
       document.removeEventListener("visibilitychange", onVisibilityChange);
-      window.removeEventListener("pagehide", onPageChange);
-      window.removeEventListener("pageshow", onPageChange);
-      window.removeEventListener("blur", onPageChange);
+      window.removeEventListener("pagehide", onPageHide);
+      window.removeEventListener("pageshow", onReturn);
+      window.removeEventListener("blur", onPageHide);
+      window.removeEventListener("focus", onReturn);
     };
-  }, [abortCurrent, clearConversation, scopeKey]);
+  }, [abortCurrent, lockConversation, revalidateConversation, scopeKey]);
 
   useEffect(() => { endRef.current?.scrollIntoView({ block: "end", behavior: "smooth" }); }, [messages, loading]);
 
   async function submit(suggestion, agendaPage = 0) {
-    if (requestRef.current) return;
+    if (requestRef.current || privacyLockedRef.current) return;
     const question = (agendaPage ? "Me mostre mais desses agendamentos" : typeof suggestion === "string" ? suggestion : draft).trim();
     if (question.length < 2 || question.length > 400) {
       setError("Escreva uma pergunta de até 400 caracteres.");
@@ -168,7 +217,7 @@ export function ClinicChatPanel({ scopeKey }) {
     const controller = new AbortController();
     const generation = ++generationRef.current;
     const requestScope = scopeKey;
-    const isCurrent = () => mountedRef.current && generationRef.current === generation && scopeRef.current === requestScope;
+    const isCurrent = () => mountedRef.current && !privacyLockedRef.current && generationRef.current === generation && scopeRef.current === requestScope;
     requestRef.current = controller;
     const lastIntent = lastIntentRef.current;
     if (!agendaPage) setMessages((current) => [...current.slice(-10), { id: ++messageIdRef.current, role: "user", text: question }]);
@@ -214,7 +263,7 @@ export function ClinicChatPanel({ scopeKey }) {
     }
   }
 
-  const visibleMessages = renderScope === scopeKey ? messages : [];
+  const visibleMessages = renderScope === scopeKey && !privacyLocked ? messages : [];
   return (
     <section className="mt-6">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-neutral-200 pb-4">
@@ -223,25 +272,25 @@ export function ClinicChatPanel({ scopeKey }) {
           <span className="text-sm font-semibold text-neutral-900">Conversa de gestão</span>
           <span className="text-xs text-neutral-500">Últimos {days} dias</span>
         </div>
-        <button type="button" onClick={clearConversation} className="inline-flex h-9 items-center gap-2 rounded-md border border-neutral-300 px-3 text-xs font-semibold text-neutral-700 hover:bg-neutral-50">
+        <button type="button" onClick={clearConversation} disabled={privacyLocked} className="inline-flex h-9 items-center gap-2 rounded-md border border-neutral-300 px-3 text-xs font-semibold text-neutral-700 hover:bg-neutral-50 disabled:opacity-50">
           <RotateCcw size={15} /> Nova conversa
         </button>
       </div>
 
       <div role="log" aria-label="Conversa com NexaWi IA" aria-live="polite" className="max-h-[52vh] min-h-[280px] space-y-6 overflow-y-auto py-6 pr-1 sm:min-h-[360px]">
-        {visibleMessages.length === 0 ? <div className="max-w-2xl py-4">
+        {privacyLocked ? <p className="text-sm text-neutral-600">Verificando sua sessão...</p> : visibleMessages.length === 0 ? <div className="max-w-2xl py-4">
           <h2 className="text-lg font-bold text-neutral-950">Como posso ajudar na gestão hoje?</h2>
           <p className="mt-2 text-sm leading-6 text-neutral-600">Converse sobre agenda, financeiro, clientes e tendências com base nos indicadores disponíveis.</p>
           <div className="mt-6 flex flex-wrap gap-2">{suggestions.map((suggestion) => <button key={suggestion} type="button" disabled={loading} onClick={() => submit(suggestion)}
             className="rounded-md border border-neutral-300 bg-white px-3 py-2 text-left text-xs font-medium text-neutral-700 hover:border-[var(--clinic-primary)] hover:text-neutral-950 disabled:opacity-60">{suggestion}</button>)}</div>
         </div> : visibleMessages.map((message, index) => <ChatMessage key={message.id} message={message}
           onMore={index === visibleMessages.length - 1 ? () => submit(null, message.page + 1) : undefined} />)}
-        {loading ? <div className="flex items-center gap-2 text-sm text-neutral-500"><LoaderCircle size={17} className="animate-spin" /> Consultando dados...</div> : null}
+        {loading && !privacyLocked ? <div className="flex items-center gap-2 text-sm text-neutral-500"><LoaderCircle size={17} className="animate-spin" /> Consultando dados...</div> : null}
         <div ref={endRef} />
       </div>
 
-      {error ? <p role="alert" className="mb-3 text-sm text-red-700">{error}</p> : null}
-      <div className="border-t border-neutral-200 pt-4">
+      {error && !privacyLocked ? <p role="alert" className="mb-3 text-sm text-red-700">{error}</p> : null}
+      {!privacyLocked ? <div className="border-t border-neutral-200 pt-4">
         <div role="group" aria-label="Período da conversa" className="mb-3 inline-flex overflow-hidden rounded-md border border-neutral-300">
           {[7, 30].map((value) => <button key={value} type="button" disabled={loading} aria-pressed={days === value}
             onClick={() => { if (value !== days) { clearConversation(); setDays(value); } }}
@@ -256,7 +305,7 @@ export function ClinicChatPanel({ scopeKey }) {
             className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-neutral-950 text-white disabled:opacity-40"><ArrowUp size={19} /></button>
         </div>
         <div className="mt-2 flex justify-end text-xs tabular-nums text-neutral-500">{draft.length}/400</div>
-      </div>
+      </div> : null}
     </section>
   );
 }

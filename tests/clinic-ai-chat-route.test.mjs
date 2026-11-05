@@ -180,6 +180,26 @@ test("agenda permission is checked before lookup and never calls the model", asy
   assert.equal(state.generationCalls.length, 0);
 });
 
+test("contextual agenda follow-up changes count to list and requires a valid prior context", async () => {
+  reset();
+  const first = await post({ question: "Quantos agendamentos tenho amanhã?", days: 30 });
+  assert.equal(first.body.agendaContext.mode, "count");
+  const second = await post({ question: "Quais são eles?", days: 30, lastIntent: first.body.lastIntent, agendaContext: first.body.agendaContext });
+  assert.equal(second.body.type, "agenda_details");
+  assert.equal(state.agendaCalls.at(-1).request.mode, "list");
+  assert.equal(state.agendaCalls.at(-1).request.startDate, first.body.agendaContext.startDate);
+  assert.equal(state.generationCalls.length, 0);
+  assert.equal(state.snapshotCalls.length, 0);
+  const calls = state.agendaCalls.length;
+  const missing = await post({ question: "Quais são eles?", days: 30, lastIntent: "agenda_details" });
+  assert.equal(missing.body.type, "local");
+  assert.equal(state.agendaCalls.length, calls);
+  reset({ selected: B });
+  const foreign = await post({ question: "Quais são eles?", days: 30, lastIntent: "agenda_details", agendaContext: first.body.agendaContext });
+  assert.equal(foreign.status, 200);
+  assert.equal(state.agendaCalls[0].clinicId, B);
+});
+
 test("day-specific customer aggregates state the limitation instead of showing unrelated totals", async () => {
   reset();
   const response = await post({ question: "Quantos clientes novos tenho hoje?", days: 30 });

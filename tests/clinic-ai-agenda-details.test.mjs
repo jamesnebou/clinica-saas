@@ -114,3 +114,51 @@ test("pagination reports remaining rows instead of silently truncating", async (
   assert.equal(second.appointments.length, 3);
   assert.equal(second.hasMore, false);
 });
+
+test("six-turn agenda context re-queries scoped rows without a model", async () => {
+  const rows = { ...tables, agendamentos: [
+    { ...appointments[0], id: "tomorrow-1", inicio: "2026-11-05T12:00:00Z" },
+    { ...appointments[1], id: "tomorrow-2", inicio: "2026-11-05T15:00:00Z" },
+    { ...appointments[2], id: "foreign-tomorrow", inicio: "2026-11-05T13:00:00Z" },
+    { ...appointments[0], id: "after-tomorrow", inicio: "2026-11-06T12:00:00Z" },
+  ] };
+  const turns = [
+    ["Quantos agendamentos tenho amanhã?", "count", "2026-11-05", 2],
+    ["Quais são eles?", "list", "2026-11-05", 2],
+    ["Algum ainda não confirmou?", "count", "2026-11-05", 1],
+    ["Quais procedimentos serão realizados?", "procedures", "2026-11-05", 1],
+    ["Quem é o primeiro cliente?", "first", "2026-11-05", 1],
+    ["E para depois de amanhã?", "list", "2026-11-06", 1],
+  ];
+  let previous = null;
+  for (const [question, mode, date, total] of turns) {
+    const intent = classifyManagementQuestion(question, previous ? "agenda_details" : null);
+    assert.equal(intent.intent, "agenda_details", question);
+    const request = agendaRequestForQuestion(question, previous, clinic, now);
+    assert.equal(request.mode, mode, question);
+    assert.equal(request.startDate, date, question);
+    const db = fakeDatabase({ rows });
+    const result = await getClinicAgendaDetails({ supabase: db, clinic, request });
+    assert.equal(result.total, total, question);
+    assert.doesNotMatch(JSON.stringify(result), /OUTRO_TENANT|PRIVATE_PHONE|OUTRO_PROCEDIMENTO/);
+    assert.ok(db.selects.every(({ columns }) => !/telefone|email|cpf|observacoes/.test(columns)));
+    if (mode === "count") assert.deepEqual(result.appointments, []);
+    if (mode === "list" || mode === "first") assert.equal(result.appointments[0].client, "Ana Silva");
+    if (mode === "procedures") assert.equal(result.appointments[0].client, null);
+    previous = result.agendaContext;
+  }
+  const next = agendaRequestForQuestion("E no dia seguinte?", previous, clinic, now);
+  assert.equal(next.startDate, "2026-11-07");
+  for (const question of ["Quem são?", "Me mostre esses agendamentos.", "Quais são esses dois?",
+    "E os procedimentos?", "Qual o horário deles?", "Mostre apenas os confirmados.", "E amanhã?", "E no dia seguinte?"]) {
+    assert.equal(classifyManagementQuestion(question, "agenda_details").intent, "agenda_details", question);
+  }
+  assert.equal(classifyManagementQuestion("Quais são eles?").intent, null);
+  assert.match(classifyManagementQuestion("Quais são eles?").message, /Informe a data/);
+  const foreign = await getClinicAgendaDetails({ supabase: fakeDatabase({ rows }), clinic: { ...clinic, id: B }, request: {
+    ...previous, startDate: "2026-11-05", endDate: "2026-11-05", status: null, mode: "list",
+  } });
+  assert.equal(foreign.total, 1);
+  assert.equal(foreign.appointments[0].client, "OUTRO_TENANT");
+  assert.doesNotMatch(JSON.stringify(foreign), /Ana Silva|Bia Lima/);
+});

@@ -38,16 +38,20 @@ export function classifyManagementQuestion(question, lastIntent = null) {
   }
 
   const followUpRequested = /\b(?:explique|detalhe|aprofund\w*|mais\s+sobre|essa\s+tendencia|esse\s+resultado|por\s+que|porque|comparad\w*|periodo\s+anterior|melhorar|recomendacao)\b/.test(text);
-  const temporal = /\b(?:hoje|amanha|\d{4}-\d{2}-\d{2}|\d{2}\/\d{2}\/\d{4})\b/.test(text);
+  const temporal = /\b(?:hoje|amanha|dia\s+seguinte|\d{4}-\d{2}-\d{2}|\d{2}\/\d{2}\/\d{4})\b/.test(text);
   const asksForRecords = /\b(?:quais|quem|mostr\w*|liste|listar|cada|primeir\w*|quantos|quantas)\b/.test(text);
   const bookingWords = /\b(?:agenda|agend\w*|atendimento\w*|horario\w*|procedimento\w*)\b/.test(text);
   if (temporal && /\bclientes?\b/.test(text) && !bookingWords && !/\b(?:quais|quem|mostr\w*|liste|listar)\b/.test(text)) {
     return { intent: null, followUp: false, message: "Ainda não consigo analisar clientes por dia. Posso consultar a agenda dessa data ou analisar clientes nos últimos 7 ou 30 dias." };
   }
   const agendaSubject = bookingWords || /\bclientes?\b/.test(text) && temporal;
-  const agendaFollowUp = lastIntent === "agenda_details" && /\b(?:desses|dessas|apenas|somente|primeir\w*|amanha|hoje|confirmad\w*|procedimento\w*)\b/.test(text);
+  const contextualAgenda = /\b(?:quais\s+sao\s+(?:eles|elas|esses|essas)(?:\s+dois)?|quem\s+sao|(?:mostr\w*|liste|listar)\s+(?:apenas\s+|somente\s+)?(?:esses|essas|os\s+confirmados)|desses|dessas|deles|delas|algum|primeir\w*|amanha|hoje|dia\s+seguinte|confirmad\w*|procedimento\w*)\b/.test(text);
+  const agendaFollowUp = lastIntent === "agenda_details" && contextualAgenda;
   if ((agendaSubject && (temporal || asksForRecords && /\b(?:agend\w*|atendimento\w*|horario\w*|procedimento\w*)\b/.test(text))) || agendaFollowUp) {
     return { intent: "agenda_details", followUp: agendaFollowUp, message: null };
+  }
+  if (/\b(?:quais\s+sao\s+(?:eles|elas|esses|essas)|quem\s+sao|desses|dessas|deles|delas|dia\s+seguinte)\b/.test(text) && !lastIntent) {
+    return { intent: null, followUp: false, message: "A quais agendamentos você se refere? Informe a data ou o período para consultar a agenda." };
   }
   const rules = [
     ["absences", /\b(?:falta\w*|cancel\w*|nao\s+comparec\w*|no[ -]?show)\b/],
