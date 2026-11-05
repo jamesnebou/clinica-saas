@@ -64,6 +64,31 @@ test("Snapshot contains only aggregated operational fields and server-computed t
   for (const forbidden of ["Paciente", "telefone", "email", "cpf", "anamnese", "prontuario", "foto", "storage_path", "private", "procedure-1"]) assert.equal(serialized.includes(forbidden), false);
 });
 
+test("production Beta fails closed unless flag, user and clinic IDs all match", () => {
+  const keys = ["VERCEL_ENV", "NEXAWI_AI_BETA_ENABLED", "NEXAWI_AI_BETA_USER_IDS", "NEXAWI_AI_BETA_CLINIC_IDS"];
+  const original = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
+  try {
+    process.env.VERCEL_ENV = "production";
+    delete process.env.NEXAWI_AI_BETA_ENABLED;
+    assert.equal(canUseClinicAi(context("owner")), false);
+    process.env.NEXAWI_AI_BETA_ENABLED = "true";
+    process.env.NEXAWI_AI_BETA_USER_IDS = "another-user";
+    process.env.NEXAWI_AI_BETA_CLINIC_IDS = id;
+    assert.equal(canUseClinicAi(context("owner")), false);
+    process.env.NEXAWI_AI_BETA_USER_IDS = user.id;
+    process.env.NEXAWI_AI_BETA_CLINIC_IDS = "another-clinic";
+    assert.equal(canUseClinicAi(context("owner")), false);
+    process.env.NEXAWI_AI_BETA_CLINIC_IDS = id;
+    assert.equal(canUseClinicAi(context("owner")), true);
+    assert.equal(canUseClinicAi(context("recepcao")), false);
+  } finally {
+    for (const key of keys) {
+      if (original[key] === undefined) delete process.env[key];
+      else process.env[key] = original[key];
+    }
+  }
+});
+
 test("Model payload uses a strict numeric allowlist and excludes future snapshot fields", () => {
   const snapshot = sampleSnapshot();
   snapshot.patientName = "Pessoa Ficticia";

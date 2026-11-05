@@ -2,7 +2,8 @@ const UNSAFE_OUTPUT = "AI_UNSAFE_OUTPUT";
 const EMAIL = /\b[\w.+-]+@[\w.-]+\.[a-z]{2,}\b/i;
 const CPF = /\b(?:cpf\s*[:#-]?\s*)?(?:\d{3}[.\s-]?){3}\d{2}\b/i;
 const PHONE = /\b(?:\+?55[\s.-]?)?\(?\d{2}\)?[\s.-]?\d{4,5}[\s.-]?\d{4}\b/;
-const PATIENT_NAME = /\b(?:[Pp]aciente|[Cc]liente)\s+[A-ZÀ-Ý][a-zà-ÿ]+(?:\s+[A-ZÀ-Ý][a-zà-ÿ]+)?(?![a-zà-ÿ])/u;
+const PATIENT_NAME = /\b(?:[Pp]aciente|[Cc]liente)\s+(?!(?:Novo|Novos|Nova|Novas|Ativo|Ativos|Ativa|Ativas|Recorrente|Recorrentes|Potencial|Potenciais|Inativo|Inativos|Inativa|Inativas)\b)[A-ZÀ-Ý][a-zà-ÿ]+(?:\s+[A-ZÀ-Ý][a-zà-ÿ]+)?(?![a-zà-ÿ])/u;
+const PATIENT_FULL_NAME = /\b(?:[Pp]aciente|[Cc]liente)\s+[A-ZÀ-Ý][a-zà-ÿ]+\s+[A-ZÀ-Ý][a-zà-ÿ]+(?![a-zà-ÿ])/u;
 
 function normalize(text) {
   return text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
@@ -60,7 +61,7 @@ export function assertClinicSummaryOutputSafe(output, payload) {
     ...output.opportunities.flatMap(({ title, detail }) => [title, detail]),
     ...output.recommendedActions.flatMap(({ action, rationale }) => [action, rationale])];
   for (const text of texts) {
-    if (EMAIL.test(text) || CPF.test(text) || PHONE.test(text) || PATIENT_NAME.test(text)
+    if (EMAIL.test(text) || CPF.test(text) || PHONE.test(text) || PATIENT_NAME.test(text) || PATIENT_FULL_NAME.test(text)
       || hasClinicalAdvice(text) || contradictsKnownMetric(text, payload)) throw new Error(UNSAFE_OUTPUT);
   }
 }

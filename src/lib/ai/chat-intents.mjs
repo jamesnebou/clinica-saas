@@ -1,10 +1,17 @@
 import { z } from "zod";
 
 export const chatIntentSchema = z.enum(["overview", "agenda", "agenda_details", "finance", "absences", "customers", "trends"]);
+export const chatMemorySchema = z.strictObject({
+  intent: chatIntentSchema,
+  days: z.union([z.literal(7), z.literal(30)]),
+  metric: z.string().max(40).nullable(),
+  objective: z.enum(["analyze", "explain", "compare", "improve"]),
+});
 export const chatRequestSchema = z.strictObject({
   question: z.string().trim().min(2).max(400),
   days: z.union([z.literal(7), z.literal(30)]),
   lastIntent: chatIntentSchema.nullable().optional(),
+  memory: chatMemorySchema.nullable().optional(),
   agendaContext: z.strictObject({
     startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
     endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
@@ -30,7 +37,7 @@ export function classifyManagementQuestion(question, lastIntent = null) {
     return { intent: null, followUp: false, message: SENSITIVE };
   }
 
-  const followUpRequested = /\b(?:explique|detalhe|aprofund\w*|mais\s+sobre|essa\s+tendencia|esse\s+resultado)\b/.test(text);
+  const followUpRequested = /\b(?:explique|detalhe|aprofund\w*|mais\s+sobre|essa\s+tendencia|esse\s+resultado|por\s+que|porque|comparad\w*|periodo\s+anterior|melhorar|recomendacao)\b/.test(text);
   const temporal = /\b(?:hoje|amanha|\d{4}-\d{2}-\d{2}|\d{2}\/\d{2}\/\d{4})\b/.test(text);
   const asksForRecords = /\b(?:quais|quem|mostr\w*|liste|listar|cada|primeir\w*|quantos|quantas)\b/.test(text);
   const bookingWords = /\b(?:agenda|agend\w*|atendimento\w*|horario\w*|procedimento\w*)\b/.test(text);
@@ -52,7 +59,8 @@ export function classifyManagementQuestion(question, lastIntent = null) {
   ];
   const intent = rules.find(([, pattern]) => pattern.test(text))?.[0] || null;
   if (followUpRequested && !intent && !lastIntent) return { intent: null, followUp: false, message: "Escolha primeiro um assunto de gestão. " + AVAILABLE };
-  const selected = followUpRequested && lastIntent && (!intent || intent === "trends") ? lastIntent : intent;
+  const selected = followUpRequested && lastIntent && (!intent || intent === "trends"
+    || intent === "overview" && /\b(?:esse|essa|deste|dessa)\s+resultado\b/.test(text)) ? lastIntent : intent;
   return selected ? { intent: selected, followUp: followUpRequested && Boolean(lastIntent) && selected === lastIntent, message: null }
     : { intent: null, followUp: false, message: AVAILABLE };
 }

@@ -42,3 +42,16 @@ test("chat is the primary tab and the existing summary remains available without
   assert.equal(second.find((node) => node.props?.id === "ai-chat-panel").props.hidden, true);
   assert.equal(second.find((node) => node.type === Summary).props.scopeKey, "scope-a");
 });
+
+test("dashboard AI entry is shared by desktop and mobile and gated server-side", () => {
+  const layout = readFileSync(new URL("../src/app/dashboard/layout.js", import.meta.url), "utf8");
+  const nav = readFileSync(new URL("../src/components/app-shell/sidebar-nav.js", import.meta.url), "utf8");
+  const dashboard = readFileSync(new URL("../src/app/dashboard/page.js", import.meta.url), "utf8");
+  assert.match(layout, /href: "\/dashboard\/ia", label: "NexaWi IA", icon: "ai"/);
+  assert.match(layout, /!item\.aiOnly \|\| canUseClinicAi\(context\)/);
+  assert.match(nav, /export function SidebarNav/);
+  assert.match(nav, /export function MobileSidebarMenu/);
+  assert.match(nav, /ai: Sparkles/);
+  assert.match(dashboard, /Conversar com NexaWi IA/);
+  assert.doesNotMatch(dashboard, />Gerar análise<\/Link>/);
+});

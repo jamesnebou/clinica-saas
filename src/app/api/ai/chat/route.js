@@ -40,7 +40,7 @@ export async function POST(request) {
         return sectionHasCapability("agenda", capabilities.effective);
       },
       agendaLookup: (currentClinic, agendaRequest, page) => getClinicAgendaDetails({ supabase, clinic: context.activeClinic.id === currentClinic.id ? context.activeClinic : null, request: agendaRequest, page }),
-      generate: ({ payload, intent, followUp, model }) => generateClinicChatAnswer({ payload, intent, followUp, model,
+      generate: ({ payload, intent, followUp, focus, days, model }) => generateClinicChatAnswer({ payload, intent, followUp, focus, days, model,
         tenantHash: hashPublicRateLimitValue("ai:clinic", clinic.id),
         environment: process.env.VERCEL_ENV || process.env.NODE_ENV }),
     });

@@ -6,7 +6,7 @@ const A = "00000000-0000-4000-8000-000000000001";
 const B = "00000000-0000-4000-8000-000000000002";
 const user = { id: "user-a" };
 const clinic = (id = A, mode = "unlimited_lifetime") => ({ id, plan_entitlements_mode: mode });
-const state = { context: null, clinic: null, limiter: { allowed: true }, snapshotCalls: [], generationCalls: [], limitCalls: [], agendaCalls: [], agendaAllowed: true };
+const state = { context: null, clinic: null, limiter: { allowed: true }, snapshotCalls: [], generationCalls: [], limitCalls: [], agendaCalls: [], agendaAllowed: true, generationFailure: null };
 globalThis.__ia03 = state;
 
 const fake = new Map([
@@ -28,6 +28,7 @@ const fake = new Map([
   };`],
   ["@/lib/ai/chat-generation.mjs", `export const generateClinicChatAnswer = async (args) => {
     globalThis.__ia03.generationCalls.push(args);
+    if (globalThis.__ia03.generationFailure) throw new Error(globalThis.__ia03.generationFailure);
     return { interpretation: 'Interpretação sintética sem números.', nextSteps: ['Revisar indicadores disponíveis.'] };
   };`],
   ["@/lib/security/public-antiabuse", `export const consumePublicRateLimit = async (args) => { globalThis.__ia03.limitCalls.push(args); return globalThis.__ia03.limiter; };
@@ -76,6 +77,7 @@ function reset({ role = "owner", mode = "unlimited_lifetime", selected = A, auth
   state.limitCalls.length = 0;
   state.agendaCalls.length = 0;
   state.agendaAllowed = true;
+  state.generationFailure = null;
 }
 
 async function post(body, origin = "https://test.invalid") {
@@ -200,6 +202,52 @@ test("pointed aggregate question returns the supported metric without generic mo
   assert.equal(state.generationCalls.length, 0);
 });
 
+test("rejected narrative returns only server metrics without retry or leaked text", async () => {
+  reset();
+  state.generationFailure = "AI_UNSAFE_OUTPUT";
+  const response = await post({ question: "Analise meu financeiro", days: 30 });
+  assert.equal(response.status, 200);
+  assert.equal(response.body.type, "analysis");
+  assert.deepEqual(response.body.confirmed.map((item) => item.label), ["Entradas realizadas", "Saídas realizadas"]);
+  assert.equal(response.body.interpretation, "");
+  assert.deepEqual(response.body.nextSteps, []);
+  assert.match(response.body.notice, /não pôde ser exibida com segurança/);
+  assert.equal(state.generationCalls.length, 1);
+});
+
+test("provider failure remains an error and ambiguous recommendation asks for clarification", async () => {
+  reset();
+  state.generationFailure = "AI_UNAVAILABLE";
+  const failed = await post({ question: "Analise meu financeiro", days: 30 });
+  assert.equal(failed.status, 503);
+  assert.equal(failed.body.error, "AI_UNAVAILABLE");
+  assert.equal(state.generationCalls.length, 1);
+  reset();
+  const memory = { intent: "finance", days: 30, metric: null, objective: "analyze" };
+  const ambiguous = await post({ question: "Explique melhor a segunda recomendação", days: 30, memory });
+  assert.equal(ambiguous.status, 200);
+  assert.equal(ambiguous.body.type, "local");
+  assert.match(ambiguous.body.message, /Indique qual recomendação/);
+  assert.equal(state.generationCalls.length, 0);
+});
+
+test("structured follow-up preserves validated period and never sends raw history", async () => {
+  reset();
+  const first = await post({ question: "Quanto entrou neste período?", days: 7 });
+  assert.equal(first.body.memory.metric, "Entradas realizadas");
+  const second = await post({ question: "Por que esse resultado merece atenção?", days: 30, memory: first.body.memory });
+  assert.equal(second.status, 200);
+  assert.equal(second.body.intent, "finance");
+  assert.deepEqual(state.snapshotCalls.at(-1), { clinicId: A, days: 7 });
+  assert.deepEqual(state.generationCalls.at(-1).focus, { metric: "Entradas realizadas", objective: "explain" });
+  assert.doesNotMatch(JSON.stringify(state.generationCalls), /Por que esse resultado merece atenção/);
+  const third = await post({ question: "E comparado com o período anterior?", days: 30, memory: second.body.memory });
+  assert.equal(third.status, 200);
+  assert.equal(third.body.memory.objective, "compare");
+  assert.equal(state.generationCalls.at(-1).focus.objective, "compare");
+  assert.deepEqual(third.body.confirmed.map((item) => item.label), ["Variação de entradas"]);
+});
+
 test("agenda day uses the authenticated clinic timezone, not the entitlement projection", async () => {
   reset();
   state.context.activeClinic = { ...state.context.activeClinic, metadata: { timezone: "Pacific/Kiritimati" } };
@@ -229,7 +277,7 @@ test("raw question, chat history and patient labels never enter the generated pa
   assert.equal(response.status, 200);
   const input = state.generationCalls[0];
   assert.equal(input.intent, "agenda");
-  assert.deepEqual(Object.keys(input).sort(), ["environment", "followUp", "intent", "model", "payload", "tenantHash"].sort());
+  assert.deepEqual(Object.keys(input).sort(), ["days", "environment", "focus", "followUp", "intent", "model", "payload", "tenantHash"].sort());
   assert.deepEqual(Object.keys(input.payload).sort(), ["agenda", "customers", "finance", "period", "procedures", "trends"].sort());
   assert.doesNotMatch(JSON.stringify(input), /ignore tudo|PRIVATE_PATIENT_NAME/);
   assert.equal(input.payload.finance.realizedEntries, 1200.5);
@@ -269,14 +317,19 @@ test("model prompt includes only intent, controlled context and numeric allowlis
     const safe = await run({ interpretation: "Os indicadores permitem acompanhar a agenda sem inferir causas.", nextSteps: ["Revisar a distribuição dos horários."] });
     assert.match(safe.interpretation, /agenda/);
     assert.equal(calls.length, 1);
+    const detailed = await run({ interpretation: "Acompanhe as oscilações antes de alterar a operação.", nextSteps: ["Revisar horários com a equipe."],
+      analysis: { executiveSummary: "A agenda merece acompanhamento.", positives: ["Há atendimentos concluídos."],
+        attention: ["Observe a taxa de faltas."], opportunities: [], watch: ["Agendamentos confirmados."], followUps: ["Deseja detalhar a agenda?"] } });
+    assert.equal(detailed.analysis.attention.length, 1);
     assert.doesNotMatch(calls[0].prompt, /PRIVATE_PATIENT_NAME|ignore tudo|CPF/);
     for (const unsafe of [
       { interpretation: "Paciente Maria possui diabetes.", nextSteps: [] },
       { interpretation: "Houve 999 agendamentos.", nextSteps: [] },
       { interpretation: "A queda foi causada por um procedimento.", nextSteps: [] },
       { interpretation: "ok", nextSteps: [], unexpected: "leak" },
-    ]) await assert.rejects(run(unsafe), /AI_UNAVAILABLE/);
-    assert.equal(calls.length, 5);
+      { interpretation: "ok", nextSteps: [], analysis: { executiveSummary: "Cliente Maria foi atendida.", positives: [], attention: [], opportunities: [], watch: [], followUps: [] } },
+    ]) await assert.rejects(run(unsafe), /AI_UNSAFE_OUTPUT|AI_UNAVAILABLE/);
+    assert.equal(calls.length, 7);
     assert.doesNotMatch(JSON.stringify(logs), /Paciente Maria|999 agendamentos|causada por|leak/);
   } finally {
     console.info = originalInfo;

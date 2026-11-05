@@ -161,9 +161,9 @@ export default async function DashboardPage({ searchParams }) {
             <div className="flex flex-wrap items-center justify-between gap-4">
               <div className="flex items-start gap-3">
                 <Sparkles size={20} className="mt-1 shrink-0 text-[var(--clinic-primary)]" />
-                <div><h2 className="text-base font-bold text-neutral-900">NexaWi IA</h2><p className="mt-1 text-sm text-neutral-600">Veja um resumo inteligente do desempenho da sua clínica e os principais pontos de atenção.</p></div>
+                <div><h2 className="text-base font-bold text-neutral-900">NexaWi IA</h2><p className="mt-1 text-sm text-neutral-600">Converse com seu copiloto inteligente e descubra oportunidades para melhorar a gestão da sua clínica.</p></div>
               </div>
-              <Link href="/dashboard/ia" className="inline-flex h-10 items-center rounded-md bg-[var(--clinic-primary)] px-4 text-sm font-semibold text-white">Gerar análise</Link>
+              <Link href="/dashboard/ia" className="inline-flex h-10 items-center rounded-md bg-[var(--clinic-primary)] px-4 text-sm font-semibold text-white">Conversar com NexaWi IA</Link>
             </div>
           </Card>
         ) : null}

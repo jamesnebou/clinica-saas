@@ -13,6 +13,7 @@ import { DemoGuidedTour } from "@/components/demo/demo-guided-tour";
 import { DemoConversionCta } from "@/components/demo/demo-conversion-cta";
 import { switchActiveClinicAction } from "./clinic-actions";
 import { DashboardThemeToggle } from "@/components/app-shell/dashboard-theme-toggle";
+import { canUseClinicAi } from "@/lib/ai/access.mjs";
 
 
 export async function generateMetadata() {
@@ -38,6 +39,7 @@ export async function generateMetadata() {
 
 const navItems = [
   { href: "/dashboard", label: "Visão geral", icon: "dashboard", section: "dashboard" },
+  { href: "/dashboard/ia", label: "NexaWi IA", icon: "ai", section: "dashboard", aiOnly: true, featured: true },
   { href: "/dashboard/bi", label: "Inteligência / BI", icon: "bi", section: "bi" },
   { href: "/dashboard/agenda", label: "Agenda", icon: "agenda", section: "agenda" },
   { href: "/dashboard/notificacoes", label: "Notificações", icon: "notificacoes", section: "notificacoes" },
@@ -145,7 +147,8 @@ export default async function DashboardLayout({ children }) {
     procedimentos: terminology.procedimentos,
   };
   const allowedNavItems = navItems
-    .filter((item) => canAccessSection(role, item.section, membership) && sectionHasCapability(item.section, capabilities.effective))
+    .filter((item) => (!item.aiOnly || canUseClinicAi(context))
+      && canAccessSection(role, item.section, membership) && sectionHasCapability(item.section, capabilities.effective))
     .map((item) => terminologyBySection[item.section] ? { ...item, label: terminologyBySection[item.section] } : item)
     .map((item) => item.section === "notificacoes" && notificationCount > 0 ? { ...item, badge: notificationCount } : item);
   const clinicOptions = context.memberships

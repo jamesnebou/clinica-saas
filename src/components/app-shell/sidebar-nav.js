@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BarChart3, Bell, BookOpenCheck, CalendarDays, CreditCard, KanbanSquare, LayoutDashboard, Menu, MessageCircleMore, ReceiptText, Scissors, ShoppingBag, PackageCheck, Settings, Stethoscope, UserCog, UsersRound, Workflow, X } from "lucide-react";
+import { BarChart3, Bell, BookOpenCheck, CalendarDays, CreditCard, KanbanSquare, LayoutDashboard, Menu, MessageCircleMore, ReceiptText, Scissors, ShoppingBag, PackageCheck, Settings, Sparkles, Stethoscope, UserCog, UsersRound, Workflow, X } from "lucide-react";
 import { useEffect, useState } from "react";
 
 const iconMap = {
   dashboard: LayoutDashboard,
+  ai: Sparkles,
   bi: BarChart3,
   agenda: CalendarDays,
   notificacoes: Bell,
@@ -43,7 +44,8 @@ export function SidebarNav({ items, forceDocumentNavigation = false }) {
               "inline-flex min-h-10 shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold transition",
               active
                 ? "bg-[linear-gradient(135deg,color-mix(in_srgb,var(--clinic-accent)_20%,white),rgba(255,255,255,0.82))] text-[var(--clinic-primary)] shadow-[0_12px_26px_color-mix(in_srgb,var(--clinic-primary)_14%,transparent)] ring-1 ring-[color-mix(in_srgb,var(--clinic-primary)_16%,transparent)]"
-                : "text-neutral-600 hover:bg-white/75 hover:text-[var(--clinic-primary)] hover:shadow-sm",
+                : item.featured ? "border border-[color-mix(in_srgb,var(--clinic-primary)_30%,white)] bg-[var(--clinic-soft)] text-[var(--clinic-primary)] hover:bg-white"
+                  : "text-neutral-600 hover:bg-white/75 hover:text-[var(--clinic-primary)] hover:shadow-sm",
             ].join(" ")}
           >
             <Icon size={17} />
@@ -141,7 +143,8 @@ export function MobileSidebarMenu({ items, brandName, logoUrl, forceDocumentNavi
                       "flex min-h-11 items-center gap-3 rounded-lg px-3 py-2 text-sm font-semibold transition",
                       active
                         ? "bg-[linear-gradient(135deg,color-mix(in_srgb,var(--clinic-accent)_20%,white),rgba(255,255,255,0.82))] text-[var(--clinic-primary)] shadow-sm"
-                        : "text-neutral-600 hover:bg-white/75",
+                        : item.featured ? "border border-[color-mix(in_srgb,var(--clinic-primary)_30%,white)] bg-[var(--clinic-soft)] text-[var(--clinic-primary)]"
+                          : "text-neutral-600 hover:bg-white/75",
                     ].join(" ")}
                   >
                     <Icon size={18} />

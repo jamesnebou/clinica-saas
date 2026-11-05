@@ -21,6 +21,9 @@ test("legitimate administrative, absence, no-show and financial text is accepted
   assert.doesNotThrow(() => assertClinicSummaryOutputSafe(output, snapshot));
   assert.doesNotThrow(() => assertClinicSummaryOutputSafe({ ...output, executiveSummary: "Sem dados para comparar o período anterior." }, snapshot));
   assert.doesNotThrow(() => assertClinicSummaryOutputSafe({ ...output, alerts: [], highlights: [], opportunities: [], recommendedActions: [] }, snapshot));
+  assert.doesNotThrow(() => assertClinicSummaryOutputSafe({ ...output, executiveSummary: "Cliente Novo é um segmento administrativo, não uma pessoa." }, snapshot));
+  assert.throws(() => assertClinicSummaryOutputSafe({ ...output, executiveSummary: "Cliente Maria foi atendida." }, snapshot));
+  assert.throws(() => assertClinicSummaryOutputSafe({ ...output, executiveSummary: "Cliente Novo Maria foi atendida." }, snapshot));
 });
 
 test("policy rejects unsafe content in every textual field", () => {

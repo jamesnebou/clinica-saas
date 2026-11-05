@@ -53,6 +53,12 @@ function Indicator({ metric }) {
   </div>;
 }
 
+function AnalysisSection({ title, items }) {
+  if (!items?.length) return null;
+  return <section className="mt-5"><h3 className="font-semibold text-neutral-950">{title}</h3>
+    <ul className="mt-1 list-disc space-y-1 pl-5">{items.map((item, index) => <li key={index}>{item}</li>)}</ul></section>;
+}
+
 function ChatMessage({ message, onMore }) {
   if (message.role === "user") return (
     <div className="flex justify-end">
@@ -67,12 +73,21 @@ function ChatMessage({ message, onMore }) {
           <p className="font-semibold text-neutral-950">Indicadores confirmados</p>
           {message.confirmed.length ? <dl className="mt-2 max-w-xl">{message.confirmed.map((metric) => <Indicator key={metric.label} metric={metric} />)}</dl>
             : <p className="mt-2 text-neutral-600">Não há base comparável para este indicador no período.</p>}
-          {message.interpretation ? <><p className="mt-5 font-semibold text-neutral-950">Leitura gerencial</p>
+          {message.analysis ? <><p className="mt-5 font-semibold text-neutral-950">Resumo executivo</p>
+            <p className="mt-1 whitespace-pre-wrap">{message.analysis.executiveSummary}</p>
+            <AnalysisSection title="Pontos positivos" items={message.analysis.positives} />
+            <AnalysisSection title="Pontos de atenção" items={message.analysis.attention} />
+            <AnalysisSection title="Oportunidades" items={message.analysis.opportunities} />
+            <AnalysisSection title="Indicadores a acompanhar" items={message.analysis.watch} />
+          </> : null}
+          {message.interpretation ? <><p className="mt-5 font-semibold text-neutral-950">Interpretação</p>
             <p className="mt-1 whitespace-pre-wrap">{message.interpretation}</p></> : null}
+          {message.notice ? <p className="mt-3 text-amber-800">{message.notice}</p> : null}
           {message.nextSteps.length ? <>
             <p className="mt-5 font-semibold text-neutral-950">Próximos passos</p>
             <ul className="mt-1 list-disc space-y-1 pl-5">{message.nextSteps.map((step, index) => <li key={index}>{step}</li>)}</ul>
           </> : null}
+          <AnalysisSection title="Para aprofundar" items={message.analysis?.followUps} />
         </>}
       </div>
     </div>
@@ -91,6 +106,7 @@ export function ClinicChatPanel({ scopeKey }) {
   const messageIdRef = useRef(0);
   const lastIntentRef = useRef(null);
   const agendaContextRef = useRef(null);
+  const memoryRef = useRef(null);
   const mountedRef = useRef(false);
   const scopeRef = useRef(scopeKey);
   const endRef = useRef(null);
@@ -109,6 +125,7 @@ export function ClinicChatPanel({ scopeKey }) {
     requestRef.current = null;
     lastIntentRef.current = null;
     agendaContextRef.current = null;
+    memoryRef.current = null;
   }, []);
 
   const clearConversation = useCallback(() => {
@@ -160,9 +177,14 @@ export function ClinicChatPanel({ scopeKey }) {
     setLoading(true);
     try {
       const response = await fetch("/api/ai/chat", { method: "POST", credentials: "same-origin", cache: "no-store",
-        headers: { "Content-Type": "application/json" }, body: JSON.stringify({ question, days, lastIntent, agendaContext: agendaContextRef.current, agendaPage }), signal: controller.signal });
+        headers: { "Content-Type": "application/json" }, body: JSON.stringify({ question, days, lastIntent, memory: memoryRef.current,
+          agendaContext: agendaContextRef.current, agendaPage }), signal: controller.signal });
       const payload = await response.json();
-      if (!response.ok) throw new Error(payload?.error || "AI_UNAVAILABLE");
+      if (!response.ok) {
+        const failure = new Error(payload?.error || "AI_UNAVAILABLE");
+        failure.status = response.status;
+        throw failure;
+      }
       if (!["local", "analysis", "agenda_details"].includes(payload?.type)) throw new Error("AI_UNAVAILABLE");
       if (payload.type === "analysis" && (!Array.isArray(payload.confirmed) || !Array.isArray(payload.nextSteps) || typeof payload.interpretation !== "string")) throw new Error("AI_UNAVAILABLE");
       if (payload.type === "local" && typeof payload.message !== "string") throw new Error("AI_UNAVAILABLE");
@@ -170,16 +192,18 @@ export function ClinicChatPanel({ scopeKey }) {
       if (isCurrent()) {
         lastIntentRef.current = payload.lastIntent || null;
         agendaContextRef.current = payload.type === "agenda_details" ? payload.agendaContext : null;
+        if (payload.type !== "local" || payload.memory) memoryRef.current = payload.memory || null;
         if (agendaPage) setMessages((current) => current.map((item, index) => index === current.length - 1 && item.agenda
           ? { ...item, appointments: [...item.appointments, ...payload.appointments], hasMore: payload.hasMore, page: payload.page } : item));
         else setMessages((current) => [...current.slice(-11), { id: ++messageIdRef.current, role: "assistant",
           ...(payload.type === "local" ? { local: true, text: payload.message }
             : payload.type === "agenda_details" ? { agenda: true, ...payload }
-              : { local: false, confirmed: payload.confirmed, interpretation: payload.interpretation, nextSteps: payload.nextSteps }) }]);
+              : { local: false, confirmed: payload.confirmed, interpretation: payload.interpretation, nextSteps: payload.nextSteps,
+                analysis: payload.analysis || null, notice: payload.notice || null }) }]);
       }
     } catch (cause) {
       if (isCurrent()) {
-        clearConversation();
+        if (cause?.status === 401 || cause?.status === 403 || cause?.message === "AI_FORBIDDEN") clearConversation();
         setError(errors[cause?.message] || errors.AI_UNAVAILABLE);
       }
     } finally {

@@ -4,8 +4,16 @@ import { assertClinicSummaryOutputSafe } from "./summary-output-policy.mjs";
 import { classifyAiGenerationError } from "./summary-error-diagnostics.mjs";
 
 export const chatAnswerSchema = z.strictObject({
-  interpretation: z.string().trim().min(1).max(600),
-  nextSteps: z.array(z.string().trim().min(1).max(180)).max(3),
+  interpretation: z.string().trim().min(1).max(1800),
+  nextSteps: z.array(z.string().trim().min(1).max(240)).max(5),
+  analysis: z.strictObject({
+    executiveSummary: z.string().trim().min(1).max(400),
+    positives: z.array(z.string().trim().min(1).max(220)).max(3),
+    attention: z.array(z.string().trim().min(1).max(220)).max(3),
+    opportunities: z.array(z.string().trim().min(1).max(220)).max(3),
+    watch: z.array(z.string().trim().min(1).max(220)).max(3),
+    followUps: z.array(z.string().trim().min(1).max(160)).max(3),
+  }).optional(),
 });
 
 const SYSTEM = `Você é o copiloto de gestão de uma clínica. Use somente os indicadores agregados fornecidos.
@@ -15,33 +23,40 @@ Os números confirmados serão exibidos separadamente pelo servidor: não escrev
 Se a base não sustentar uma conclusão, diga claramente que não é possível concluir.
 Priorize o assunto solicitado, apresente fatos antes de interpretações e relacione cada conclusão aos indicadores disponíveis.
 Diferencie fatos de hipóteses. Evite elogios genéricos, causalidade, capacidade ou crescimento sem evidência.
+Para análises amplas, preencha analysis com resumo executivo, pontos positivos, atenção, oportunidades, indicadores a acompanhar e perguntas para aprofundar. Deixe listas vazias quando não houver dados.
+Explique os achados e as limitações, relacione pontos de atenção aos indicadores e priorize ações práticas. Não crie seções sem dados.
 Não repita um resumo completo quando o pedido for pontual. Próximos passos são opcionais e devem ser proporcionais aos dados.
 Responda em português brasileiro de modo objetivo e profissional.`;
 
-export async function generateClinicChatAnswer({ payload, intent, followUp, model, tenantHash, environment, generate = generateText }) {
+export async function generateClinicChatAnswer({ payload, intent, followUp, focus = null, days = 30, model, tenantHash, environment, generate = generateText }) {
   const started = Date.now();
   try {
     const result = await generate({
       model,
       system: SYSTEM,
-      prompt: JSON.stringify({ intent, followUp, indicators: payload }),
+      prompt: JSON.stringify({ intent, followUp, focus, indicators: payload }),
       output: Output.object({ schema: chatAnswerSchema }),
-      maxOutputTokens: 500,
+      maxOutputTokens: followUp ? 700 : 1200,
       providerOptions: { gateway: { user: tenantHash, tags: ["feature:clinic-chat", `environment:${environment || "local"}`, `tenant:${tenantHash.slice(0, 12)}`] } },
     });
     const answer = chatAnswerSchema.parse(result.output);
-    const texts = [answer.interpretation, ...answer.nextSteps];
-    if (texts.some((text) => /\d|%|R\$/.test(text) || /\b(?:causad[oa]|devido\s+a|por\s+causa\s+de)\b/i.test(text))) throw new Error("AI_UNSAFE_OUTPUT");
-    assertClinicSummaryOutputSafe({ title: "Gestão", executiveSummary: answer.interpretation,
+    const analysis = answer.analysis;
+    const texts = [answer.interpretation, ...answer.nextSteps, ...(analysis ? [analysis.executiveSummary,
+      ...analysis.positives, ...analysis.attention, ...analysis.opportunities, ...analysis.watch, ...analysis.followUps] : [])];
+    if (texts.some((text) => /\d|%|R\$/.test(text.replace(new RegExp(`\\b${days}\\s+dias\\b`, "gi"), ""))
+      || /\b(?:causad[oa]|devido\s+a|por\s+causa\s+de)\b/i.test(text))) throw new Error("AI_UNSAFE_OUTPUT");
+    assertClinicSummaryOutputSafe({ title: "Gestão", executiveSummary: texts.join("\n"),
       highlights: [], alerts: [], opportunities: [],
       recommendedActions: answer.nextSteps.map((action, index) => ({ priority: index + 1, action, rationale: "Ação gerencial." })) }, payload);
     console.info("clinic_ai_chat", { feature: "clinic-chat", status: "ok", model, intent, durationMs: Date.now() - started,
       inputTokens: result.usage?.inputTokens ?? null, outputTokens: result.usage?.outputTokens ?? null, tenantHash });
     return answer;
   } catch (error) {
+    const diagnostics = classifyAiGenerationError(error);
+    const rejected = error instanceof z.ZodError || error?.message === "AI_UNSAFE_OUTPUT"
+      || diagnostics.aiErrorCategory === "STRUCTURED_OUTPUT";
     console.warn("clinic_ai_chat", { feature: "clinic-chat", status: "error", model, intent, durationMs: Date.now() - started,
-      tenantHash, errorCode: error instanceof Error && error.message === "AI_UNSAFE_OUTPUT" ? "AI_UNSAFE_OUTPUT" : "AI_UNAVAILABLE",
-      ...classifyAiGenerationError(error) });
-    throw new Error("AI_UNAVAILABLE");
+      tenantHash, errorCode: rejected ? "AI_UNSAFE_OUTPUT" : "AI_UNAVAILABLE", ...diagnostics });
+    throw new Error(rejected ? "AI_UNSAFE_OUTPUT" : "AI_UNAVAILABLE");
   }
 }

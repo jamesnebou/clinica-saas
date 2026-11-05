@@ -120,7 +120,7 @@ function createChat(scopeKey = "user-a:clinic-a") {
 }
 
 async function finish(chat, index, body, status = 200) {
-  chat.requests[index].pending.resolve({ ok: status >= 200 && status < 300, json: async () => body });
+  chat.requests[index].pending.resolve({ ok: status >= 200 && status < 300, status, json: async () => body });
   await new Promise((resolve) => setImmediate(resolve));
   chat.render();
 }
@@ -132,6 +132,19 @@ const agenda = { type: "agenda_details", lastIntent: "agenda_details", period: {
   days: [{ date: "2026-11-04", label: "Hoje", total: 1 }, { date: "2026-11-05", label: "Amanhã", total: 1 }],
   appointments: [{ date: "2026-11-04", time: "09:00", client: "Ana Silva", procedures: ["Limpeza"], professional: "Lia", status: "agendado" }],
   total: 2, hasMore: true, page: 0, mode: "list" };
+
+test("detailed analysis renders only populated sections", async () => {
+  const chat = createChat();
+  const action = chat.button("Analisar meus agendamentos").props.onClick();
+  await finish(chat, 0, { ...analysis, interpretation: "Interpretação fundamentada.", analysis: {
+    executiveSummary: "Agenda sob acompanhamento.", positives: ["Atendimentos concluídos."], attention: [],
+    opportunities: [], watch: ["Confirmações."], followUps: ["Deseja detalhar?"],
+  } });
+  await action;
+  assert.match(chat.text, /Resumo executivo|Pontos positivos|Indicadores a acompanhar|Para aprofundar/);
+  assert.doesNotMatch(chat.text, /Pontos de atenção|Oportunidades/);
+  chat.unmount();
+});
 
 test("agenda answer shows days and paginates without model text or client-provided IDs", async () => {
   const chat = createChat();
@@ -208,7 +221,7 @@ test("new conversation and period change clear history without automatic generat
   chat.unmount();
 });
 
-test("authorization failure, network failure and partial response clear all prior content", async () => {
+test("authorization clears history while recoverable failures preserve it without leaking details", async () => {
   for (const failure of [401, 403, 503, "network", "partial"]) {
     const chat = createChat();
     const first = chat.button("Analisar meus agendamentos").props.onClick();
@@ -221,7 +234,9 @@ test("authorization failure, network failure and partial response clear all prio
     else await finish(chat, 1, failure === "partial" ? { type: "analysis", confirmed: [] } : { error: failure === 403 ? "AI_FORBIDDEN" : "AI_UNAVAILABLE" }, failure === "partial" ? 200 : failure);
     await retry;
     chat.render();
-    assert.doesNotMatch(chat.text, /Acompanhe a agenda|private-network-detail/);
+    if (failure === 401 || failure === 403) assert.doesNotMatch(chat.text, /Acompanhe a agenda/);
+    else assert.match(chat.text, /Acompanhe a agenda/);
+    assert.doesNotMatch(chat.text, /private-network-detail/);
     assert.match(chat.text, failure === 403 ? /Sua sessão ou permissão mudou/ : /Não foi possível responder/);
     chat.unmount();
   }
