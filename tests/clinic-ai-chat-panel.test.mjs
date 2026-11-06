@@ -41,7 +41,7 @@ function text(node) {
   return text(node.props?.children);
 }
 
-function createChat(scopeKey = "user-a:clinic-a") {
+function createChat(scopeKey = "user-a:clinic-a", memory = { read: () => null, save() {}, clear() {} }) {
   const document = { ...target(), hidden: false };
   const window = target();
   const requests = [];
@@ -88,6 +88,7 @@ function createChat(scopeKey = "user-a:clinic-a") {
       if (specifier === "react") return react;
       if (specifier === "react/jsx-runtime") return { jsx, jsxs: jsx, Fragment: "fragment" };
       if (specifier === "lucide-react") return Object.fromEntries(["ArrowUp", "Bot", "LoaderCircle", "RotateCcw", "Sparkles"].map((name) => [name, name]));
+      if (specifier === "./conversation-memory") return { useClinicAiConversationMemory: () => memory };
       throw new Error(`Unexpected import: ${specifier}`);
     },
   });
@@ -341,4 +342,99 @@ test("rapid duplicate send starts only one request", async () => {
   await finish(chat, 0, analysis);
   await Promise.all([first, second]);
   chat.unmount();
+});
+
+test("navigation to agenda and finance restores a bounded conversation only after session revalidation", async () => {
+  let saved = null;
+  const memory = { read: () => saved, save: (value) => { saved = value; }, clear: () => { saved = null; } };
+  const first = createChat("user-a:clinic-a", memory);
+  const request = first.button("Analisar meus agendamentos").props.onClick();
+  await finish(first, 0, agenda);
+  await request;
+  assert.match(first.text, /Ana Silva/);
+  first.unmount();
+
+  for (const route of ["Agenda", "Financeiro"]) {
+    const returned = createChat("user-a:clinic-a", memory);
+    assert.doesNotMatch(returned.text, /Ana Silva/, `${route}: hidden before verification`);
+    await Promise.resolve();
+    assert.equal(returned.requests[0].url, "/api/ai/session");
+    await finish(returned, 0, { scopeKey: "user-a:clinic-a" });
+    assert.match(returned.text, /Ana Silva/, `${route}: restored after verification`);
+    returned.find((node) => node.type === "textarea").props.onChange({ target: { value: "E amanhã?" } });
+    returned.render();
+    const followUp = returned.button("Enviar pergunta").props.onClick();
+    const body = JSON.parse(returned.requests[1].options.body);
+    assert.equal(body.lastIntent, "agenda_details");
+    assert.deepEqual(body.agendaContext, agenda.agendaContext);
+    await finish(returned, 1, agenda);
+    await followUp;
+    returned.unmount();
+  }
+});
+
+test("invalid session discards saved conversation before it can be displayed", async () => {
+  let saved = null;
+  const memory = { read: () => saved, save: (value) => { saved = value; }, clear: () => { saved = null; } };
+  const original = createChat("user-a:clinic-a", memory);
+  const action = original.button("Analisar meus agendamentos").props.onClick();
+  await finish(original, 0, analysis);
+  await action;
+  original.unmount();
+  const returned = createChat("user-a:clinic-a", memory);
+  assert.doesNotMatch(returned.text, /Acompanhe a agenda/);
+  await Promise.resolve();
+  await finish(returned, 0, { error: "AI_FORBIDDEN" }, 403);
+  assert.doesNotMatch(returned.text, /Acompanhe a agenda/);
+  assert.equal(saved, null);
+  returned.unmount();
+});
+
+test("restored chat remains private on tab switch and new conversation clears retained context", async () => {
+  let saved = null;
+  const memory = { read: () => saved, save: (value) => { saved = value; }, clear: () => { saved = null; } };
+  const original = createChat("user-a:clinic-a", memory);
+  const first = original.button("Analisar meus agendamentos").props.onClick();
+  await finish(original, 0, agenda);
+  await first;
+  original.unmount();
+
+  const returned = createChat("user-a:clinic-a", memory);
+  await Promise.resolve();
+  await finish(returned, 0, { scopeKey: "user-a:clinic-a" });
+  assert.match(returned.text, /Ana Silva/);
+  returned.document.hidden = true;
+  returned.document.dispatch("visibilitychange");
+  returned.render();
+  assert.doesNotMatch(returned.text, /Ana Silva/);
+  returned.document.hidden = false;
+  returned.document.dispatch("visibilitychange");
+  assert.doesNotMatch(returned.text, /Ana Silva/);
+  await finish(returned, 1, { scopeKey: "user-a:clinic-a" });
+  assert.match(returned.text, /Ana Silva/);
+
+  returned.button("Nova conversa").props.onClick();
+  returned.render();
+  assert.equal(saved, null);
+  assert.doesNotMatch(returned.text, /Ana Silva/);
+  const followUp = returned.button("Analisar meus agendamentos").props.onClick();
+  const body = JSON.parse(returned.requests[2].options.body);
+  assert.equal(body.lastIntent, null);
+  assert.equal(body.agendaContext, null);
+  await finish(returned, 2, analysis);
+  await followUp;
+  returned.unmount();
+});
+
+test("route exit aborts pending chat without retaining an unanswered question", async () => {
+  let saved = null;
+  const memory = { read: () => saved, save: (value) => { saved = value; }, clear: () => { saved = null; } };
+  const chat = createChat("user-a:clinic-a", memory);
+  const action = chat.button("Analisar meus agendamentos").props.onClick();
+  chat.render();
+  chat.unmount();
+  assert.equal(chat.requests[0].options.signal.aborted, true);
+  await finish(chat, 0, analysis);
+  await action;
+  assert.equal(saved, null);
 });

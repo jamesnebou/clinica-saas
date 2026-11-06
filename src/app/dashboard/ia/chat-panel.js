@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowUp, Bot, LoaderCircle, RotateCcw, Sparkles } from "lucide-react";
+import { useClinicAiConversationMemory } from "./conversation-memory";
 
 const suggestions = [
   "Analisar meu desempenho",
@@ -95,17 +96,19 @@ function ChatMessage({ message, onMore }) {
 }
 
 export function ClinicChatPanel({ scopeKey }) {
+  const conversationMemory = useClinicAiConversationMemory();
   const [days, setDays] = useState(30);
   const [draft, setDraft] = useState("");
   const [messages, setMessages] = useState([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [privacyLocked, setPrivacyLocked] = useState(false);
+  const [privacyLocked, setPrivacyLocked] = useState(Boolean(conversationMemory.read()));
   const [renderScope, setRenderScope] = useState(scopeKey);
   const requestRef = useRef(null);
   const verificationRef = useRef(null);
   const verificationGenerationRef = useRef(0);
-  const privacyLockedRef = useRef(false);
+  const privacyLockedRef = useRef(privacyLocked);
+  const hydratedRef = useRef(false);
   const generationRef = useRef(0);
   const messageIdRef = useRef(0);
   const lastIntentRef = useRef(null);
@@ -117,6 +120,7 @@ export function ClinicChatPanel({ scopeKey }) {
 
   if (renderScope !== scopeKey) {
     setRenderScope(scopeKey);
+    setDays(30);
     setMessages([]);
     setDraft("");
     setError("");
@@ -146,14 +150,16 @@ export function ClinicChatPanel({ scopeKey }) {
 
   const clearConversation = useCallback(() => {
     abortCurrent();
+    conversationMemory.clear();
+    hydratedRef.current = true;
     setMessages([]);
     setDraft("");
     setError("");
     setLoading(false);
-  }, [abortCurrent]);
+  }, [abortCurrent, conversationMemory]);
 
   const revalidateConversation = useCallback(async () => {
-    if (document.hidden || !privacyLockedRef.current) return;
+    if (!mountedRef.current || document.hidden || !privacyLockedRef.current) return;
     const controller = new AbortController();
     const generation = ++verificationGenerationRef.current;
     verificationRef.current?.abort();
@@ -164,6 +170,18 @@ export function ClinicChatPanel({ scopeKey }) {
       const payload = await response.json();
       if (!response.ok || payload?.scopeKey !== expectedScope) throw new Error("AI_FORBIDDEN");
       if (mountedRef.current && generation === verificationGenerationRef.current && scopeRef.current === expectedScope && !document.hidden) {
+        if (!hydratedRef.current) {
+          const saved = conversationMemory.read();
+          if (saved) {
+            setDays(saved.days);
+            setMessages(saved.messages);
+            messageIdRef.current = saved.messageId;
+            lastIntentRef.current = saved.lastIntent;
+            agendaContextRef.current = saved.agendaContext;
+            memoryRef.current = saved.memory;
+          }
+          hydratedRef.current = true;
+        }
         verificationRef.current = null;
         privacyLockedRef.current = false;
         setPrivacyLocked(false);
@@ -177,13 +195,23 @@ export function ClinicChatPanel({ scopeKey }) {
         setError(errors.AI_FORBIDDEN);
       }
     }
-  }, [clearConversation]);
+  }, [clearConversation, conversationMemory]);
 
   useEffect(() => {
     mountedRef.current = true;
+    if (scopeRef.current !== scopeKey) {
+      conversationMemory.clear();
+      hydratedRef.current = false;
+    }
     scopeRef.current = scopeKey;
     abortCurrent();
-    if (privacyLockedRef.current && !document.hidden) revalidateConversation();
+    if (conversationMemory.read()) {
+      privacyLockedRef.current = true;
+      if (!document.hidden) Promise.resolve().then(revalidateConversation);
+    } else {
+      hydratedRef.current = true;
+      privacyLockedRef.current = false;
+    }
     const onVisibilityChange = () => { if (document.hidden) lockConversation(); else revalidateConversation(); };
     const onPageHide = () => lockConversation();
     const onReturn = () => revalidateConversation();
@@ -203,7 +231,19 @@ export function ClinicChatPanel({ scopeKey }) {
       window.removeEventListener("blur", onPageHide);
       window.removeEventListener("focus", onReturn);
     };
-  }, [abortCurrent, lockConversation, revalidateConversation, scopeKey]);
+  }, [abortCurrent, conversationMemory, lockConversation, revalidateConversation, scopeKey]);
+
+  useEffect(() => {
+    if (!hydratedRef.current || privacyLockedRef.current || loading) return;
+    if (!messages.length && days === 30) {
+      conversationMemory.clear();
+      return;
+    }
+    conversationMemory.save({ messages, days, messageId: messageIdRef.current,
+      lastIntent: lastIntentRef.current, agendaContext: agendaContextRef.current, memory: memoryRef.current });
+  }, [conversationMemory, days, loading, messages]);
+
+  useEffect(() => conversationMemory.subscribe?.(clearConversation), [clearConversation, conversationMemory]);
 
   useEffect(() => { endRef.current?.scrollIntoView({ block: "end", behavior: "smooth" }); }, [messages, loading]);
 

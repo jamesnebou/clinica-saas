@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { redirect } from "next/navigation";
 import { LogOut, Sparkles } from "lucide-react";
 import { requireClinic } from "@/lib/auth/session";
@@ -14,6 +15,7 @@ import { DemoConversionCta } from "@/components/demo/demo-conversion-cta";
 import { switchActiveClinicAction } from "./clinic-actions";
 import { DashboardThemeToggle } from "@/components/app-shell/dashboard-theme-toggle";
 import { canUseClinicAi } from "@/lib/ai/access.mjs";
+import { ClinicAiConversationProvider } from "./ia/conversation-memory";
 
 
 export async function generateMetadata() {
@@ -154,8 +156,10 @@ export default async function DashboardLayout({ children }) {
   const clinicOptions = context.memberships
     .filter((item) => item.clinicas?.id)
     .map((item) => ({ id: item.clinicas.id, name: item.clinicas.nome || "Clínica" }));
+  const aiScopeKey = createHash("sha256").update("clinic-ai\0").update(user.id).update("\0").update(activeClinic.id).digest("hex");
 
   return (
+  <ClinicAiConversationProvider key={aiScopeKey} scopeKey={aiScopeKey}>
   <div
     className="premium-shell min-h-screen text-neutral-950 md:pl-[260px]"
     style={{
@@ -246,5 +250,6 @@ export default async function DashboardLayout({ children }) {
         {children}
       </section>
     </div>
+  </ClinicAiConversationProvider>
   );
 }
