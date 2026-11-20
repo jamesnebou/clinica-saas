@@ -384,6 +384,77 @@ test("model plan handles financial comparison, customer count and ambiguous foll
   assert.equal(state.snapshotCalls.length, 0);
 });
 
+test("semantic reconciliation selects scoped data and confirmed metrics despite a contradictory plan", async () => {
+  reset();
+  state.plan = { intent: "agenda", periodKey: "last_30_days", objective: "analyze", metric: "appointments", followUp: true };
+  const finance = await post({ question: "Analise as entradas e saídas financeiras dos últimos 7 dias e indique os principais pontos de atenção.", days: 30 });
+  assert.equal(finance.status, 200);
+  assert.equal(finance.body.intent, "finance");
+  assert.equal(finance.body.period.key, "last_7_days");
+  assert.deepEqual(finance.body.confirmed.map((item) => item.label), ["Entradas realizadas", "Saídas realizadas"]);
+  assert.equal(finance.body.memory.metric, null);
+  assert.equal(state.generationCalls[0].followUp, false);
+  assert.deepEqual(state.snapshotCalls, [{ clinicId: A, periodKey: "last_7_days" }]);
+
+  reset();
+  state.plan = { intent: "finance", periodKey: "last_30_days", objective: "analyze", metric: "exits", followUp: true };
+  const month = await post({ question: "Quanto faturei este mês?", days: 30 });
+  assert.equal(month.body.period.key, "this_month");
+  assert.deepEqual(month.body.confirmed.map((item) => item.label), ["Entradas realizadas"]);
+  assert.equal(state.generationCalls.length, 0);
+
+  reset();
+  state.plan = { intent: "trends", periodKey: "keep", objective: "compare", metric: "none", followUp: true };
+  const trend = await post({ question: "Meu faturamento está melhorando?", days: 30 });
+  assert.equal(trend.body.intent, "finance");
+  assert.deepEqual(trend.body.confirmed.map((item) => item.label), ["Variação de entradas"]);
+
+  reset();
+  state.plan = { intent: "finance", periodKey: "keep", objective: "analyze", metric: "entries", followUp: true };
+  const customers = await post({ question: "Quantos clientes tenho?", days: 30 });
+  assert.equal(customers.body.intent, "customers");
+  assert.deepEqual(customers.body.confirmed.map((item) => item.label), ["Clientes"]);
+
+  reset();
+  state.plan = { intent: "finance", periodKey: "keep", objective: "analyze", metric: "entries", followUp: true };
+  const date = await post({ question: "Qual é a data de hoje?", days: 30 });
+  assert.equal(date.body.type, "local");
+  assert.match(date.body.message, /Hoje é/);
+  assert.equal(state.snapshotCalls.length, 0);
+});
+
+test("period follow-up without prior context asks for clarification; prior finance is preserved", async () => {
+  reset();
+  state.plan = { intent: "finance", periodKey: "last_month", objective: "analyze", metric: "entries", followUp: true };
+  const unknown = await post({ question: "E no mês passado?", days: 30 });
+  assert.equal(unknown.body.type, "local");
+  assert.equal(state.snapshotCalls.length, 0);
+  const memory = { intent: "finance", days: 30, periodKey: "this_month", metric: "Entradas realizadas", objective: "analyze" };
+  const known = await post({ question: "E no mês passado?", days: 30, memory });
+  assert.equal(known.body.intent, "finance");
+  assert.equal(known.body.period.key, "last_month");
+  assert.equal(known.body.memory.metric, "Entradas realizadas");
+  assert.deepEqual(state.snapshotCalls, [{ clinicId: A, periodKey: "last_month" }]);
+
+  reset();
+  state.plan = { intent: "finance", periodKey: "keep", objective: "analyze", metric: "entries", followUp: true };
+  const ambiguous = await post({ question: "E aquilo?", days: 30 });
+  assert.equal(ambiguous.body.type, "local");
+  assert.equal(state.snapshotCalls.length, 0);
+});
+
+test("reconciled plans still use the authenticated tenant and reject sensitive input", async () => {
+  reset({ selected: B });
+  state.plan = { intent: "agenda", periodKey: "this_month", objective: "analyze", metric: "appointments", followUp: true };
+  const response = await post({ question: "Analise as entradas e saídas dos últimos 7 dias", days: 30 });
+  assert.equal(response.status, 200);
+  assert.deepEqual(state.snapshotCalls, [{ clinicId: B, periodKey: "last_7_days" }]);
+  const calls = state.snapshotCalls.length;
+  const denied = await post({ question: "Paciente Maria: analise as entradas e saídas", days: 30 });
+  assert.equal(denied.body.type, "local");
+  assert.equal(state.snapshotCalls.length, calls);
+});
+
 test("date is server-derived and unsupported plans never query clinic data", async () => {
   reset();
   state.plan = { intent: "date", periodKey: "today", objective: "analyze", metric: "none", followUp: false };

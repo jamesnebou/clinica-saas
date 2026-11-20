@@ -55,7 +55,7 @@ export function buildChatPeriod(clinic, key, now = new Date()) {
     previousStart: toUtc(previousStartKey), previousEnd: toUtc(previousEndKey), timezone };
 }
 
-export function fallbackPeriodKey(question, previousKey = null, selectedDays = 30) {
+export function explicitChatPeriodKey(question) {
   const text = question.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
   if (/\bmes passado\b/.test(text)) return "last_month";
   if (/\b(?:este|esse|neste) mes\b/.test(text)) return "this_month";
@@ -66,5 +66,10 @@ export function fallbackPeriodKey(question, previousKey = null, selectedDays = 3
   if (/\bamanha\b/.test(text)) return "tomorrow";
   if (/\bontem\b/.test(text)) return "yesterday";
   if (/\bhoje\b/.test(text)) return "today";
-  return previousKey && chatPeriodKeys.includes(previousKey) ? previousKey : selectedDays === 7 ? "last_7_days" : "last_30_days";
+  return null;
+}
+
+export function fallbackPeriodKey(question, previousKey = null, selectedDays = 30) {
+  return explicitChatPeriodKey(question)
+    || (previousKey && chatPeriodKeys.includes(previousKey) ? previousKey : selectedDays === 7 ? "last_7_days" : "last_30_days");
 }

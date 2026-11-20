@@ -2,8 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { z } from "zod";
 import { Output } from "ai";
-import { chatPlanSchema, planClinicChat, safePlannerQuestion } from "../src/lib/ai/chat-planner.mjs";
-import { buildChatPeriod, fallbackPeriodKey } from "../src/lib/ai/chat-periods.mjs";
+import { chatPlanSchema, planClinicChat, reconcileChatPlan, safePlannerQuestion } from "../src/lib/ai/chat-planner.mjs";
+import { buildChatPeriod, explicitChatPeriodKey, fallbackPeriodKey } from "../src/lib/ai/chat-periods.mjs";
 import { chatAnswerSchema, generateClinicChatAnswer } from "../src/lib/ai/chat-generation.mjs";
 import { summarizeClinicRows } from "../src/lib/ai/clinic-summary-core.mjs";
 
@@ -101,6 +101,34 @@ test("planner rejects invalid model arguments and does not forward obvious PII o
   } finally {
     console.warn = originalWarn;
   }
+});
+
+test("planner reconciles only explicit financial, period and context evidence", () => {
+  const wrong = { intent: "agenda", periodKey: "last_30_days", objective: "analyze", metric: "appointments", followUp: true };
+  assert.deepEqual(reconcileChatPlan("Analise as entradas e saídas financeiras dos últimos 7 dias e indique os principais pontos de atenção.", wrong),
+    { ...wrong, intent: "finance", periodKey: "last_7_days", metric: "none", followUp: false });
+  assert.deepEqual(reconcileChatPlan("Quanto faturei este mês?", wrong),
+    { ...wrong, intent: "finance", periodKey: "this_month", metric: "entries", followUp: false });
+  assert.deepEqual(reconcileChatPlan("Quantos clientes tenho?", wrong),
+    { ...wrong, intent: "customers", metric: "customers", followUp: false });
+  assert.equal(reconcileChatPlan("E no mês passado?", wrong).intent, "clarify");
+  const previous = { intent: "finance", periodKey: "this_month", metric: "entries", objective: "analyze" };
+  assert.deepEqual(reconcileChatPlan("E no mês passado?", wrong, previous),
+    { ...wrong, intent: "finance", periodKey: "last_month", metric: "none", followUp: true });
+  assert.equal(reconcileChatPlan("E aquilo?", wrong).intent, "clarify");
+  assert.equal(reconcileChatPlan("Qual é a data de hoje?", wrong).intent, "date");
+  assert.equal(reconcileChatPlan("Agenda e financeiro", wrong).intent, "agenda");
+  assert.equal(reconcileChatPlan("Analise meu financeiro", { ...wrong, intent: "finance", metric: "appointments" }).metric, "none");
+  assert.equal(reconcileChatPlan("Analise meu financeiro", { ...wrong, intent: "sql" }), null);
+  assert.equal(explicitChatPeriodKey("Analise os últimos 7 dias"), "last_7_days");
+  assert.equal(explicitChatPeriodKey("Analise meu financeiro"), null);
+});
+
+test("real planner module reconciles a schema-valid but contradictory mocked plan", async () => {
+  const raw = { intent: "agenda", periodKey: "last_30_days", objective: "analyze", metric: "appointments", followUp: true };
+  const result = await planClinicChat({ question: "Analise as entradas e saídas financeiras dos últimos 7 dias e indique os principais pontos de atenção.",
+    previous: null, model: "test/model", tenantHash: "opaque", generate: async () => ({ output: raw }) });
+  assert.deepEqual(result, { ...raw, intent: "finance", periodKey: "last_7_days", metric: "none", followUp: false });
 });
 
 test("calendar periods use clinic timezone and distinguish month from rolling days", () => {

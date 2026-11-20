@@ -2,7 +2,7 @@ import { buildClinicSummaryModelPayload } from "./summary-generation.mjs";
 import { chatRequestSchema, classifyManagementQuestion, confirmedChatMetrics, directChatMetrics } from "./chat-intents.mjs";
 import { agendaRequestForQuestion } from "./agenda-details.mjs";
 import { buildChatPeriod, fallbackPeriodKey } from "./chat-periods.mjs";
-import { safePlannerQuestion } from "./chat-planner.mjs";
+import { reconcileChatPlan, safePlannerQuestion } from "./chat-planner.mjs";
 
 export async function runClinicChat({ body, clinic, agendaClinic = clinic, user, model, limiter, snapshot, generate, planner, agendaAllowed, agendaLookup, now = new Date() }) {
   const input = chatRequestSchema.parse(body);
@@ -22,7 +22,8 @@ export async function runClinicChat({ body, clinic, agendaClinic = clinic, user,
   }
   const limit = await limiter(clinic.id);
   if (!limit?.allowed || limit.unavailable) throw new Error(limit?.limited ? "AI_RATE_LIMITED" : "AI_UNAVAILABLE");
-  const planned = await planner?.({ question: input.question, previous: previous || (input.lastIntent ? { intent: input.lastIntent, periodKey: null, metric: null, objective: "analyze" } : null), model });
+  const prior = previous || (input.lastIntent ? { intent: input.lastIntent, periodKey: null, metric: null, objective: "analyze" } : null);
+  const planned = reconcileChatPlan(input.question, await planner?.({ question: input.question, previous: prior, model }), prior);
   const intent = planned?.intent || (/\b(?:data|dia)\s+de\s+hoje\b/.test(text) ? "date" : fallback.intent);
   if (intent === "date") {
     const timeZone = buildChatPeriod(agendaClinic, "today", now).timezone;
@@ -40,7 +41,7 @@ export async function runClinicChat({ body, clinic, agendaClinic = clinic, user,
     if (!request) return { type: "local", message: "Informe uma data válida ou um intervalo de até 7 dias.", lastIntent: input.lastIntent || null };
     return agendaLookup(clinic, request, input.agendaPage || 0);
   }
-  const followUp = Boolean(planned?.followUp ?? fallback.followUp) && (!previous || previous.intent === intent);
+  const followUp = Boolean(planned?.followUp ?? fallback.followUp) && Boolean(prior?.intent) && prior.intent === intent;
   const periodKey = planned?.periodKey && planned.periodKey !== "keep" ? planned.periodKey
     : fallbackPeriodKey(input.question, followUp ? previous?.periodKey : null, followUp && previous ? previous.days : input.days);
   if (periodKey === "tomorrow" && intent !== "agenda") return { type: "local", message: "A consulta de amanhã está disponível apenas para a Agenda.", lastIntent: intent };
