@@ -37,6 +37,7 @@ export async function generateClinicChatAnswer({ payload, intent, followUp, focu
       prompt: JSON.stringify({ intent, followUp, focus, indicators: payload }),
       output: Output.object({ schema: chatAnswerSchema }),
       maxOutputTokens: followUp ? 700 : 1200,
+      maxRetries: 0,
       providerOptions: { gateway: { user: tenantHash, tags: ["feature:clinic-chat", `environment:${environment || "local"}`, `tenant:${tenantHash.slice(0, 12)}`] } },
     });
     const answer = chatAnswerSchema.parse(result.output);

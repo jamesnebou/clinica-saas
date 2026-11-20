@@ -4,7 +4,7 @@ import { z } from "zod";
 import { Output } from "ai";
 import { chatPlanSchema, planClinicChat, safePlannerQuestion } from "../src/lib/ai/chat-planner.mjs";
 import { buildChatPeriod, fallbackPeriodKey } from "../src/lib/ai/chat-periods.mjs";
-import { chatAnswerSchema } from "../src/lib/ai/chat-generation.mjs";
+import { chatAnswerSchema, generateClinicChatAnswer } from "../src/lib/ai/chat-generation.mjs";
 import { summarizeClinicRows } from "../src/lib/ai/clinic-summary-core.mjs";
 
 const clinic = { id: "00000000-0000-4000-8000-000000000001", metadata: { timezone: "America/Sao_Paulo" } };
@@ -32,7 +32,56 @@ test("planner returns only allowlisted arguments and never receives raw history"
   assert.equal(calls.length, 1);
   assert.doesNotMatch(calls[0].prompt, /PRIVATE_HISTORY/);
   assert.equal(calls[0].maxOutputTokens, 180);
+  assert.equal(calls[0].maxRetries, 0);
   assert.equal(calls[0].providerOptions.gateway.user, "opaque-hash");
+});
+
+test("planner failure makes one SDK invocation and keeps the deterministic fallback available", async () => {
+  const originalWarn = console.warn;
+  let calls = 0;
+  console.warn = () => {};
+  try {
+    const planned = await planClinicChat({ question: "Analise as entradas e saídas", model: "test/model", tenantHash: "opaque-hash",
+      generate: async (options) => { calls++; assert.equal(options.maxRetries, 0); throw new Error("provider unavailable"); } });
+    assert.equal(planned, null);
+    assert.equal(calls, 1);
+  } finally {
+    console.warn = originalWarn;
+  }
+});
+
+test("generator disables SDK retries, keeps strict output and never forwards patient identifiers", async () => {
+  const originalInfo = console.info;
+  const originalWarn = console.warn;
+  const calls = [];
+  const payload = { period: { days: 7 }, finance: { realizedEntries: 100, realizedExits: 25 },
+    customers: { total: 2, newInPeriod: 0 }, agenda: { total: 0 }, procedures: [], trends: {} };
+  console.info = () => {};
+  console.warn = () => {};
+  try {
+    const answer = await generateClinicChatAnswer({ payload, intent: "finance", followUp: false,
+      model: "test/model", tenantHash: "opaque-hash", generate: async (options) => {
+        calls.push(options);
+        return { output: { interpretation: "Acompanhe as entradas e saídas realizadas.", nextSteps: [], analysis: null } };
+      } });
+    assert.equal(answer.analysis, null);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].maxRetries, 0);
+    assert.equal(calls[0].maxOutputTokens, 1200);
+    assert.doesNotMatch(calls[0].prompt, /paciente|prontu[aá]rio|cpf/i);
+    let failures = 0;
+    await assert.rejects(generateClinicChatAnswer({ payload, intent: "finance", followUp: true,
+      model: "test/model", tenantHash: "opaque-hash", generate: async (options) => {
+        failures++;
+        assert.equal(options.maxRetries, 0);
+        assert.equal(options.maxOutputTokens, 700);
+        throw new Error("provider unavailable");
+      } }), /AI_UNAVAILABLE/);
+    assert.equal(failures, 1);
+  } finally {
+    console.info = originalInfo;
+    console.warn = originalWarn;
+  }
 });
 
 test("planner rejects invalid model arguments and does not forward obvious PII or prompt injection", async () => {

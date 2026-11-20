@@ -42,6 +42,7 @@ export async function planClinicChat({ question, previous, model, tenantHash, en
       } : null }),
       output: Output.object({ schema: chatPlanSchema }),
       maxOutputTokens: 180,
+      maxRetries: 0,
       providerOptions: { gateway: { user: tenantHash, tags: ["feature:clinic-chat-planner", `environment:${environment || "local"}`, `tenant:${tenantHash.slice(0, 12)}`] } },
     });
     return chatPlanSchema.parse(result.output);
