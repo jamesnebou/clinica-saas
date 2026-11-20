@@ -72,6 +72,7 @@ function ChatMessage({ message, onMore }) {
       <div className="min-w-0 max-w-3xl flex-1 text-sm leading-6 text-neutral-800">
         {message.agenda ? <AgendaAnswer message={message} onMore={onMore} /> : message.local ? <p className="pt-1">{message.text}</p> : <>
           <p className="font-semibold text-neutral-950">Indicadores confirmados</p>
+          {message.period?.label ? <p className="mt-1 text-xs text-neutral-500">{message.period.label}</p> : null}
           {message.confirmed.length ? <dl className="mt-2 max-w-xl">{message.confirmed.map((metric) => <Indicator key={metric.label} metric={metric} />)}</dl>
             : <p className="mt-2 text-neutral-600">Não há base comparável para este indicador no período.</p>}
           {message.analysis ? <><p className="mt-5 font-semibold text-neutral-950">Resumo executivo</p>
@@ -287,7 +288,7 @@ export function ClinicChatPanel({ scopeKey }) {
         else setMessages((current) => [...current.slice(-11), { id: ++messageIdRef.current, role: "assistant",
           ...(payload.type === "local" ? { local: true, text: payload.message }
             : payload.type === "agenda_details" ? { agenda: true, ...payload }
-              : { local: false, confirmed: payload.confirmed, interpretation: payload.interpretation, nextSteps: payload.nextSteps,
+              : { local: false, period: payload.period, confirmed: payload.confirmed, interpretation: payload.interpretation, nextSteps: payload.nextSteps,
                 analysis: payload.analysis || null, notice: payload.notice || null }) }]);
       }
     } catch (cause) {

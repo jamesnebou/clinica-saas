@@ -1,5 +1,6 @@
 import { clinicTimeZone, dateKeyInTimeZone, utcRangeForClinicDate } from "@/lib/clinic/schedule";
 import { summarizeClinicRows, validateSummaryDays } from "./clinic-summary-core.mjs";
+import { buildChatPeriod } from "./chat-periods.mjs";
 
 const PAGE_SIZE = 500;
 const MAX_ROWS = 5000;
@@ -11,13 +12,14 @@ function addDays(key, days) {
 }
 
 export function buildSummaryPeriod(clinic, days, now = new Date()) {
+  if (typeof days === "string") return buildChatPeriod(clinic, days, now);
   validateSummaryDays(days);
   const timezone = clinicTimeZone(clinic);
   const today = dateKeyInTimeZone(now, timezone);
   const start = utcRangeForClinicDate(addDays(today, 1 - days), timezone).start.toISOString();
   const end = utcRangeForClinicDate(addDays(today, 1), timezone).start.toISOString();
   const previousStart = utcRangeForClinicDate(addDays(today, 1 - days * 2), timezone).start.toISOString();
-  return { days, start, end, previousStart, previousEnd: start, timezone };
+  return { days, previousDays: days, start, end, previousStart, previousEnd: start, timezone };
 }
 
 async function boundedRows(query) {

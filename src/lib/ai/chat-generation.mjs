@@ -13,7 +13,7 @@ export const chatAnswerSchema = z.strictObject({
     opportunities: z.array(z.string().trim().min(1).max(220)).max(3),
     watch: z.array(z.string().trim().min(1).max(220)).max(3),
     followUps: z.array(z.string().trim().min(1).max(160)).max(3),
-  }).optional(),
+  }).nullable(),
 });
 
 const SYSTEM = `Você é o copiloto de gestão de uma clínica. Use somente os indicadores agregados fornecidos.
@@ -23,7 +23,7 @@ Os números confirmados serão exibidos separadamente pelo servidor: não escrev
 Se a base não sustentar uma conclusão, diga claramente que não é possível concluir.
 Priorize o assunto solicitado, apresente fatos antes de interpretações e relacione cada conclusão aos indicadores disponíveis.
 Diferencie fatos de hipóteses. Evite elogios genéricos, causalidade, capacidade ou crescimento sem evidência.
-Para análises amplas, preencha analysis com resumo executivo, pontos positivos, atenção, oportunidades, indicadores a acompanhar e perguntas para aprofundar. Deixe listas vazias quando não houver dados.
+Para análises amplas, preencha analysis com resumo executivo, pontos positivos, atenção, oportunidades, indicadores a acompanhar e perguntas para aprofundar. Deixe listas vazias quando não houver dados. Para pedidos pontuais, use analysis: null.
 Explique os achados e as limitações, relacione pontos de atenção aos indicadores e priorize ações práticas. Não crie seções sem dados.
 Não repita um resumo completo quando o pedido for pontual. Próximos passos são opcionais e devem ser proporcionais aos dados.
 Responda em português brasileiro de modo objetivo e profissional.`;

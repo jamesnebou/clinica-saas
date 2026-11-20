@@ -6,6 +6,7 @@ export const chatMemorySchema = z.strictObject({
   days: z.union([z.literal(7), z.literal(30)]),
   metric: z.string().max(40).nullable(),
   objective: z.enum(["analyze", "explain", "compare", "improve"]),
+  periodKey: z.enum(["today", "yesterday", "tomorrow", "this_week", "last_week", "this_month", "last_month", "last_7_days", "last_30_days"]).optional(),
 });
 export const chatRequestSchema = z.strictObject({
   question: z.string().trim().min(2).max(400),

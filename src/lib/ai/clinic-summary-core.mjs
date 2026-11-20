@@ -14,7 +14,7 @@ export function sanitizeProcedureLabel(value) {
 
 export function summarizeClinicRows({ period, appointments, movements, customerTotal, newCustomers, procedureNames, upcoming }) {
   const current = appointments.filter((row) => row.inicio >= period.start && row.inicio < period.end);
-  const previous = appointments.filter((row) => row.inicio >= period.previousStart && row.inicio < period.start);
+  const previous = appointments.filter((row) => row.inicio >= period.previousStart && row.inicio < (period.previousEnd || period.start));
   const count = (rows, status) => rows.filter((row) => row.status === status).length;
   const money = (n) => Math.round(n * 100) / 100;
   const totals = (rows) => ({
@@ -22,8 +22,11 @@ export function summarizeClinicRows({ period, appointments, movements, customerT
     exits: money(rows.filter((row) => ["saida", "ajuste_saida", "estorno"].includes(row.tipo)).reduce((sum, row) => sum + Number(row.valor_liquido || 0), 0)),
   });
   const finance = totals(movements.filter((row) => row.data_movimento >= period.start && row.data_movimento < period.end));
-  const previousFinance = totals(movements.filter((row) => row.data_movimento >= period.previousStart && row.data_movimento < period.start));
-  const change = (now, before) => before > 0 ? Math.round(((now - before) / before) * 1000) / 10 : null;
+  const previousFinance = totals(movements.filter((row) => row.data_movimento >= period.previousStart && row.data_movimento < (period.previousEnd || period.start)));
+  const comparable = period.previousDays == null
+    ? (Date.parse(period.end) - Date.parse(period.start)) === (Date.parse(period.previousEnd || period.start) - Date.parse(period.previousStart))
+    : period.days === period.previousDays;
+  const change = (now, before) => comparable && before > 0 ? Math.round(((now - before) / before) * 1000) / 10 : null;
   const byProcedure = new Map();
   for (const row of current) {
     if (row.status !== "concluido" || !row.procedimento_id) continue;

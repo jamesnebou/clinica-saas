@@ -4,6 +4,7 @@ import { canUseClinicAi, getClinicAiMembership } from "@/lib/ai/access.mjs";
 import { getClinicSummarySnapshot } from "@/lib/ai/clinic-summary-data";
 import { runClinicChat } from "@/lib/ai/chat-flow.mjs";
 import { generateClinicChatAnswer } from "@/lib/ai/chat-generation.mjs";
+import { planClinicChat } from "@/lib/ai/chat-planner.mjs";
 import { getClinicAgendaDetails } from "@/lib/ai/agenda-details.mjs";
 import { canAccessSection, sectionHasCapability } from "@/lib/auth/permissions";
 import { getClinicPlan } from "@/lib/saas/plans";
@@ -31,7 +32,9 @@ export async function POST(request) {
       user: context.user,
       model: process.env.AI_GATEWAY_MODEL?.trim(),
       limiter: (clinicId) => consumePublicRateLimit({ scope: "ai_summary", headers: request.headers, tenantId: clinicId, target: clinicId }),
-      snapshot: async (currentClinic, days) => getClinicSummarySnapshot({ supabase, clinic: currentClinic, days }),
+      snapshot: async (currentClinic, periodKey) => getClinicSummarySnapshot({ supabase, clinic: currentClinic, days: periodKey }),
+      planner: ({ question, previous, model }) => planClinicChat({ question, previous, model,
+        tenantHash: hashPublicRateLimitValue("ai:clinic", clinic.id), environment: process.env.VERCEL_ENV || process.env.NODE_ENV }),
       agendaAllowed: async () => {
         const membership = getClinicAiMembership(context, clinic);
         if (!canAccessSection(membership?.papel, "agenda", membership)) return false;

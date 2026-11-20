@@ -1,69 +1,94 @@
 import { buildClinicSummaryModelPayload } from "./summary-generation.mjs";
 import { chatRequestSchema, classifyManagementQuestion, confirmedChatMetrics, directChatMetrics } from "./chat-intents.mjs";
 import { agendaRequestForQuestion } from "./agenda-details.mjs";
+import { buildChatPeriod, fallbackPeriodKey } from "./chat-periods.mjs";
+import { safePlannerQuestion } from "./chat-planner.mjs";
 
-export async function runClinicChat({ body, clinic, agendaClinic = clinic, user, model, limiter, snapshot, generate, agendaAllowed, agendaLookup }) {
+export async function runClinicChat({ body, clinic, agendaClinic = clinic, user, model, limiter, snapshot, generate, planner, agendaAllowed, agendaLookup, now = new Date() }) {
   const input = chatRequestSchema.parse(body);
   if (!clinic?.id || !user?.id) throw new Error("AI_FORBIDDEN");
   const previous = input.memory;
-  const classified = classifyManagementQuestion(input.question, previous?.intent || input.lastIntent);
-  if (!classified.intent) return { type: "local", message: classified.message, lastIntent: input.lastIntent || null };
-  if (classified.intent === "agenda_details") {
-    if (classified.followUp && !input.agendaContext) return { type: "local", message: "A quais agendamentos você se refere? Informe a data ou o período para consultar a agenda.", lastIntent: null };
+  if (!safePlannerQuestion(input.question)) return { type: "local", message: "Para proteger dados pessoais e clínicos, pergunte somente sobre indicadores agregados da clínica.", lastIntent: null };
+  const fallback = classifyManagementQuestion(input.question, previous?.intent || input.lastIntent);
+  const text = input.question.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  if (/\b(?:quais|qual)\s+dias?\b.*\b(?:menos|mais)\b.*\bagend/.test(text)) {
+    return { type: "local", message: "Ainda não tenho uma distribuição confiável de agendamentos por dia para essa comparação.", lastIntent: null };
+  }
+  if (/\b(?:segunda|2a|2ª)\s+recomendacao\b/.test(text) && previous) {
+    return { type: "local", message: "Indique qual recomendação deseja aprofundar. Não mantenho o texto de recomendações anteriores como fonte de dados.", lastIntent: previous.intent };
+  }
+  if (!model && !fallback.intent && !/\b(?:data|dia)\s+de\s+hoje\b/.test(text)) {
+    return { type: "local", message: fallback.message, lastIntent: input.lastIntent || null };
+  }
+  const limit = await limiter(clinic.id);
+  if (!limit?.allowed || limit.unavailable) throw new Error(limit?.limited ? "AI_RATE_LIMITED" : "AI_UNAVAILABLE");
+  const planned = await planner?.({ question: input.question, previous: previous || (input.lastIntent ? { intent: input.lastIntent, periodKey: null, metric: null, objective: "analyze" } : null), model });
+  const intent = planned?.intent || (/\b(?:data|dia)\s+de\s+hoje\b/.test(text) ? "date" : fallback.intent);
+  if (intent === "date") {
+    const timeZone = buildChatPeriod(agendaClinic, "today", now).timezone;
+    const date = new Intl.DateTimeFormat("pt-BR", { timeZone, day: "2-digit", month: "long", year: "numeric" }).format(now);
+    return { type: "local", message: `Hoje é ${date}.`, lastIntent: null };
+  }
+  if (!intent || intent === "clarify" || intent === "unsupported") {
+    return { type: "local", message: intent === "unsupported" ? "Não tenho dados confiáveis para responder a essa pergunta." : fallback.message || "Qual indicador de gestão você deseja analisar?", lastIntent: input.lastIntent || null };
+  }
+  if (intent === "agenda_details") {
+    if ((planned?.followUp || fallback.followUp) && !input.agendaContext) return { type: "local", message: "A quais agendamentos você se refere? Informe a data ou o período para consultar a agenda.", lastIntent: null };
     if (!await agendaAllowed?.()) throw new Error("AI_FORBIDDEN");
     if (agendaClinic?.id !== clinic.id) throw new Error("AI_FORBIDDEN");
     const request = agendaRequestForQuestion(input.question, input.agendaContext, agendaClinic);
     if (!request) return { type: "local", message: "Informe uma data válida ou um intervalo de até 7 dias.", lastIntent: input.lastIntent || null };
-    const limit = await limiter(clinic.id);
-    if (!limit?.allowed || limit.unavailable) throw new Error(limit?.limited ? "AI_RATE_LIMITED" : "AI_UNAVAILABLE");
     return agendaLookup(clinic, request, input.agendaPage || 0);
   }
-  const text = input.question.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
-  const followUp = classified.followUp && (!previous || previous.intent === classified.intent);
-  if (followUp && /\b(?:segunda|2a|2ª)\s+recomendacao\b/.test(text)) {
-    return { type: "local", message: "Indique qual recomendação deseja aprofundar. Não mantenho o texto de recomendações anteriores como fonte de dados.", lastIntent: classified.intent };
+  const followUp = Boolean(planned?.followUp ?? fallback.followUp) && (!previous || previous.intent === intent);
+  const periodKey = planned?.periodKey && planned.periodKey !== "keep" ? planned.periodKey
+    : fallbackPeriodKey(input.question, followUp ? previous?.periodKey : null, followUp && previous ? previous.days : input.days);
+  if (periodKey === "tomorrow" && intent !== "agenda") return { type: "local", message: "A consulta de amanhã está disponível apenas para a Agenda.", lastIntent: intent };
+  if (intent === "customers" && ["today", "yesterday", "tomorrow"].includes(periodKey)) {
+    return { type: "local", message: "Ainda não consigo analisar clientes por dia. Posso consultar a agenda dessa data ou analisar clientes nos últimos 7 ou 30 dias.", lastIntent: intent };
   }
-  const days = followUp && previous ? previous.days : input.days;
-  const directRequested = directChatMetrics(input.question, classified.intent, []) !== null;
-  if (!model && !directRequested) throw new Error("AI_NOT_CONFIGURED");
-  // Chat and summary deliberately share the same persistent quota until a separate policy is introduced.
-  const limit = await limiter(clinic.id);
-  if (!limit?.allowed || limit.unavailable) throw new Error(limit?.limited ? "AI_RATE_LIMITED" : "AI_UNAVAILABLE");
-  const data = await snapshot(clinic, days);
+  const period = buildChatPeriod(agendaClinic, periodKey, now);
+  const days = period.days;
+  const data = await snapshot(clinic, periodKey);
   const payload = buildClinicSummaryModelPayload(data);
-  let confirmed = confirmedChatMetrics(payload, classified.intent);
-  const direct = directChatMetrics(input.question, classified.intent, confirmed);
+  let confirmed = confirmedChatMetrics(payload, intent);
+  const selectedLabels = { entries: "Entradas realizadas", exits: "Saídas realizadas", appointments: "Agendamentos", completed: "Concluídos",
+    confirmed: "Confirmados", upcoming: "Próximos", customers: "Clientes", new_customers: "Novos no período", no_shows: "Faltas", cancellations: "Cancelamentos" };
+  const selected = planned?.metric && planned.metric !== "none" ? confirmed.filter((item) => item.label === selectedLabels[planned.metric]) : null;
+  const direct = selected?.length ? selected : planned ? null : directChatMetrics(input.question, intent, confirmed);
   const metric = direct?.length === 1 ? direct[0].label : followUp && previous && confirmed.some((item) => item.label === previous.metric) ? previous.metric : null;
-  const objective = /\b(?:comparad\w*|periodo\s+anterior)\b/.test(text) ? "compare"
-    : /\b(?:melhorar|recomendacao)\b/.test(text) ? "improve" : followUp ? "explain" : "analyze";
-  const memory = { intent: classified.intent, days, metric, objective };
-  if (objective === "compare" && !["agenda", "finance", "trends", "overview"].includes(classified.intent)) {
-    return { type: "local", message: "Ainda não há comparação confirmada para esse assunto. Escolha agenda ou entradas financeiras.", lastIntent: classified.intent, memory };
+  const objective = planned?.objective || (/\b(?:comparad\w*|periodo\s+anterior)\b/.test(text) ? "compare"
+    : /\b(?:melhorar|recomendacao)\b/.test(text) ? "improve" : followUp ? "explain" : "analyze");
+  const memory = { intent, days: input.days, periodKey, metric, objective };
+  if (objective === "compare" && !["agenda", "finance", "trends", "overview"].includes(intent)) {
+    return { type: "local", message: "Ainda não há comparação confirmada para esse assunto. Escolha agenda ou entradas financeiras.", lastIntent: intent, memory };
   }
   if (objective === "compare") {
-    const trends = confirmedChatMetrics(payload, "trends").filter((item) => classified.intent === "overview" || classified.intent === "trends"
-      || classified.intent === "finance" && item.label === "Variação de entradas"
-      || classified.intent === "agenda" && item.label === "Variação de agendamentos");
-    if (!trends.length) return { type: "local", message: "Não há dados suficientes para comparar esse indicador com o período anterior.", lastIntent: classified.intent, memory };
+    const trends = confirmedChatMetrics(payload, "trends").filter((item) => intent === "overview" || intent === "trends"
+      || intent === "finance" && item.label === "Variação de entradas"
+      || intent === "agenda" && item.label === "Variação de agendamentos");
+    if (!trends.length) return { type: "local", message: "Não há dados suficientes para comparar esse indicador com o período anterior.", lastIntent: intent, memory };
     confirmed = trends;
   }
-  if (direct !== null) return { type: "analysis", intent: classified.intent, lastIntent: classified.intent, period: { days }, memory,
-    confirmed: direct, interpretation: "", nextSteps: [] };
+  if (direct !== null && objective === "analyze") return { type: "analysis", intent, lastIntent: intent, period: { days, key: periodKey, label: period.label }, memory,
+    confirmed: direct, interpretation: intent === "finance" ? "Critério: entradas realizadas líquidas, não faturamento previsto nem lucro." : "", nextSteps: [] };
+  if (!model) return { type: "analysis", intent, lastIntent: intent, period: { days, key: periodKey, label: period.label }, memory,
+    confirmed, interpretation: "", nextSteps: [], notice: "A interpretação adicional está indisponível. Os indicadores confirmados continuam disponíveis." };
   let answer;
   try {
-    answer = await generate({ payload, intent: classified.intent, followUp, focus: { metric, objective }, days, model });
+    answer = await generate({ payload, intent, followUp, focus: { metric, objective }, days, model });
   } catch (error) {
-    if (error?.message !== "AI_UNSAFE_OUTPUT") throw error;
-    return { type: "analysis", intent: classified.intent, lastIntent: classified.intent, period: { days }, memory,
-      confirmed, interpretation: "", nextSteps: [], notice: "A interpretação adicional não pôde ser exibida com segurança. Os indicadores confirmados continuam disponíveis." };
+    return { type: "analysis", intent, lastIntent: intent, period: { days, key: periodKey, label: period.label }, memory,
+      confirmed, interpretation: "", nextSteps: [], notice: error?.message === "AI_UNSAFE_OUTPUT"
+        ? "A interpretação adicional não pôde ser exibida com segurança. Os indicadores confirmados continuam disponíveis."
+        : "A interpretação adicional está indisponível. Os indicadores confirmados continuam disponíveis." };
   }
   return {
     type: "analysis",
-    intent: classified.intent,
-    lastIntent: classified.intent,
-    period: { days }, memory,
+    intent, lastIntent: intent,
+    period: { days, key: periodKey, label: period.label }, memory,
     confirmed,
-    interpretation: answer.interpretation,
+    interpretation: intent === "finance" ? `Critério: entradas realizadas líquidas, não faturamento previsto nem lucro. ${answer.interpretation}` : answer.interpretation,
     nextSteps: answer.nextSteps,
     analysis: answer.analysis || null,
   };

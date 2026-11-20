@@ -17,7 +17,7 @@ const count = z.number().int().nonnegative();
 const metric = z.number().finite();
 const nullableMetric = metric.nullable();
 export const clinicSummaryModelPayloadSchema = z.strictObject({
-  period: z.strictObject({ days: z.union([z.literal(7), z.literal(30)]) }),
+  period: z.strictObject({ days: z.number().int().min(1).max(31) }),
   agenda: z.strictObject({ total: count, completed: count, confirmed: count, canceled: count, noShows: count, upcoming: count }),
   finance: z.strictObject({ realizedEntries: metric, realizedExits: metric }),
   customers: z.strictObject({ total: count, newInPeriod: count }),
