@@ -35,13 +35,35 @@ function normalize(value) {
   return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 }
 
+export function ambiguousPhysicalMovement(question) {
+  const text = normalize(question);
+  return /\b(?:entrou|entraram|saiu|sairam)\b/.test(text)
+    && /\b(?:clientes?|pessoas?|profissiona\w*|produtos?|agenda|agend\w*|clinica)\b/.test(text)
+    && !/\b(?:dinheiro|valor|receita\w*|despesa\w*|financeir\w*)\b/.test(text);
+}
+
+export function explicitFinancialMovement(question) {
+  const text = normalize(question);
+  const amountQuestion = /\bquanto\s+(?:entrou|saiu|recebi|gastei)\b/.test(text);
+  const nonFinancialSubject = ambiguousPhysicalMovement(question);
+  if (!amountQuestion || nonFinancialSubject) return { entries: false, exits: false };
+  return {
+    entries: /\b(?:entrou|recebi)\b/.test(text),
+    exits: /\b(?:saiu|gastei)\b/.test(text),
+  };
+}
+
 export function classifyManagementQuestion(question, lastIntent = null) {
   const text = normalize(question);
+  const movement = explicitFinancialMovement(question);
   if (/\b[\w.+-]+@[\w.-]+\.[a-z]{2,}\b/i.test(question)
     || /\b(?:\d{3}[.\s-]?){3}\d{2}\b/.test(question)
     || /\b(?:\+?55[\s.-]?)?\(?\d{2}\)?[\s.-]?\d{4,5}[\s.-]?\d{4}\b/.test(question)
     || /\b(?:paciente|prontuario|diagnostic\w*|sintoma\w*|medicamento\w*|tratamento\s+individual|exame\s+clinico)\b/.test(text)) {
     return { intent: null, followUp: false, message: SENSITIVE };
+  }
+  if (ambiguousPhysicalMovement(question)) {
+    return { intent: null, followUp: false, message: "Esclareça se a pergunta é sobre valores financeiros ou agendamentos." };
   }
 
   const followUpRequested = /\b(?:explique|detalhe|aprofund\w*|mais\s+sobre|essa\s+tendencia|esse\s+resultado|por\s+que|porque|comparad\w*|periodo\s+anterior|melhorar|recomendacao)\b/.test(text);
@@ -62,13 +84,13 @@ export function classifyManagementQuestion(question, lastIntent = null) {
   }
   const rules = [
     ["absences", /\b(?:falta\w*|cancel\w*|nao\s+comparec\w*|no[ -]?show)\b/],
-    ["finance", /\b(?:financ\w*|receita\w*|despesa\w*|entrada\w*|saida\w*|entr(?:ou|aram|ando)|sa(?:iu|iram|indo)|receb\w*|pagamento\w*|fatur\w*|dinheiro|lucro)\b/],
+    ["finance", /\b(?:financ\w*|receita\w*|despesa\w*|entrada\w*|saida\w*|receb\w*|pagamento\w*|fatur\w*|dinheiro|lucro)\b/],
     ["agenda", /\b(?:agenda|agend\w*|atendimento\w*|horario\w*)\b/],
     ["customers", /\b(?:cliente\w*|crescimento\s+de\s+cliente\w*|novos\s+clientes)\b/],
     ["trends", /\b(?:tendencia\w*|compar\w*|evolu\w*|crescimento|queda\w*)\b/],
     ["overview", /\b(?:geral|desempenho|resultado\w*|resumo|visao|clinica)\b/],
   ];
-  const intent = rules.find(([, pattern]) => pattern.test(text))?.[0] || null;
+  const intent = movement.entries || movement.exits ? "finance" : rules.find(([, pattern]) => pattern.test(text))?.[0] || null;
   if (followUpRequested && !intent && !lastIntent) return { intent: null, followUp: false, message: "Escolha primeiro um assunto de gestão. " + AVAILABLE };
   const selected = followUpRequested && lastIntent && (!intent || intent === "trends"
     || intent === "overview" && /\b(?:esse|essa|deste|dessa)\s+resultado\b/.test(text)) ? lastIntent : intent;
@@ -96,8 +118,9 @@ export function directChatMetrics(question, intent, metrics) {
   if (!/\b(?:quanto|quantos|quantas|qual\s+(?:o|a)\s+(?:total|valor|numero|quantidade))\b/.test(text)
     || /\b(?:porque|por\s+que|explique|analise|compare|tendencia)\b/.test(text)) return null;
   if (intent === "finance") {
-    const entry = /\b(?:entrada\w*|entr(?:ou|aram)|receita\w*|receb\w*|fatur\w*)\b/.test(text);
-    const exit = /\b(?:saida\w*|sa(?:iu|iram)|despesa\w*)\b/.test(text);
+    const movement = explicitFinancialMovement(question);
+    const entry = movement.entries || /\b(?:entrada\w*|receita\w*|receb\w*|fatur\w*)\b/.test(text);
+    const exit = movement.exits || /\b(?:saida\w*|despesa\w*)\b/.test(text);
     return metrics.filter((item) => (!entry && !exit) || entry && item.label === "Entradas realizadas" || exit && item.label === "Saídas realizadas");
   }
   if (intent === "agenda") {

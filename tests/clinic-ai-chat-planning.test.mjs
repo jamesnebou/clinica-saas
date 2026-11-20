@@ -124,6 +124,23 @@ test("planner reconciles only explicit financial, period and context evidence", 
   assert.equal(explicitChatPeriodKey("Analise meu financeiro"), null);
 });
 
+test("financial movement verbs require an unambiguous amount question", () => {
+  const agenda = { intent: "agenda", periodKey: "last_30_days", objective: "analyze", metric: "appointments", followUp: false };
+  const clarify = { ...agenda, intent: "clarify", metric: "none" };
+  for (const [question, metric] of [
+    ["Quanto entrou?", "entries"], ["Quanto saiu?", "exits"],
+    ["Quanto recebi?", "entries"], ["Quanto gastei?", "exits"],
+  ]) {
+    const result = reconcileChatPlan(question, agenda);
+    assert.equal(result.intent, "finance", question);
+    assert.equal(result.metric, metric, question);
+  }
+  for (const question of [
+    "O cliente entrou na clínica?", "Quantas pessoas entraram hoje?",
+    "A profissional saiu mais cedo?", "Qual produto mais saiu?", "Quem entrou na agenda?",
+  ]) assert.equal(reconcileChatPlan(question, clarify).intent, "clarify", question);
+});
+
 test("real planner module reconciles a schema-valid but contradictory mocked plan", async () => {
   const raw = { intent: "agenda", periodKey: "last_30_days", objective: "analyze", metric: "appointments", followUp: true };
   const result = await planClinicChat({ question: "Analise as entradas e saídas financeiras dos últimos 7 dias e indique os principais pontos de atenção.",

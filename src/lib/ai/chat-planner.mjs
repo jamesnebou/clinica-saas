@@ -1,7 +1,7 @@
 import { generateText, Output } from "ai";
 import { z } from "zod";
 import { chatPeriodKeys, explicitChatPeriodKey } from "./chat-periods.mjs";
-import { chatMetricLabels } from "./chat-intents.mjs";
+import { ambiguousPhysicalMovement, chatMetricLabels, explicitFinancialMovement } from "./chat-intents.mjs";
 
 export const chatPlanSchema = z.strictObject({
   intent: z.enum(["overview", "agenda", "agenda_details", "finance", "absences", "customers", "trends", "date", "clarify", "unsupported"]),
@@ -42,8 +42,9 @@ export function reconcileChatPlan(question, plan, previous = null) {
   const text = String(question).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
   const priorIntent = previous?.intent;
   const periodOnly = /^(?:e\s+)?(?:(?:no|na|nos|nas)\s+)?(?:mes passado|este mes|neste mes|semana passada|esta semana|ultimos? (?:7|30) dias)\??$/.test(text);
-  const financeEntries = /\b(?:entradas?|receitas?|receb\w*|fatur\w*)\b/.test(text);
-  const financeExits = /\b(?:saidas?|despesas?)\b/.test(text);
+  const movement = explicitFinancialMovement(question);
+  const financeEntries = movement.entries || /\b(?:entradas?|receitas?|receb\w*|fatur\w*)\b/.test(text);
+  const financeExits = movement.exits || /\b(?:saidas?|despesas?)\b/.test(text);
   const financeSubject = financeEntries || financeExits || /\bfinanceir\w*\b/.test(text);
   const agendaSubject = /\b(?:agenda|agend\w*|atendimento\w*|horario\w*)\b/.test(text);
   const customerSubject = /\bclientes?\b/.test(text);
@@ -53,7 +54,8 @@ export function reconcileChatPlan(question, plan, previous = null) {
     || customerSubject && !financeSubject && /\b(?:quais|quem|mostr\w*|list\w*)\b/.test(text) && !/\b(?:novos?|cadastrad\w*)\b/.test(text)
   );
   let intent = parsed.data.intent;
-  if (periodOnly) intent = priorIntent || "clarify";
+  if (ambiguousPhysicalMovement(question)) intent = "clarify";
+  else if (periodOnly) intent = priorIntent || "clarify";
   else if (/^(?:e\s+)?(?:aquilo|isso|esse resultado|essa tendencia)\??$/.test(text) && !priorIntent) intent = "clarify";
   else if (/\b(?:data|dia)\s+de\s+hoje\b/.test(text) && !financeSubject && !agendaSubject && !customerSubject) intent = "date";
   else if (datedAgenda) intent = "agenda_details";

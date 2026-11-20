@@ -426,6 +426,60 @@ test("semantic reconciliation selects scoped data and confirmed metrics despite 
   assert.equal(state.snapshotCalls.length, 0);
 });
 
+test("financial movement verbs override contradictory agenda plans without widening metrics", async () => {
+  const cases = [
+    ["Quanto entrou?", "last_30_days", ["Entradas realizadas"]],
+    ["Quanto saiu?", "last_30_days", ["Saídas realizadas"]],
+    ["Quanto entrou neste mês?", "this_month", ["Entradas realizadas"]],
+    ["Quanto saiu neste mês?", "this_month", ["Saídas realizadas"]],
+    ["Quanto entrou e saiu neste mês?", "this_month", ["Entradas realizadas", "Saídas realizadas"]],
+    ["Quanto recebi?", "last_30_days", ["Entradas realizadas"]],
+    ["Quanto gastei?", "last_30_days", ["Saídas realizadas"]],
+    ["Quais foram minhas entradas?", "last_30_days", ["Entradas realizadas"]],
+    ["Quais foram minhas saídas?", "last_30_days", ["Saídas realizadas"]],
+  ];
+  for (const [question, periodKey, labels] of cases) {
+    reset();
+    state.plan = { intent: "agenda", periodKey: "last_30_days", objective: "analyze", metric: "appointments", followUp: false };
+    const response = await post({ question, days: 30 });
+    assert.equal(response.status, 200, question);
+    assert.equal(response.body.intent, "finance", question);
+    assert.equal(response.body.period.key, periodKey, question);
+    assert.deepEqual(response.body.confirmed.map((item) => item.label), labels, question);
+    assert.deepEqual(state.snapshotCalls, [{ clinicId: A, periodKey }], question);
+    assert.equal(state.agendaCalls.length, 0, question);
+  }
+});
+
+test("financial movement fallback and physical-movement ambiguity stay scoped", async () => {
+  for (const [question, label] of [
+    ["Quanto entrou neste mês?", "Entradas realizadas"],
+    ["Quanto saiu neste mês?", "Saídas realizadas"],
+    ["Quanto gastei?", "Saídas realizadas"],
+  ]) {
+    reset({ selected: B });
+    const response = await post({ question, days: 30 });
+    assert.equal(response.body.intent, "finance", question);
+    assert.deepEqual(response.body.confirmed.map((item) => item.label), [label], question);
+    assert.deepEqual(state.snapshotCalls, [{ clinicId: B, periodKey: question.includes("mês") ? "this_month" : "last_30_days" }], question);
+  }
+  for (const question of [
+    "O cliente entrou na clínica?", "Quantas pessoas entraram hoje?",
+    "A profissional saiu mais cedo?", "Qual produto mais saiu?", "Quem entrou na agenda?",
+  ]) {
+    reset();
+    state.plan = { intent: "finance", periodKey: "today", objective: "analyze", metric: "entries", followUp: false };
+    const response = await post({ question, days: 30 });
+    assert.equal(response.body.type, "local", question);
+    assert.equal(state.snapshotCalls.length, 0, question);
+    assert.equal(state.agendaCalls.length, 0, question);
+    reset();
+    const fallback = await post({ question, days: 30 });
+    assert.equal(fallback.body.type, "local", question);
+    assert.equal(state.snapshotCalls.length, 0, question);
+  }
+});
+
 test("explicit dated client list uses authorized agenda while registered totals stay customer metrics", async () => {
   reset();
   state.plan = { intent: "agenda_details", periodKey: "today", objective: "analyze", metric: "none", followUp: false };
