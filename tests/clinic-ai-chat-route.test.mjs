@@ -1,10 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { registerHooks } from "node:module";
 
 const A = "00000000-0000-4000-8000-000000000001";
 const B = "00000000-0000-4000-8000-000000000002";
 const user = { id: "user-a" };
+const scopeKey = (clinicId = A) => createHash("sha256").update("clinic-ai\0").update(user.id).update("\0").update(clinicId).digest("hex");
 const clinic = (id = A, mode = "unlimited_lifetime") => ({ id, plan_entitlements_mode: mode });
 const state = { context: null, clinic: null, limiter: { allowed: true }, snapshotCalls: [], generationCalls: [], planningCalls: [], limitCalls: [], agendaCalls: [], agendaAllowed: true, generationFailure: null, plan: null };
 globalThis.__ia03 = state;
@@ -262,7 +264,7 @@ test("provider failure preserves confirmed metrics and ambiguous recommendation 
   assert.match(failed.body.notice, /interpretação adicional está indisponível/);
   assert.equal(state.generationCalls.length, 1);
   reset();
-  const memory = { intent: "finance", days: 30, metric: null, objective: "analyze" };
+  const memory = { scopeKey: scopeKey(), intent: "finance", days: 30, metric: null, objective: "analyze" };
   const ambiguous = await post({ question: "Explique melhor a segunda recomendação", days: 30, memory });
   assert.equal(ambiguous.status, 200);
   assert.equal(ambiguous.body.type, "local");
@@ -274,6 +276,7 @@ test("structured follow-up preserves validated period and never sends raw histor
   reset();
   const first = await post({ question: "Quanto entrou neste período?", days: 7 });
   assert.equal(first.body.memory.metric, "Entradas realizadas");
+  assert.equal(first.body.memory.scopeKey, scopeKey());
   const second = await post({ question: "Por que esse resultado merece atenção?", days: 30, memory: first.body.memory });
   assert.equal(second.status, 200);
   assert.equal(second.body.intent, "finance");
@@ -423,13 +426,126 @@ test("semantic reconciliation selects scoped data and confirmed metrics despite 
   assert.equal(state.snapshotCalls.length, 0);
 });
 
+test("explicit dated client list uses authorized agenda while registered totals stay customer metrics", async () => {
+  reset();
+  state.plan = { intent: "agenda_details", periodKey: "today", objective: "analyze", metric: "none", followUp: false };
+  const scheduled = await post({ question: "Quais clientes tenho hoje?", days: 30 });
+  assert.equal(scheduled.body.type, "agenda_details");
+  assert.equal(state.agendaCalls[0].clinicId, A);
+  assert.equal(state.agendaCalls[0].request.mode, "list");
+  assert.deepEqual(scheduled.body.appointments, []);
+  assert.equal(state.snapshotCalls.length, 0);
+  reset();
+  state.plan = { intent: "agenda_details", periodKey: "today", objective: "analyze", metric: "none", followUp: false };
+  const registered = await post({ question: "Quantos clientes tenho cadastrados?", days: 30 });
+  assert.equal(registered.body.intent, "customers");
+  assert.deepEqual(registered.body.confirmed.map((item) => item.label), ["Clientes"]);
+  assert.equal(state.agendaCalls.length, 0);
+  reset();
+  state.plan = { intent: "agenda_details", periodKey: "today", objective: "analyze", metric: "none", followUp: false };
+  const unsupported = await post({ question: "Quantos clientes novos tenho hoje?", days: 30 });
+  assert.equal(unsupported.body.type, "local");
+  assert.match(unsupported.body.message, /clientes por dia/);
+  assert.equal(state.agendaCalls.length, 0);
+  assert.equal(state.snapshotCalls.length, 0);
+});
+
+test("explicit agenda tomorrow overrides a contradictory finance plan without bypassing permission", async () => {
+  reset();
+  state.plan = { intent: "finance", periodKey: "tomorrow", objective: "analyze", metric: "entries", followUp: false };
+  const response = await post({ question: "Como está minha agenda amanhã?", days: 30 });
+  assert.equal(response.body.type, "agenda_details");
+  assert.equal(state.agendaCalls.length, 1);
+  assert.equal(state.agendaCalls[0].request.mode, "list");
+  assert.deepEqual(response.body.appointments, []);
+  assert.equal(state.snapshotCalls.length, 0);
+  assert.equal(state.generationCalls.length, 0);
+  reset();
+  state.agendaAllowed = false;
+  state.plan = { intent: "finance", periodKey: "tomorrow", objective: "analyze", metric: "entries", followUp: false };
+  assert.equal((await post({ question: "Como está minha agenda amanhã?", days: 30 })).status, 403);
+  assert.equal(state.agendaCalls.length, 0);
+});
+
+test("explicit comparison and improvement objectives override contradictory analysis", async () => {
+  reset();
+  state.plan = { intent: "finance", periodKey: "last_7_days", objective: "analyze", metric: "none", followUp: false };
+  const compared = await post({ question: "Compare meu financeiro com o período anterior.", days: 7 });
+  assert.equal(compared.body.memory.objective, "compare");
+  assert.deepEqual(compared.body.confirmed.map((item) => item.label), ["Variação de entradas"]);
+  assert.equal(state.generationCalls[0].focus.objective, "compare");
+  reset();
+  state.plan = { intent: "overview", periodKey: "last_7_days", objective: "analyze", metric: "none", followUp: false };
+  const improved = await post({ question: "Como posso melhorar o desempenho da clínica?", days: 7 });
+  assert.equal(improved.body.memory.objective, "improve");
+  assert.equal(state.generationCalls[0].focus.objective, "improve");
+  reset();
+  state.plan = { intent: "finance", periodKey: "last_7_days", objective: "explain", metric: "none", followUp: false };
+  const ambiguous = await post({ question: "Quais pontos de atenção no financeiro?", days: 7 });
+  assert.equal(ambiguous.body.memory.objective, "explain");
+  reset();
+  state.plan = { intent: "finance", periodKey: "last_7_days", objective: "analyze", metric: "none", followUp: false };
+  const analyzed = await post({ question: "Analise meu financeiro", days: 7 });
+  assert.equal(analyzed.body.memory.objective, "analyze");
+  reset();
+  state.plan = { intent: "finance", periodKey: "last_7_days", objective: "analyze", metric: "none", followUp: false };
+  const originalSnapshot = state.snapshot;
+  state.snapshot = (days) => ({ ...originalSnapshot(days), trends: { appointmentsPercent: null, receivedPercent: null, noShowRatePercent: null } });
+  try {
+    const unavailable = await post({ question: "Compare meu financeiro com o período anterior.", days: 7 });
+    assert.equal(unavailable.body.type, "local");
+    assert.match(unavailable.body.message, /Não há dados suficientes/);
+    assert.equal(state.generationCalls.length, 0);
+  } finally {
+    state.snapshot = originalSnapshot;
+  }
+});
+
+test("period-only finance follow-ups preserve one metric until explicitly changed or expanded", async () => {
+  const memory = (metric) => ({ scopeKey: scopeKey(), intent: "finance", days: 30, periodKey: "this_month", metric, objective: "analyze" });
+  for (const [metric, question, expectedPeriod, expectedLabel] of [
+    ["Entradas realizadas", "E no mês passado?", "last_month", "Entradas realizadas"],
+    ["Saídas realizadas", "E neste mês?", "this_month", "Saídas realizadas"],
+  ]) {
+    reset();
+    state.plan = { intent: "finance", periodKey: expectedPeriod, objective: "improve", metric: "none", followUp: true };
+    const response = await post({ question, days: 30, memory: memory(metric) });
+    assert.equal(response.body.period.key, expectedPeriod);
+    assert.deepEqual(response.body.confirmed.map((item) => item.label), [expectedLabel]);
+    assert.equal(response.body.memory.metric, expectedLabel);
+    assert.equal(response.body.memory.objective, "analyze");
+  }
+  reset();
+  state.plan = { intent: "finance", periodKey: "keep", objective: "analyze", metric: "none", followUp: true };
+  const changed = await post({ question: "E as saídas?", days: 30, memory: memory("Entradas realizadas") });
+  assert.deepEqual(changed.body.confirmed.map((item) => item.label), ["Saídas realizadas"]);
+  reset();
+  state.plan = { intent: "finance", periodKey: "keep", objective: "analyze", metric: "none", followUp: true };
+  const expanded = await post({ question: "Mostre entradas e saídas", days: 30, memory: memory("Entradas realizadas") });
+  assert.deepEqual(expanded.body.confirmed.map((item) => item.label), ["Entradas realizadas", "Saídas realizadas"]);
+  reset();
+  state.plan = { intent: "finance", periodKey: "last_month", objective: "analyze", metric: "none", followUp: true };
+  const noPrior = await post({ question: "E no mês passado?", days: 30 });
+  assert.equal(noPrior.body.type, "local");
+  assert.equal(state.snapshotCalls.length, 0);
+  reset({ selected: B });
+  state.plan = { intent: "finance", periodKey: "last_month", objective: "analyze", metric: "none", followUp: true };
+  const otherClinic = await post({ question: "E no mês passado?", days: 30, memory: memory("Entradas realizadas") });
+  assert.equal(otherClinic.body.type, "local");
+  assert.equal(state.snapshotCalls.length, 0);
+  assert.equal(otherClinic.status, 200);
+  reset({ authenticated: false });
+  assert.equal((await post({ question: "E no mês passado?", days: 30, memory: memory("Entradas realizadas") })).status, 401);
+  assert.equal(state.snapshotCalls.length, 0);
+});
+
 test("period follow-up without prior context asks for clarification; prior finance is preserved", async () => {
   reset();
   state.plan = { intent: "finance", periodKey: "last_month", objective: "analyze", metric: "entries", followUp: true };
   const unknown = await post({ question: "E no mês passado?", days: 30 });
   assert.equal(unknown.body.type, "local");
   assert.equal(state.snapshotCalls.length, 0);
-  const memory = { intent: "finance", days: 30, periodKey: "this_month", metric: "Entradas realizadas", objective: "analyze" };
+  const memory = { scopeKey: scopeKey(), intent: "finance", days: 30, periodKey: "this_month", metric: "Entradas realizadas", objective: "analyze" };
   const known = await post({ question: "E no mês passado?", days: 30, memory });
   assert.equal(known.body.intent, "finance");
   assert.equal(known.body.period.key, "last_month");

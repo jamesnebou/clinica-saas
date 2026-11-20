@@ -28,7 +28,7 @@ test("planner returns only allowlisted arguments and never receives raw history"
   const plan = { intent: "finance", periodKey: "last_month", objective: "compare", metric: "entries", followUp: true };
   const result = await planClinicChat({ question: "E no mês passado?", previous: { intent: "finance", periodKey: "this_month", metric: "Entradas realizadas", objective: "analyze", history: "PRIVATE_HISTORY" },
     model: "test/model", tenantHash: "opaque-hash", environment: "test", generate: async (options) => { calls.push(options); return { output: plan }; } });
-  assert.deepEqual(result, plan);
+  assert.deepEqual(result, { ...plan, objective: "analyze" });
   assert.equal(calls.length, 1);
   assert.doesNotMatch(calls[0].prompt, /PRIVATE_HISTORY/);
   assert.equal(calls[0].maxOutputTokens, 180);
@@ -110,7 +110,7 @@ test("planner reconciles only explicit financial, period and context evidence", 
   assert.deepEqual(reconcileChatPlan("Quanto faturei este mês?", wrong),
     { ...wrong, intent: "finance", periodKey: "this_month", metric: "entries", followUp: false });
   assert.deepEqual(reconcileChatPlan("Quantos clientes tenho?", wrong),
-    { ...wrong, intent: "customers", metric: "customers", followUp: false });
+    { ...wrong, intent: "customers", periodKey: "keep", metric: "customers", followUp: false });
   assert.equal(reconcileChatPlan("E no mês passado?", wrong).intent, "clarify");
   const previous = { intent: "finance", periodKey: "this_month", metric: "entries", objective: "analyze" };
   assert.deepEqual(reconcileChatPlan("E no mês passado?", wrong, previous),

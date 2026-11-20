@@ -1,7 +1,13 @@
 import { z } from "zod";
 
 export const chatIntentSchema = z.enum(["overview", "agenda", "agenda_details", "finance", "absences", "customers", "trends"]);
+export const chatMetricLabels = {
+  entries: "Entradas realizadas", exits: "Saídas realizadas", appointments: "Agendamentos", completed: "Concluídos",
+  confirmed: "Confirmados", upcoming: "Próximos", customers: "Clientes", new_customers: "Novos no período",
+  no_shows: "Faltas", cancellations: "Cancelamentos",
+};
 export const chatMemorySchema = z.strictObject({
+  scopeKey: z.string().regex(/^[a-f0-9]{64}$/),
   intent: chatIntentSchema,
   days: z.union([z.literal(7), z.literal(30)]),
   metric: z.string().max(40).nullable(),
